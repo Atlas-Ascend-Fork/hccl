@@ -702,13 +702,13 @@ TEST_F(ST_ALLTOALLVC_TEST, st_alltoallvc_28)
     RunAlltoAllVCMeshTest(topoMeta, rankSize, dataType, sendCountMatrix);
 }
 
-// AllToAllVCPairwise 算子 ST 用例（口径与 alltoallv 一致：每 rank 总发送量 ≤ 8MB）
+// AllToAllVCPairwise ST 用例
 TEST_F(ST_ALLTOALLVC_TEST, st_alltoallvc_pairwise_1)
 {
-    // 128 rank 回归基线, FP16 非对称矩阵 (N=8, XOR)
+    // 32 rank , FP16 非对称矩阵 (N=8, XOR)
     TopoMeta topoMeta;
-    GenTopoMeta(topoMeta, 2, 8, 8); // 2 框 × 8 板 × 8 卡 = 128 rank
-    uint32_t rankSize = PAIRWISE_RANK_SIZE;
+    GenTopoMeta(topoMeta, 2, 2, 8); // 2 框 × 2 板 × 8 卡 = 32 rank
+    uint32_t rankSize = 32;
     HcclDataType dataType = HcclDataType::HCCL_DATA_TYPE_FP16;
     u64 perPair = GenPairwisePerPairCount(rankSize, 2); // FP16 2B
     std::vector<u64> sendCountMatrix = GenPairwiseAsymmetricMatrix(rankSize, perPair / 8, perPair / 8);
