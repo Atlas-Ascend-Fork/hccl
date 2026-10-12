@@ -26,17 +26,6 @@ std::string InsV2BatchSendRecvSoleExecutor<AlgTopoMatch, InsAlgTemplate>::Descri
 {
     return "Instruction BatchSendRecvS Executor.";
 }
-
-template <typename AlgTopoMatch, typename InsAlgTemplate>
-HcclResult InsV2BatchSendRecvSoleExecutor<AlgTopoMatch, InsAlgTemplate>::CalcAlgHierarchyInfo(
-    HcclComm comm, TopoInfoWithNetLayerDetails* topoInfo, AlgHierarchyInfoForAllLevel& algHierarchyInfo)
-{
-    (void)comm;
-    AlgTopoMatch topoMatch;
-    CHK_RET(topoMatch.MatchTopo(topoInfo, algHierarchyInfo, AlgAttrs{}));
-    return HCCL_SUCCESS;
-}
-
 template <typename AlgTopoMatch, typename InsAlgTemplate>
 HcclResult InsV2BatchSendRecvSoleExecutor<AlgTopoMatch, InsAlgTemplate>::CalcAlgHierarchyInfoV2(
     TopoInfoWithNetLayerDetails* topoInfo, AlgHierarchyInfoForAllLevel& algHierarchyInfo, const AlgAttrs& algAttrs)

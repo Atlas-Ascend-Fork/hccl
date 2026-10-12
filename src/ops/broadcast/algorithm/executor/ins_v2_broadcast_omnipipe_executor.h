@@ -52,9 +52,6 @@ public:
         const AlgResourceCtxSerializable& resCtx,
         std::vector<std::map<u32, std::vector<ChannelInfo>>>& rankIdToChannelInfo) const override;
 
-    HcclResult CalcAlgHierarchyInfo(
-        HcclComm comm, TopoInfoWithNetLayerDetails* topoInfo, AlgHierarchyInfoForAllLevel& algHierarchyInfo) override;
-
     HcclResult CalcAlgHierarchyInfoV2(
         TopoInfoWithNetLayerDetails* topoInfo, AlgHierarchyInfoForAllLevel& algHierarchyInfo,
         const AlgAttrs& algAttrs) override;

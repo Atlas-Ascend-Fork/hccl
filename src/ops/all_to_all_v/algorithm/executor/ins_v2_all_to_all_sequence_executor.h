@@ -25,9 +25,6 @@ class InsV2AlltoAllSequenceExecutor : public InsCollAlgBase {
 public:
     explicit InsV2AlltoAllSequenceExecutor();
     ~InsV2AlltoAllSequenceExecutor() override = default;
-
-    HcclResult CalcAlgHierarchyInfo(
-        HcclComm comm, TopoInfoWithNetLayerDetails* topoInfo, AlgHierarchyInfoForAllLevel& algHierarchyInfo) override;
     HcclResult CalcAlgHierarchyInfoV2(
         TopoInfoWithNetLayerDetails* topoInfo, AlgHierarchyInfoForAllLevel& algHierarchyInfo,
         const AlgAttrs& algAttrs) override;

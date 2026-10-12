@@ -10,7 +10,7 @@
 
 本RFC提出一套以 `HcclAlgorithm` 为静态算法描述、以 `OpsExecutor` 为通用解释器、以 Template 为单层执行单元、以 CommPlanner 为通信计划生成器的 HCCL 重构方案。方案通过递归算法树描述 Sequence、Parallel 和 OmniPipe 等组合，通过 `ranksForInputData`/`ranksForOutputData` 传递逻辑数据归属，并建立 `Input → CCL Buffer → ... → CCL Buffer → Output` 的统一内存与数据流模型。
 
-本重构以 `experimental/ops/op_common/recursive_executor/` 为落地目录，采用**插件式零侵入接入**方式对接到 src 原流程：recursive\_executor 代码以 OBJECT 库形式编入 `libhccl.so`，通过 `REGISTER_ALG` 把 `AdaptorExecutor`（继承 src 的 `InsCollAlgBase`）注册进 src 的 `CollAlgExecRegistryV2`；src 的 Selector 对 4 级拓扑选择 recursive\_executor 算法名后，原流程 `Selector → HcclExecOp → GetAlgExec → CalcAlgHierarchyInfo/CalcRes → Orchestrate` 自然调度到 recursive\_executor 执行器，src 侧除 Selector 的 4 级拓扑分支外零改动。
+本重构以 `experimental/ops/op_common/recursive_executor/` 为落地目录，采用**插件式零侵入接入**方式对接到 src 原流程：recursive\_executor 代码以 OBJECT 库形式编入 `libhccl.so`，通过 `REGISTER_ALG` 把 `AdaptorExecutor`（继承 src 的 `InsCollAlgBase`）注册进 src 的 `CollAlgExecRegistryV2`；src 的 Selector 对 4 级拓扑选择 recursive\_executor 算法名后，原流程 `Selector → HcclExecOp → GetAlgExec → CalcAlgHierarchyInfoV2/CalcRes → Orchestrate` 自然调度到 recursive\_executor 执行器，src 侧除 Selector 的 4 级拓扑分支外零改动。
 
 ## 背景与动机
 
@@ -238,7 +238,7 @@ virtual HcclResult GetRes(AlgResourceRequest &res) const;
 
 | 依赖项 | 来源 | 用途 |
 |--------|------|------|
-| `InsCollAlgBase` | `src/ops/op_common/algorithm/executor/executor_v2_base.h` | `AdaptorExecutor` 继承此类，实现三个纯虚接口（`CalcAlgHierarchyInfo`/`CalcRes`/`Orchestrate`），桥接 src 执行框架 |
+| `InsCollAlgBase` | `src/ops/op_common/algorithm/executor/executor_v2_base.h` | `AdaptorExecutor` 继承此类，实现三个纯虚接口（`CalcAlgHierarchyInfoV2`/`CalcRes`/`Orchestrate`），桥接 src 执行框架 |
 | `OpParam` / `AlgResourceRequest` / `AlgResourceCtxSerializable` | `src/ops/op_common/...` | recursive_executor 与 src 共享同一套类型，天然类型一致，无需包装层 |
 | `CollAlgExecRegistryV2` | `src/ops/op_common/executor/registry/coll_alg_v2_exec_registry.h` | 执行器注册表，`REGISTER_ALG` 通过此表将 `AdaptorExecutor` 注册到 src |
 | `hcomm_dlsym` 符号表 | `src/common/hcomm_dlsym/` | 跨仓调用 HCOMM 走 dlsym，不引入对 `cann/hcomm` 的编译期硬依赖 |
@@ -401,7 +401,7 @@ public:
 
 拓扑层级（`subCommIndex`）和执行顺序（`execPolicy`）是两个独立维度：前者回答"在哪个 Rank 集合上执行"，后者回答"Children 之间如何组织"。
 
-**`subCommIndex`** **到实际通信域的映射**：`subCommIndex` 是逐层子通信域表 `AlgHierarchyInfoForAllLevel::infos[]` 的下标，该表由 `TopoMatchBaseV2::MatchTopo` 在 `CalcAlgHierarchyInfo` 阶段填充（`infos[i]` 为第 i 层子通信域的 Rank 分组）。Template 运行时通过同一下标取本层通信资源：`algHierarchyInfo_.infos[subCommIndex].at(0)` 取本层 Rank 列表，`GenTemplateRes` 以 `channelTable_.at(subCommIndex)`/`subThreads_.at(subCommIndex)` 取本层 channel 与线程（资源由 `CalcRes` 阶段 `CalcTemplateChannelRes` 按 `subCommIndex` 逐层申请、经 `resCtx.channels[level]` 序列化、`InitRes` 时 `RestoreChannelMap` 重建，见 3.7）。约束：`subCommIndex` 必须小于拓扑层数，越界直接报错。
+**`subCommIndex`** **到实际通信域的映射**：`subCommIndex` 是逐层子通信域表 `AlgHierarchyInfoForAllLevel::infos[]` 的下标，该表由 `TopoMatchBaseV2::MatchTopo` 在 `CalcAlgHierarchyInfoV2` 阶段填充（`infos[i]` 为第 i 层子通信域的 Rank 分组）。Template 运行时通过同一下标取本层通信资源：`algHierarchyInfo_.infos[subCommIndex].at(0)` 取本层 Rank 列表，`GenTemplateRes` 以 `channelTable_.at(subCommIndex)`/`subThreads_.at(subCommIndex)` 取本层 channel 与线程（资源由 `CalcRes` 阶段 `CalcTemplateChannelRes` 按 `subCommIndex` 逐层申请、经 `resCtx.channels[level]` 序列化、`InitRes` 时 `RestoreChannelMap` 重建，见 3.7）。约束：`subCommIndex` 必须小于拓扑层数，越界直接报错。
 
 #### 1.3 算法注册表（AlgSelector）
 
@@ -916,8 +916,9 @@ if (topoInfo->topoLevelNums > 1) {
 ```cpp
 class InsCollAlgBase {
 public:
-    virtual HcclResult CalcAlgHierarchyInfo(
-        HcclComm comm, TopoInfoWithNetLayerDetails* topoInfo, AlgHierarchyInfoForAllLevel& algHierarchyInfo) = 0;
+    virtual HcclResult CalcAlgHierarchyInfoV2(
+        TopoInfoWithNetLayerDetails* topoInfo, AlgHierarchyInfoForAllLevel& algHierarchyInfo,
+        const AlgAttrs& algAttrs) = 0;
     virtual HcclResult CalcRes(
         HcclComm comm, const OpParam& param, const TopoInfoWithNetLayerDetails* topoInfo,
         const AlgHierarchyInfoForAllLevel& algHierarchyInfo, AlgResourceRequest& resourceRequest) = 0;
@@ -933,8 +934,9 @@ public:
     AdaptorExecutorBase() = default;
     ~AdaptorExecutorBase() override = default;
 
-    HcclResult CalcAlgHierarchyInfo(
-        HcclComm comm, TopoInfoWithNetLayerDetails* topoInfo, AlgHierarchyInfoForAllLevel& algHierarchyInfo) override;
+    HcclResult CalcAlgHierarchyInfoV2(
+        TopoInfoWithNetLayerDetails* topoInfo, AlgHierarchyInfoForAllLevel& algHierarchyInfo,
+        const AlgAttrs& algAttrs) override;
     HcclResult CalcRes(
         HcclComm comm, const OpParam& param, const TopoInfoWithNetLayerDetails* topoInfo,
         const AlgHierarchyInfoForAllLevel& algHierarchyInfo, AlgResourceRequest& resourceRequest) override;
@@ -958,7 +960,7 @@ public:
 
 ```cpp
 // 1. 拓扑匹配：从 AlgSelector 取算法对象的 topoMatch 完成匹配（传 algAttrs）
-HcclResult AdaptorExecutorBase::CalcAlgHierarchyInfo(...)
+HcclResult AdaptorExecutorBase::CalcAlgHierarchyInfoV2(...)
 {
     HcclAlgorithm alg;
     if (!AlgSelector::Instance().GetAlgorithm(algName_, alg)) { ... }
@@ -1075,7 +1077,7 @@ sequenceDiagram
     Op->>Op: param.algName = algName
     Op->>Reg: GetAlgExec(opType, algName)
     Reg-->>Op: unique_ptr<AdaptorExecutorImpl>
-    Op->>Ada: CalcAlgHierarchyInfo(comm, topoInfo, algHierarchyInfo)
+    Op->>Ada: CalcAlgHierarchyInfoV2(topoInfo, algHierarchyInfo, algAttrs)
     Ada->>Ada: AlgSelector.GetAlgorithm(algName_) -> algo
     Ada->>Ada: algo.topoMatch->MatchTopo(...)
     Ada-->>Op: algHierarchyInfo
@@ -1096,12 +1098,12 @@ sequenceDiagram
 
 1. **算法选择**（src）：`AllGatherAutoSelector::SelectAicpuAlgo` 对 4 级拓扑返回 `"AicpuAllGatherSequenceMeshNHRNHRMesh"`。
 2. **执行器路由**（src）：`HcclExecOp`（`src/ops/op_common/op_common.cc`）把算法名写入 `param.algName`，调 `CollAlgExecRegistryV2::Instance().GetAlgExec(param.opType, algName)` 得到 `AdaptorExecutorImpl`（src 侧唯一的一处按名查找，recursive\_executor 复用）。
-3. **资源计算**（src 驱动 + recursive\_executor 实现）：`HcclGetAlgRes` 依次调用 `CalcAlgHierarchyInfo`、`CalcRes`。前者由 `AdaptorExecutor` 交给 `TopoMatchFourLevel` 做逐层拓扑匹配；后者构造 `OpsExecutor` 并递归 `CalcRes`，输出 `AlgResourceRequest`。src 据此经 `GetAlgResWithEngine` 分配线程/notify/channel/scratch 并序列化为 `AlgResourceCtxSerializable`。
+3. **资源计算**（src 驱动 + recursive\_executor 实现）：`HcclGetAlgRes` 依次调用 `CalcAlgHierarchyInfoV2`、`CalcRes`。前者由 `AdaptorExecutor` 交给 `TopoMatchFourLevel` 做逐层拓扑匹配；后者构造 `OpsExecutor` 并递归 `CalcRes`，输出 `AlgResourceRequest`。src 据此经 `GetAlgResWithEngine` 分配线程/notify/channel/scratch 并序列化为 `AlgResourceCtxSerializable`。
 4. **执行**：`executor->Orchestrate(param, resCtxHost)`（CCU/默认引擎在 Host 直接调；AICPU\_TS 引擎在 `HcclAicpuKernelEntranceLaunch` 下发后，AICPU 内核里同样经 `CollAlgExecRegistryV2::GetAlgExec` + `Orchestrate` 执行）。`OpsExecutor::InitRes` 从 `resCtx` 恢复 CCL Buffer/线程/channel 表后，进入 `PrepareOrchestrate → OrchestrateLoop` 递归编排。
 
 #### 3.7 资源复用与 Host/Device 传递
 
-- **资源复用**：`HcclGetAlgRes` 先尝试 `TryReuseResource`——若该 `algTag` 的资源已创建，直接返回序列化 ctx（`isResourceReused=true`），Host 侧反序列化后即可 `Orchestrate`，跳过 `CalcAlgHierarchyInfo`/`CalcRes`。recursive\_executor 执行器无需感知该机制，复用判断完全发生在 src。
+- **资源复用**：`HcclGetAlgRes` 先尝试 `TryReuseResource`——若该 `algTag` 的资源已创建，直接返回序列化 ctx（`isResourceReused=true`），Host 侧反序列化后即可 `Orchestrate`，跳过 `CalcAlgHierarchyInfoV2`/`CalcRes`。recursive\_executor 执行器无需感知该机制，复用判断完全发生在 src。
 - **Channel 恢复**：`OpsExecutor::InitRes` 调用 `RestoreChannelMap`，把 `resCtx.channels`（按层展开）重组为 `rankId → ChannelInfo` 映射，供 Template 的 `GenTemplateRes` 绑定实际通信资源，与 src 执行器的 `InsCollAlgBase::RestoreChannelMap` 语义对齐。
 
 ### 4. 新增算法指南

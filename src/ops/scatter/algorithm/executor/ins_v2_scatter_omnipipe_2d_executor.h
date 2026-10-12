@@ -29,8 +29,6 @@ class InsV2ScatterOmniPipe2DExecutor : public InsCollAlgBase {
 public:
     explicit InsV2ScatterOmniPipe2DExecutor();
     ~InsV2ScatterOmniPipe2DExecutor() override = default;
-    HcclResult CalcAlgHierarchyInfo(
-        HcclComm comm, TopoInfoWithNetLayerDetails* topoInfo, AlgHierarchyInfoForAllLevel& algHierarchyInfo) override;
     std::vector<CostModelParam> CalcCostCoeff(
         HcclComm comm, TopoInfoWithNetLayerDetails* topoInfo, const char* algName, const OpParam& param) override;
     AlgNetMeta GetAlgNetMeta(

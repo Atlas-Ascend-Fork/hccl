@@ -102,20 +102,6 @@ HcclResult InsV2BroadcastOmniPipeExecutor<
         devType_, dataType_, dataTypeSize_);
     return HCCL_SUCCESS;
 }
-
-template <
-    typename AlgTopoMatch, typename InsScatterAlgTemplateX, typename InsScatterAlgTemplateY,
-    typename InsScatterAlgTemplateZ, typename InsAgAlgTemplateX, typename InsAgAlgTemplateY, typename InsAgAlgTemplateZ>
-HcclResult InsV2BroadcastOmniPipeExecutor<
-    AlgTopoMatch, InsScatterAlgTemplateX, InsScatterAlgTemplateY, InsScatterAlgTemplateZ, InsAgAlgTemplateX,
-    InsAgAlgTemplateY, InsAgAlgTemplateZ>::
-    CalcAlgHierarchyInfo(
-        HcclComm comm, TopoInfoWithNetLayerDetails* topoInfo, AlgHierarchyInfoForAllLevel& algHierarchyInfo)
-{
-    (void)comm;
-    return CalcAlgHierarchyInfoV2(topoInfo, algHierarchyInfo, GetAlgoMeta("DpuBroadcastPipeLineMeshNHRNHR"));
-}
-
 template <
     typename AlgTopoMatch, typename InsScatterAlgTemplateX, typename InsScatterAlgTemplateY,
     typename InsScatterAlgTemplateZ, typename InsAgAlgTemplateX, typename InsAgAlgTemplateY, typename InsAgAlgTemplateZ>

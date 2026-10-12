@@ -35,17 +35,6 @@ constexpr u32 OMNIPIPE_2D_MAIN_NOTIFY_NUM = 2; // 两个template各自的notify�
 template <typename AlgTopoMatch, typename InsAlgTempLevel0, typename InsAlgTempLevel1>
 InsV2ScatterOmniPipe2DExecutor<AlgTopoMatch, InsAlgTempLevel0, InsAlgTempLevel1>::InsV2ScatterOmniPipe2DExecutor()
 {}
-
-template <typename AlgTopoMatch, typename InsAlgTempLevel0, typename InsAlgTempLevel1>
-HcclResult InsV2ScatterOmniPipe2DExecutor<AlgTopoMatch, InsAlgTempLevel0, InsAlgTempLevel1>::CalcAlgHierarchyInfo(
-    HcclComm comm, TopoInfoWithNetLayerDetails* topoInfo, AlgHierarchyInfoForAllLevel& algHierarchyInfo)
-{
-    (void)comm;
-    AlgTopoMatch topoMatch;
-    CHK_RET(topoMatch.MatchTopo(topoInfo, algHierarchyInfo, AlgAttrs{}));
-    return HCCL_SUCCESS;
-}
-
 template <typename AlgTopoMatch, typename InsAlgTempLevel0, typename InsAlgTempLevel1>
 HcclResult InsV2ScatterOmniPipe2DExecutor<AlgTopoMatch, InsAlgTempLevel0, InsAlgTempLevel1>::CalcAlgHierarchyInfoV2(
     TopoInfoWithNetLayerDetails* topoInfo, AlgHierarchyInfoForAllLevel& algHierarchyInfo, const AlgAttrs& algAttrs)

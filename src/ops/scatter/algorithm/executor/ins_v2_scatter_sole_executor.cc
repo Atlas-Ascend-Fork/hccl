@@ -96,17 +96,6 @@ AlgNetMeta InsV2ScatterSoleExecutor<AlgTopoMatch, InsAlgTemplate>::GetAlgNetMeta
     meta.rankSizes = {rankSize};
     return meta;
 }
-
-template <typename AlgTopoMatch, typename InsAlgTemplate>
-HcclResult InsV2ScatterSoleExecutor<AlgTopoMatch, InsAlgTemplate>::CalcAlgHierarchyInfo(
-    HcclComm comm, TopoInfoWithNetLayerDetails* topoInfo, AlgHierarchyInfoForAllLevel& algHierarchyInfo)
-{
-    (void)comm;
-    AlgTopoMatch topoMatch;
-    CHK_RET(topoMatch.MatchTopo(topoInfo, algHierarchyInfo, AlgAttrs{}));
-    return HCCL_SUCCESS;
-}
-
 template <typename AlgTopoMatch, typename InsAlgTemplate>
 HcclResult InsV2ScatterSoleExecutor<AlgTopoMatch, InsAlgTemplate>::CalcAlgHierarchyInfoV2(
     TopoInfoWithNetLayerDetails* topoInfo, AlgHierarchyInfoForAllLevel& algHierarchyInfo, const AlgAttrs& algAttrs)

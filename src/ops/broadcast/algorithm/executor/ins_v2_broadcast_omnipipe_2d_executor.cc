@@ -92,21 +92,6 @@ InsV2BroadcastOmniPipe2dExecutor<
     AlgTopoMatch, CcuScatterAlgTemplateX, CcuScatterAlgTemplateY, CcuAgAlgTemplateX,
     CcuAgAlgTemplateY>::InsV2BroadcastOmniPipe2dExecutor()
 {}
-
-template <
-    typename AlgTopoMatch, typename CcuScatterAlgTemplateX, typename CcuScatterAlgTemplateY, typename CcuAgAlgTemplateX,
-    typename CcuAgAlgTemplateY>
-HcclResult InsV2BroadcastOmniPipe2dExecutor<
-    AlgTopoMatch, CcuScatterAlgTemplateX, CcuScatterAlgTemplateY, CcuAgAlgTemplateX, CcuAgAlgTemplateY>::
-    CalcAlgHierarchyInfo(
-        HcclComm comm, TopoInfoWithNetLayerDetails* topoInfo, AlgHierarchyInfoForAllLevel& algHierarchyInfo)
-{
-    (void)comm;
-    AlgTopoMatch topoMatch;
-    CHK_RET(topoMatch.MatchTopo(topoInfo, algHierarchyInfo, AlgAttrs{}));
-    return HCCL_SUCCESS;
-}
-
 template <
     typename AlgTopoMatch, typename CcuScatterAlgTemplateX, typename CcuScatterAlgTemplateY, typename CcuAgAlgTemplateX,
     typename CcuAgAlgTemplateY>

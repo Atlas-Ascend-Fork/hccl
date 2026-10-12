@@ -46,18 +46,6 @@ ScatterSequenceAicpu3LevelExecutor<AlgTopoMatch, InsAlgTemplate0, InsAlgTemplate
         myRank_, rankSize_, dataType_, dataTypeSize_);
     return HCCL_SUCCESS;
 }
-
-template <typename AlgTopoMatch, typename InsAlgTemplate0, typename InsAlgTemplate1, typename InsAlgTemplate2>
-HcclResult ScatterSequenceAicpu3LevelExecutor<AlgTopoMatch, InsAlgTemplate0, InsAlgTemplate1, InsAlgTemplate2>::
-    CalcAlgHierarchyInfo(
-        HcclComm comm, TopoInfoWithNetLayerDetails* topoInfo, AlgHierarchyInfoForAllLevel& algHierarchyInfo)
-{
-    (void)comm;
-    AlgTopoMatch topoMatch;
-    CHK_RET(topoMatch.MatchTopo(topoInfo, algHierarchyInfo, AlgAttrs{}));
-    return HCCL_SUCCESS;
-}
-
 template <typename AlgTopoMatch, typename InsAlgTemplate0, typename InsAlgTemplate1, typename InsAlgTemplate2>
 HcclResult ScatterSequenceAicpu3LevelExecutor<AlgTopoMatch, InsAlgTemplate0, InsAlgTemplate1, InsAlgTemplate2>::
     CalcAlgHierarchyInfoV2(

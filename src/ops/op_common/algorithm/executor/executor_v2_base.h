@@ -57,21 +57,9 @@ public:
         return {};
     }
 
-    virtual HcclResult CalcAlgHierarchyInfo(
-        HcclComm comm, TopoInfoWithNetLayerDetails* topoInfo, AlgHierarchyInfoForAllLevel& algHierarchyInfo)
-        = 0;
-
     virtual HcclResult CalcAlgHierarchyInfoV2(
         TopoInfoWithNetLayerDetails* topoInfo, AlgHierarchyInfoForAllLevel& algHierarchyInfo, const AlgAttrs& algAttrs)
-    {
-        // 无 V2 实现时返回失败而非 SUCCESS: 调用方(topo match failed, skip)会安全跳过该算法。
-        // 若返回 SUCCESS 但不填充 algHierarchyInfo, 调用方访问 physicalIdxForAlgoLevels[0][0]
-        // 会在空 vector 上越界(实测 16P/32P/64P SIGSEGV at 0x40)。
-        (void)topoInfo;
-        (void)algHierarchyInfo;
-        (void)algAttrs;
-        return HcclResult::HCCL_E_PARA;
-    }
+        = 0;
 
     virtual HcclResult CalcRes(
         HcclComm comm, const OpParam& param, const TopoInfoWithNetLayerDetails* topoInfo,

@@ -40,8 +40,6 @@ public:
         const TopoInfoWithNetLayerDetails* topoInfo, const OpParam& param, const char* algName) const override;
     // AICPU 接口
     HcclResult Orchestrate(const OpParam& param, const AlgResourceCtxSerializable& resCtx) override;
-    HcclResult CalcAlgHierarchyInfo(
-        HcclComm comm, TopoInfoWithNetLayerDetails* topoInfo, AlgHierarchyInfoForAllLevel& algHierarchyInfo) override;
     HcclResult CalcAlgHierarchyInfoV2(
         TopoInfoWithNetLayerDetails* topoInfo, AlgHierarchyInfoForAllLevel& algHierarchyInfo,
         const AlgAttrs& algAttrs) override;

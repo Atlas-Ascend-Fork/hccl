@@ -170,21 +170,6 @@ HcclResult ReduceSequenceExecutorAicpu3Level<
         myRank_, rankSize_, reduceOp_, dataType_, dataTypeSize_);
     return HCCL_SUCCESS;
 }
-
-template <
-    typename AlgTopoMatch, typename AlgTemplate0, typename AlgTemplate1, typename AlgTemplate2, typename AlgTemplate3,
-    typename AlgTemplate4, typename AlgTemplate5>
-HcclResult ReduceSequenceExecutorAicpu3Level<
-    AlgTopoMatch, AlgTemplate0, AlgTemplate1, AlgTemplate2, AlgTemplate3, AlgTemplate4, AlgTemplate5>::
-    CalcAlgHierarchyInfo(
-        HcclComm comm, TopoInfoWithNetLayerDetails* topoInfo, AlgHierarchyInfoForAllLevel& algHierarchyInfo)
-{
-    (void)comm;
-    AlgTopoMatch topoMatch;
-    CHK_RET(topoMatch.MatchTopo(topoInfo, algHierarchyInfo, AlgAttrs{}));
-    return HCCL_SUCCESS;
-}
-
 template <
     typename AlgTopoMatch, typename AlgTemplate0, typename AlgTemplate1, typename AlgTemplate2, typename AlgTemplate3,
     typename AlgTemplate4, typename AlgTemplate5>

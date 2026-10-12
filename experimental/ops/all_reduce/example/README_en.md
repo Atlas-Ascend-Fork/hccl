@@ -131,7 +131,7 @@ graph TB
         C1["Select()<br/>Select algorithm name"]
     end
     subgraph "Executor"
-        D1["CalcAlgHierarchyInfo()<br/>Discover topology hierarchy"] --> D2["CalcRes()<br/>Calculate resource requirements"]
+        D1["CalcAlgHierarchyInfoV2()<br/>Discover topology hierarchy"] --> D2["CalcRes()<br/>Calculate resource requirements"]
         D2 --> D3["Orchestrate()<br/>Orchestrate execution"]
     end
     subgraph "Template"
@@ -149,7 +149,7 @@ To implement a custom algorithm, you only need to create the following files und
 
 | File | Required/Optional | Description |
 |---|---|---|
-| `ins_v2_<op>_<variant>_executor.h` | Required | Executor class template, inherits `InsCollAlgBase`, implements `CalcAlgHierarchyInfo(V2)` / `CalcRes` / `Orchestrate` |
+| `ins_v2_<op>_<variant>_executor.h` | Required | Executor class template, inherits `InsCollAlgBase`, implements `CalcAlgHierarchyInfoV2` / `CalcRes` / `Orchestrate` |
 | `ins_v2_<op>_<variant>_executor.cc` | Required | Where the registration macros `REGISTER_EXEC_V2`/`REGISTER_ALG_ATTRS` are placed |
 | `<engine>_temp_<op>_<variant>.h` | Required | Template derived class, inherits the engine template base class, implements `CalcRes` / `KernelRun` / `GetThreadNum`, etc. |
 | `<engine>_temp_<op>_<variant>.cc` | Required | Template implementation |
@@ -188,9 +188,8 @@ The executor inherits from `InsCollAlgBase` and must implement the following pur
 
 | Function | Purpose | Parameters |
 |---|---|---|
-| `CalcAlgHierarchyInfo` | Topology matching entry: instantiates `AlgTopoMatch` and calls its `MatchTopo` to compute algorithm hierarchy info for each communication layer | `comm` communicator handle; `topoInfo` topology details (userRank/rankSize/network layers, output); `algHierarchyInfo` algorithm hierarchy info (output) |
-| `CalcAlgHierarchyInfoV2` | V2 topology matching entry: behaves like `CalcAlgHierarchyInfo`, additionally carrying `algAttrs` for topology matching filtering. **The main flow (`HcclGetAlgRes`) actually calls this function**; without overriding it falls back to the base default and returns `HCCL_E_PARA` | `topoInfo` topology details; `algHierarchyInfo` algorithm hierarchy info (output); `algAttrs` algorithm attributes |
-| `CalcRes` | Resource calculation entry: constructs template instances per topo layer and delegates to their `CalcRes` to compute required channel/thread/buffer | `comm` communicator; `param` operator parameters; `topoInfo` topology details; `algHierarchyInfo` produced by `CalcAlgHierarchyInfo`; `resourceRequest` resource request (output) |
+| `CalcAlgHierarchyInfoV2` | Topology matching entry: instantiates `AlgTopoMatch` and calls its `MatchTopo` to compute algorithm hierarchy info for each communication layer. **Pure virtual; derived classes must implement (otherwise abstract, cannot be registered/instantiated via `REGISTER_EXEC_V2`)** | `topoInfo` topology details (userRank/rankSize/network layers, output); `algHierarchyInfo` algorithm hierarchy info (output); `algAttrs` algorithm attributes |
+| `CalcRes` | Resource calculation entry: constructs template instances per topo layer and delegates to their `CalcRes` to compute required channel/thread/buffer | `comm` communicator; `param` operator parameters; `topoInfo` topology details; `algHierarchyInfo` produced by `CalcAlgHierarchyInfoV2`; `resourceRequest` resource request (output) |
 | `CalcCostCoeff` | Cost-modeling entry: constructs a `CalcCostCoeffParam` (`rankSize`/`dataRatio`/`netType`, etc.) and delegates to the template `CalcCostCoeff` to compute bandwidth/latency cost coefficients A/B/C/D for selection cost competition | `comm` communicator; `topoInfo` topology details; `algName` algorithm name; `param` op parameter |
 | `GetAlgNetMeta` | Returns the network metadata `AlgNetMeta` (`netTypes`/`intraGroupMode`/`groupSizes`), describing each template's network type and in-group cost aggregation mode | `topoInfo` topology details; `param` operator parameters; `algName` algorithm name |
 | `Orchestrate` | Data-plane execution entry: sets base class members such as maxTmpMemSize_/channels_/threads_, validates data types and overflow, and orchestrates dispatch per loop | `param` operator parameters; `resCtx` serialized resource context |

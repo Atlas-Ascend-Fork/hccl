@@ -45,16 +45,6 @@ HcclResult InsV2ScatterOmniPipeExecutor<AlgTopoMatch, InsAlgTemplate0, InsAlgTem
         rankSize_, devType_, reduceOp_, dataType_, dataTypeSize_);
     return HCCL_SUCCESS;
 }
-
-template <typename AlgTopoMatch, typename InsAlgTemplate0, typename InsAlgTemplate1, typename InsAlgTemplate2>
-HcclResult
-InsV2ScatterOmniPipeExecutor<AlgTopoMatch, InsAlgTemplate0, InsAlgTemplate1, InsAlgTemplate2>::CalcAlgHierarchyInfo(
-    HcclComm comm, TopoInfoWithNetLayerDetails* topoInfo, AlgHierarchyInfoForAllLevel& algHierarchyInfo)
-{
-    (void)comm;
-    return CalcAlgHierarchyInfoV2(topoInfo, algHierarchyInfo, GetAlgoMeta("DpuScatterPipeLineMeshNHRNHR"));
-}
-
 template <typename AlgTopoMatch, typename InsAlgTemplate0, typename InsAlgTemplate1, typename InsAlgTemplate2>
 HcclResult
 InsV2ScatterOmniPipeExecutor<AlgTopoMatch, InsAlgTemplate0, InsAlgTemplate1, InsAlgTemplate2>::CalcAlgHierarchyInfoV2(

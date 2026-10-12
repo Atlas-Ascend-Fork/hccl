@@ -57,29 +57,6 @@ HcclResult InsV2SendSoleExecutor<InsAlgTemplate>::CalcRes(
     resourceRequest.channels[0] = resReq.channels[0];
     return HCCL_SUCCESS;
 }
-
-template <typename InsAlgTemplate>
-HcclResult InsV2SendSoleExecutor<InsAlgTemplate>::CalcAlgHierarchyInfo(
-    HcclComm comm, TopoInfoWithNetLayerDetails* topoInfo, AlgHierarchyInfoForAllLevel& algHierarchyInfo)
-{
-    (void)comm;
-    myRank_ = topoInfo->userRank;
-    // AlgHierarchyInfoForAllLevel固定为一层
-    CHK_PRT_RET(
-        (topoInfo->userRankSize == 0),
-        HCCL_ERROR("[InsV2SendSoleExecutor][CalcAlgHierarchyInfo] Rank [%u], rankSize is 0.", myRank_),
-        HcclResult::HCCL_E_PARA);
-
-    algHierarchyInfo.infos.resize(1);
-    algHierarchyInfo.infos[0].resize(1);
-    algHierarchyInfo.infos[0][0].clear();
-    for (uint32_t rankId = 0; rankId < topoInfo->userRankSize; rankId++) {
-        algHierarchyInfo.infos[0][0].push_back(rankId);
-    }
-    HCCL_INFO("[InsV2SendSoleExecutor][CalcAlgHierarchyInfo][%u] Success.", myRank_);
-    return HCCL_SUCCESS;
-}
-
 template <typename InsAlgTemplate>
 std::vector<CostModelParam> InsV2SendSoleExecutor<InsAlgTemplate>::CalcCostCoeff(
     HcclComm comm, TopoInfoWithNetLayerDetails* topoInfo, const char* algName, const OpParam& param)

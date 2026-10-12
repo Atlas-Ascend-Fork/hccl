@@ -35,17 +35,6 @@ constexpr u64 OMNI_UBX_AG_DATA_SIZE = 16 * 1024 * 1024; // UBX机型ccu流水算
 template <typename AlgTopoMatch, typename CcuAlgTempLevel0, typename CcuAlgTempLevel1>
 InsV2AllGatherOmniPipe2DExecutor<AlgTopoMatch, CcuAlgTempLevel0, CcuAlgTempLevel1>::InsV2AllGatherOmniPipe2DExecutor()
 {}
-
-template <typename AlgTopoMatch, typename CcuAlgTempLevel0, typename CcuAlgTempLevel1>
-HcclResult InsV2AllGatherOmniPipe2DExecutor<AlgTopoMatch, CcuAlgTempLevel0, CcuAlgTempLevel1>::CalcAlgHierarchyInfo(
-    HcclComm comm, TopoInfoWithNetLayerDetails* topoInfo, AlgHierarchyInfoForAllLevel& algHierarchyInfo)
-{
-    (void)comm;
-    AlgTopoMatch topoMatch;
-    CHK_RET(topoMatch.MatchTopo(topoInfo, algHierarchyInfo, AlgAttrs{}));
-    return HCCL_SUCCESS;
-}
-
 template <typename AlgTopoMatch, typename CcuAlgTempLevel0, typename CcuAlgTempLevel1>
 HcclResult InsV2AllGatherOmniPipe2DExecutor<AlgTopoMatch, CcuAlgTempLevel0, CcuAlgTempLevel1>::CalcAlgHierarchyInfoV2(
     TopoInfoWithNetLayerDetails* topoInfo, AlgHierarchyInfoForAllLevel& algHierarchyInfo, const AlgAttrs& algAttrs)

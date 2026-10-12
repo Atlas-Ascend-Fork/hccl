@@ -29,16 +29,6 @@ InsV2ReduceScatterOrderPreservedExecutor<AlgTopoMatch, InsAlgTemplate>::InsV2Red
 
 // 计算算法层级信息：确定算法在通信层级中的位置和子通信域
 template <typename AlgTopoMatch, typename InsAlgTemplate>
-HcclResult InsV2ReduceScatterOrderPreservedExecutor<AlgTopoMatch, InsAlgTemplate>::CalcAlgHierarchyInfo(
-    HcclComm comm, TopoInfoWithNetLayerDetails* topoInfo, AlgHierarchyInfoForAllLevel& algHierarchyInfo)
-{
-    (void)comm;
-    AlgTopoMatch topoMatch;
-    CHK_RET(topoMatch.MatchTopo(topoInfo, algHierarchyInfo, AlgAttrs{}));
-    return HCCL_SUCCESS;
-}
-
-template <typename AlgTopoMatch, typename InsAlgTemplate>
 HcclResult InsV2ReduceScatterOrderPreservedExecutor<AlgTopoMatch, InsAlgTemplate>::CalcAlgHierarchyInfoV2(
     TopoInfoWithNetLayerDetails* topoInfo, AlgHierarchyInfoForAllLevel& algHierarchyInfo, const AlgAttrs& algAttrs)
 {

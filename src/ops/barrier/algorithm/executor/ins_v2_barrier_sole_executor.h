@@ -27,9 +27,6 @@ public:
     InsV2BarrierSoleExecutor() {}
     ~InsV2BarrierSoleExecutor() override = default;
 
-    HcclResult CalcAlgHierarchyInfo(
-        HcclComm comm, TopoInfoWithNetLayerDetails* topoInfo, AlgHierarchyInfoForAllLevel& algHierarchyInfo) override;
-
     HcclResult CalcAlgHierarchyInfoV2(
         TopoInfoWithNetLayerDetails* topoInfo, AlgHierarchyInfoForAllLevel& algHierarchyInfo,
         const AlgAttrs& algAttrs) override;

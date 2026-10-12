@@ -148,7 +148,7 @@ graph TB
         C1["Select()<br/>选出算法名"]
     end
     subgraph 执行器Executor
-        D1["CalcAlgHierarchyInfo()<br/>发现拓扑层次"] --> D2["CalcRes()<br/>计算资源需求"]
+        D1["CalcAlgHierarchyInfoV2()<br/>发现拓扑层次"] --> D2["CalcRes()<br/>计算资源需求"]
         D2 --> D3["Orchestrate()<br/>编排执行"]
     end
     subgraph 模板Template
@@ -166,7 +166,7 @@ graph TB
 
 | 文件 | 必须/可选 | 说明 |
 |---|---|---|
-| `ins_v2_<op>_<variant>_executor.h` | 必须 | Executor 类模板，继承 `InsCollAlgBase`，实现 `CalcAlgHierarchyInfo(V2)` / `CalcRes` / `Orchestrate` |
+| `ins_v2_<op>_<variant>_executor.h` | 必须 | Executor 类模板，继承 `InsCollAlgBase`，实现 `CalcAlgHierarchyInfoV2` / `CalcRes` / `Orchestrate` |
 | `ins_v2_<op>_<variant>_executor.cc` | 必须 | 注册宏 `REGISTER_EXEC_V2`/`REGISTER_ALG_ATTRS` 放置处 |
 | `<engine>_temp_<op>_<variant>.h` | 必须 | Template 派生类，继承引擎模板基类，实现 `CalcRes` / `KernelRun` / `GetThreadNum` 等 |
 | `<engine>_temp_<op>_<variant>.cc` | 必须 | Template 实现 |
@@ -207,9 +207,8 @@ executor 继承自 `InsCollAlgBase`，须实现以下纯虚/关键虚函数：
 
 | 函数 | 作用 | 参数 |
 |---|---|---|
-| `CalcAlgHierarchyInfo` | 拓扑匹配入口：实例化 `AlgTopoMatch` 并调用其 `MatchTopo`，计算各通信层级的算法层次信息 | `comm` 通信域句柄；`topoInfo` 拓扑详情（userRank/rankSize/网络层级，出参）；`algHierarchyInfo` 算法层次信息（出参） |
-| `CalcAlgHierarchyInfoV2` | V2 版本的拓扑匹配入口：行为同 `CalcAlgHierarchyInfo`，额外携带 `algAttrs` 供拓扑匹配过滤。**主流程（`HcclGetAlgRes`）实际调用的是本函数**；若不重写将回落基类默认实现并返回 `HCCL_E_PARA` | `topoInfo` 拓扑详情；`algHierarchyInfo` 算法层次信息（出参）；`algAttrs` 算法属性 |
-| `CalcRes` | 资源计算入口：按 topo 层级构造 template 实例并委托其 `CalcRes` 计算所需 channel/thread/buffer | `comm` 通信域；`param` 算子参数；`topoInfo` 拓扑详情；`algHierarchyInfo` 由 `CalcAlgHierarchyInfo` 产出；`resourceRequest` 资源请求（出参） |
+| `CalcAlgHierarchyInfoV2` | 拓扑匹配入口：实例化 `AlgTopoMatch` 并调用其 `MatchTopo`，计算各通信层级的算法层次信息。**纯虚接口，派生类必须实现（不实现则派生类为抽象类，无法通过 `REGISTER_EXEC_V2` 注册/实例化）** | `topoInfo` 拓扑详情（userRank/rankSize/网络层级，出参）；`algHierarchyInfo` 算法层次信息（出参）；`algAttrs` 算法属性 |
+| `CalcRes` | 资源计算入口：按 topo 层级构造 template 实例并委托其 `CalcRes` 计算所需 channel/thread/buffer | `comm` 通信域；`param` 算子参数；`topoInfo` 拓扑详情；`algHierarchyInfo` 由 `CalcAlgHierarchyInfoV2` 产出；`resourceRequest` 资源请求（出参） |
 | `CalcCostCoeff` | 成本建模入口：构造 `CalcCostCoeffParam`（`rankSize`/`dataRatio`/`netType` 等）委托模板 `CalcCostCoeff` 计算带宽、时延成本系数 A/B/C/D，供 selection cost 竞争 | `comm` 通信域；`topoInfo` 拓扑详情；`algName` 算法名；`param` 算子参数 |
 | `GetAlgNetMeta` | 组网元信息：返回 `AlgNetMeta`（`netTypes`/`intraGroupMode`/`groupSizes`），描述各 template 的网络类型与 cost 组内聚合方式 | `topoInfo` 拓扑详情；`param` 算子参数；`algName` 算法名 |
 | `Orchestrate` | 数据面执行入口：设置 maxTmpMemSize_/channels_/threads_ 等基类成员，校验数据类型与溢出，按 loop 编排下发 | `param` 算子参数；`resCtx` 序列化资源上下文 |

@@ -21,8 +21,6 @@ class InsV2AllGatherSequenceExecutorAicpu : public InsCollAlgBase {
 public:
     InsV2AllGatherSequenceExecutorAicpu() {}
     ~InsV2AllGatherSequenceExecutorAicpu() override {}
-    HcclResult CalcAlgHierarchyInfo(
-        HcclComm comm, TopoInfoWithNetLayerDetails* topoInfo, AlgHierarchyInfoForAllLevel& algHierarchyInfo) override;
 
     HcclResult CalcAlgHierarchyInfoV2(
         TopoInfoWithNetLayerDetails* topoInfo, AlgHierarchyInfoForAllLevel& algHierarchyInfo,

@@ -111,20 +111,6 @@ template <
     typename CcuAgAlgTemplateY>
 HcclResult InsV2AllReduceOmniPipe2dExecutor<
     AlgTopoMatch, CcuRsAlgTemplateX, CcuRsAlgTemplateY, CcuAgAlgTemplateX, CcuAgAlgTemplateY>::
-    CalcAlgHierarchyInfo(
-        HcclComm comm, TopoInfoWithNetLayerDetails* topoInfo, AlgHierarchyInfoForAllLevel& algHierarchyInfo)
-{
-    (void)comm;
-    AlgTopoMatch topoMatch;
-    CHK_RET(topoMatch.MatchTopo(topoInfo, algHierarchyInfo, AlgAttrs{}));
-    return HCCL_SUCCESS;
-}
-
-template <
-    typename AlgTopoMatch, typename CcuRsAlgTemplateX, typename CcuRsAlgTemplateY, typename CcuAgAlgTemplateX,
-    typename CcuAgAlgTemplateY>
-HcclResult InsV2AllReduceOmniPipe2dExecutor<
-    AlgTopoMatch, CcuRsAlgTemplateX, CcuRsAlgTemplateY, CcuAgAlgTemplateX, CcuAgAlgTemplateY>::
     CalcAlgHierarchyInfoV2(
         TopoInfoWithNetLayerDetails* topoInfo, AlgHierarchyInfoForAllLevel& algHierarchyInfo, const AlgAttrs& algAttrs)
 {

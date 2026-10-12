@@ -36,17 +36,6 @@ constexpr uint32_t CONCURRENT_RANK_LIMIT = 4;
 template <typename AlgTopoMatch, typename InsAlgTemplate>
 InsAlltoAllVSoleExecutor<AlgTopoMatch, InsAlgTemplate>::InsAlltoAllVSoleExecutor()
 {}
-
-template <typename AlgTopoMatch, typename InsAlgTemplate>
-HcclResult InsAlltoAllVSoleExecutor<AlgTopoMatch, InsAlgTemplate>::CalcAlgHierarchyInfo(
-    HcclComm comm, TopoInfoWithNetLayerDetails* topoInfo, AlgHierarchyInfoForAllLevel& algHierarchyInfo)
-{
-    (void)comm;
-    AlgTopoMatch topoMatch;
-    CHK_RET(topoMatch.MatchTopo(topoInfo, algHierarchyInfo, AlgAttrs{}));
-    return HCCL_SUCCESS;
-}
-
 template <typename AlgTopoMatch, typename InsAlgTemplate>
 HcclResult InsAlltoAllVSoleExecutor<AlgTopoMatch, InsAlgTemplate>::CalcAlgHierarchyInfoV2(
     TopoInfoWithNetLayerDetails* topoInfo, AlgHierarchyInfoForAllLevel& algHierarchyInfo, const AlgAttrs& algAttrs)

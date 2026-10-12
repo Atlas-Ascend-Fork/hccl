@@ -44,32 +44,6 @@ HcclResult InsRecvDpuExecutor<InsAlgTemplate>::InitCommInfo(
 
     return HcclResult::HCCL_SUCCESS;
 }
-
-template <typename InsAlgTemplate>
-HcclResult InsRecvDpuExecutor<InsAlgTemplate>::CalcAlgHierarchyInfo(
-    HcclComm comm, TopoInfoWithNetLayerDetails* topoInfo, AlgHierarchyInfoForAllLevel& algHierarchyInfo)
-{
-    (void)comm;
-    // 初始化一些基本成员变量
-    myRank_ = topoInfo->userRank;
-    HCCL_DEBUG("[InsRecvDpuExecutor][CalcAlgHierarchyInfo][%d] Start.", myRank_);
-    CHK_PRT_RET(
-        topoInfo->userRankSize == 0,
-        HCCL_ERROR("[InsRecvDpuExecutor][CalcAlgHierarchyInfo] Rank [%d], rankSize is 0.", myRank_),
-        HcclResult::HCCL_E_PARA);
-
-    // AlgHierarchyInfoForAllLevel固定为一层
-    algHierarchyInfo.infos.resize(1);
-    algHierarchyInfo.infos[0].resize(1);
-    algHierarchyInfo.infos[0][0].clear();
-    for (uint32_t rankId = 0; rankId < topoInfo->userRankSize; rankId++) {
-        algHierarchyInfo.infos[0][0].push_back(rankId);
-    }
-
-    HCCL_DEBUG("[InsRecvDpuExecutor][CalcAlgHierarchyInfo][%d] Success.", myRank_);
-    return HcclResult::HCCL_SUCCESS;
-}
-
 template <typename InsAlgTemplate>
 std::vector<CostModelParam> InsRecvDpuExecutor<InsAlgTemplate>::CalcCostCoeff(
     HcclComm comm, TopoInfoWithNetLayerDetails* topoInfo, const char* algName, const OpParam& param)

@@ -10,7 +10,7 @@
 
 This RFC proposes an HCCL refactoring scheme with `HcclAlgorithm` as the static algorithm description, `OpsExecutor` as the universal interpreter, Template as the single-layer execution unit, and CommPlanner as the communication plan generator. The scheme describes combinations such as Sequence, Parallel, and OmniPipe through a recursive algorithm tree, passes logical data ownership via `ranksForInputData`/`ranksForOutputData`, and establishes a unified memory and data flow model of `Input → CCL Buffer → ... → CCL Buffer → Output`.
 
-This refactoring lands in `experimental/ops/op_common/recursive_executor/` and adopts a **plug-in zero-intrusion integration** approach to connect to the existing src workflow: the recursive_executor code is compiled into `libhccl.so` as an OBJECT library, and `AdaptorExecutor` (inheriting src's `InsCollAlgBase`) is registered into src's `CollAlgExecRegistryV2` via `REGISTER_ALG`; after src's Selector selects the recursive_executor algorithm name for 4-level topology, the existing workflow `Selector → HcclExecOp → GetAlgExec → CalcAlgHierarchyInfo/CalcRes → Orchestrate` naturally dispatches to the recursive_executor executor, with zero changes to src except for the Selector's 4-level topology branch.
+This refactoring lands in `experimental/ops/op_common/recursive_executor/` and adopts a **plug-in zero-intrusion integration** approach to connect to the existing src workflow: the recursive_executor code is compiled into `libhccl.so` as an OBJECT library, and `AdaptorExecutor` (inheriting src's `InsCollAlgBase`) is registered into src's `CollAlgExecRegistryV2` via `REGISTER_ALG`; after src's Selector selects the recursive_executor algorithm name for 4-level topology, the existing workflow `Selector → HcclExecOp → GetAlgExec → CalcAlgHierarchyInfoV2/CalcRes → Orchestrate` naturally dispatches to the recursive_executor executor, with zero changes to src except for the Selector's 4-level topology branch.
 
 ## Background and Motivation
 
@@ -239,7 +239,7 @@ This refactoring depends on the following src / HCOMM interfaces and introduces 
 
 | Dependency | Source | Usage |
 | --- | --- | --- |
-| `InsCollAlgBase` | `src/ops/op_common/algorithm/executor/executor_v2_base.h` | `AdaptorExecutor` inherits this class, implements three pure virtual interfaces (`CalcAlgHierarchyInfo`/`CalcRes`/`Orchestrate`), bridging the src execution framework |
+| `InsCollAlgBase` | `src/ops/op_common/algorithm/executor/executor_v2_base.h` | `AdaptorExecutor` inherits this class, implements three pure virtual interfaces (`CalcAlgHierarchyInfoV2`/`CalcRes`/`Orchestrate`), bridging the src execution framework |
 | `OpParam` / `AlgResourceRequest` / `AlgResourceCtxSerializable` | `src/ops/op_common/...` | recursive_executor and src share the same set of types, naturally type-consistent, no wrapper layer needed |
 | `CollAlgExecRegistryV2` | `src/ops/op_common/executor/registry/coll_alg_v2_exec_registry.h` | Executor registry; `REGISTER_ALG` registers `AdaptorExecutor` into src through this table |
 | `hcomm_dlsym` symbol table | `src/common/hcomm_dlsym/` | Cross-repository calls to HCOMM go through dlsym, introducing no compile-time hard dependency on `cann/hcomm` |
@@ -402,7 +402,7 @@ These three policies are orthogonal: sequential describes temporal dependency, p
 
 The topology level (`subCommIndex`) and execution order (`execPolicy`) are two independent dimensions: the former answers "on which set of Ranks to execute", the latter answers "how Children are organized".
 
-**Mapping of `subCommIndex` to actual communicator**: `subCommIndex` is the index into the per-level sub-communicator table `AlgHierarchyInfoForAllLevel::infos[]`, which is populated by `TopoMatchBaseV2::MatchTopo` during the `CalcAlgHierarchyInfo` stage (`infos[i]` is the Rank grouping of the i-th level sub-communicator). At Template runtime, the same index is used to access the level's communication resources: `algHierarchyInfo_.infos[subCommIndex].at(0)` gets the level's Rank list, `GenTemplateRes` uses `channelTable_.at(subCommIndex)`/`subThreads_.at(subCommIndex)` to get the level's channel and threads (resources are allocated per-level by `CalcTemplateChannelRes` during the `CalcRes` stage, serialized via `resCtx.channels[level]`, and reconstructed by `RestoreChannelMap` during `InitRes`; see Section 3.7). Constraint: `subCommIndex` must be less than the number of topology levels; out-of-bounds access directly errors.
+**Mapping of `subCommIndex` to actual communicator**: `subCommIndex` is the index into the per-level sub-communicator table `AlgHierarchyInfoForAllLevel::infos[]`, which is populated by `TopoMatchBaseV2::MatchTopo` during the `CalcAlgHierarchyInfoV2` stage (`infos[i]` is the Rank grouping of the i-th level sub-communicator). At Template runtime, the same index is used to access the level's communication resources: `algHierarchyInfo_.infos[subCommIndex].at(0)` gets the level's Rank list, `GenTemplateRes` uses `channelTable_.at(subCommIndex)`/`subThreads_.at(subCommIndex)` to get the level's channel and threads (resources are allocated per-level by `CalcTemplateChannelRes` during the `CalcRes` stage, serialized via `resCtx.channels[level]`, and reconstructed by `RestoreChannelMap` during `InitRes`; see Section 3.7). Constraint: `subCommIndex` must be less than the number of topology levels; out-of-bounds access directly errors.
 
 #### 1.3 Algorithm Registry (AlgSelector)
 
@@ -917,8 +917,9 @@ if (topoInfo->topoLevelNums > 1) {
 ```cpp
 class InsCollAlgBase {
 public:
-    virtual HcclResult CalcAlgHierarchyInfo(
-        HcclComm comm, TopoInfoWithNetLayerDetails* topoInfo, AlgHierarchyInfoForAllLevel& algHierarchyInfo) = 0;
+    virtual HcclResult CalcAlgHierarchyInfoV2(
+        TopoInfoWithNetLayerDetails* topoInfo, AlgHierarchyInfoForAllLevel& algHierarchyInfo,
+        const AlgAttrs& algAttrs) = 0;
     virtual HcclResult CalcRes(
         HcclComm comm, const OpParam& param, const TopoInfoWithNetLayerDetails* topoInfo,
         const AlgHierarchyInfoForAllLevel& algHierarchyInfo, AlgResourceRequest& resourceRequest) = 0;
@@ -934,8 +935,9 @@ public:
     AdaptorExecutorBase() = default;
     ~AdaptorExecutorBase() override = default;
 
-    HcclResult CalcAlgHierarchyInfo(
-        HcclComm comm, TopoInfoWithNetLayerDetails* topoInfo, AlgHierarchyInfoForAllLevel& algHierarchyInfo) override;
+    HcclResult CalcAlgHierarchyInfoV2(
+        TopoInfoWithNetLayerDetails* topoInfo, AlgHierarchyInfoForAllLevel& algHierarchyInfo,
+        const AlgAttrs& algAttrs) override;
     HcclResult CalcRes(
         HcclComm comm, const OpParam& param, const TopoInfoWithNetLayerDetails* topoInfo,
         const AlgHierarchyInfoForAllLevel& algHierarchyInfo, AlgResourceRequest& resourceRequest) override;
@@ -959,7 +961,7 @@ The forwarding implementation of the three interfaces (`experimental/ops/op_comm
 
 ```cpp
 // 1. Topology matching: get topology matcher from AlgSelector to complete matching (pass algAttrs)
-HcclResult AdaptorExecutorBase::CalcAlgHierarchyInfo(...)
+HcclResult AdaptorExecutorBase::CalcAlgHierarchyInfoV2(...)
 {
     HcclAlgorithm alg;
     if (!AlgSelector::Instance().GetAlgorithm(algName_, alg)) { ... }
@@ -1076,7 +1078,7 @@ sequenceDiagram
     Op->>Op: param.algName = algName
     Op->>Reg: GetAlgExec(opType, algName)
     Reg-->>Op: unique_ptr<AdaptorExecutorImpl>
-    Op->>Ada: CalcAlgHierarchyInfo(comm, topoInfo, algHierarchyInfo)
+    Op->>Ada: CalcAlgHierarchyInfoV2(topoInfo, algHierarchyInfo, algAttrs)
     Ada->>Ada: AlgSelector.GetAlgorithm(algName_) -> algo
     Ada->>Ada: algo.topoMatch->MatchTopo(...)
     Ada-->>Op: algHierarchyInfo
@@ -1097,12 +1099,12 @@ Step-by-step explanation:
 
 1. **Algorithm selection** (src): `AllGatherAutoSelector::SelectAicpuAlgo` returns `"AicpuAllGatherSequenceMeshNHRNHRMesh"` for 4-level topology.
 2. **Executor routing** (src): `HcclExecOp` (`src/ops/op_common/op_common.cc`) writes the algorithm name into `param.algName`, calls `CollAlgExecRegistryV2::Instance().GetAlgExec(param.opType, algName)` to get `AdaptorExecutorImpl` (the only name-based lookup on the src side, reused by recursive_executor).
-3. **Resource computation** (src-driven + recursive_executor implementation): `HcclGetAlgRes` calls `CalcAlgHierarchyInfo` and `CalcRes` in sequence. The former is delegated by `AdaptorExecutor` to `TopoMatchFourLevel` for per-level topology matching; the latter constructs `OpsExecutor` and recursively calls `CalcRes`, outputting `AlgResourceRequest`. src then allocates threads/notify/channel/scratch via `GetAlgResWithEngine` and serializes into `AlgResourceCtxSerializable`.
+3. **Resource computation** (src-driven + recursive_executor implementation): `HcclGetAlgRes` calls `CalcAlgHierarchyInfoV2` and `CalcRes` in sequence. The former is delegated by `AdaptorExecutor` to `TopoMatchFourLevel` for per-level topology matching; the latter constructs `OpsExecutor` and recursively calls `CalcRes`, outputting `AlgResourceRequest`. src then allocates threads/notify/channel/scratch via `GetAlgResWithEngine` and serializes into `AlgResourceCtxSerializable`.
 4. **Execution**: `executor->Orchestrate(param, resCtxHost)` (CCU/default engine calls directly on Host; AICPU_TS engine dispatches via `HcclAicpuKernelEntranceLaunch`, and the AICPU kernel similarly executes via `CollAlgExecRegistryV2::GetAlgExec` + `Orchestrate`). After `OpsExecutor::InitRes` restores CCL Buffer/thread/channel tables from `resCtx`, it enters `PrepareOrchestrate → OrchestrateLoop` recursive orchestration.
 
 #### 3.7 Resource Reuse and Host/Device Transfer
 
-- **Resource reuse**: `HcclGetAlgRes` first attempts `TryReuseResource`—if resources for that `algTag` have already been created, it directly returns the serialized ctx (`isResourceReused=true`); after Host-side deserialization, `Orchestrate` can proceed, skipping `CalcAlgHierarchyInfo`/`CalcRes`. The recursive_executor executor does not need to be aware of this mechanism; reuse checking happens entirely in src.
+- **Resource reuse**: `HcclGetAlgRes` first attempts `TryReuseResource`—if resources for that `algTag` have already been created, it directly returns the serialized ctx (`isResourceReused=true`); after Host-side deserialization, `Orchestrate` can proceed, skipping `CalcAlgHierarchyInfoV2`/`CalcRes`. The recursive_executor executor does not need to be aware of this mechanism; reuse checking happens entirely in src.
 - **Channel restoration**: `OpsExecutor::InitRes` calls `RestoreChannelMap`, reassembling `resCtx.channels` (expanded by level) into a `rankId → ChannelInfo` mapping for Template's `GenTemplateRes` to bind actual communication resources, aligned with the semantics of src executor's `InsCollAlgBase::RestoreChannelMap`.
 
 ### 4. New Algorithm Guide

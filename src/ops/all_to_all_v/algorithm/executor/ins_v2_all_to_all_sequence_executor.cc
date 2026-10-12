@@ -19,17 +19,6 @@ namespace ops_hccl {
 template <typename AlgTopoMatch>
 InsV2AlltoAllSequenceExecutor<AlgTopoMatch>::InsV2AlltoAllSequenceExecutor()
 {}
-
-template <typename AlgTopoMatch>
-HcclResult InsV2AlltoAllSequenceExecutor<AlgTopoMatch>::CalcAlgHierarchyInfo(
-    HcclComm comm, TopoInfoWithNetLayerDetails* topoInfo, AlgHierarchyInfoForAllLevel& algHierarchyInfo)
-{
-    (void)comm;
-    AlgTopoMatch topoMatch;
-    CHK_RET(topoMatch.MatchTopo(topoInfo, algHierarchyInfo, AlgAttrs{}));
-    return HCCL_SUCCESS;
-}
-
 template <typename AlgTopoMatch>
 HcclResult InsV2AlltoAllSequenceExecutor<AlgTopoMatch>::CalcAlgHierarchyInfoV2(
     TopoInfoWithNetLayerDetails* topoInfo, AlgHierarchyInfoForAllLevel& algHierarchyInfo, const AlgAttrs& algAttrs)

@@ -39,31 +39,6 @@ InsSendExecutor::InitSendInfo(const HcclComm comm, const OpParam& param, const T
 
     return HcclResult::HCCL_SUCCESS;
 }
-
-HcclResult InsSendExecutor::CalcAlgHierarchyInfo(
-    HcclComm comm, TopoInfoWithNetLayerDetails* topoInfo, AlgHierarchyInfoForAllLevel& algHierarchyInfo)
-{
-    (void)comm;
-    // 初始化一些基本成员变量
-    myRank_ = topoInfo->userRank;
-    HCCL_DEBUG("[InsSendExecutor][CalcAlgHierarchyInfo][%d] Start.", myRank_);
-    CHK_PRT_RET(
-        (topoInfo->userRankSize == 0),
-        HCCL_ERROR("[InsSendExecutor][CalcAlgHierarchyInfo] Rank [%d], rankSize is 0.", myRank_),
-        HcclResult::HCCL_E_PARA);
-
-    // AlgHierarchyInfoForAllLevel固定为一层
-    algHierarchyInfo.infos.resize(1);
-    algHierarchyInfo.infos[0].resize(1);
-    algHierarchyInfo.infos[0][0].clear();
-    for (uint32_t rankId = 0; rankId < topoInfo->userRankSize; rankId++) {
-        algHierarchyInfo.infos[0][0].push_back(rankId);
-    }
-
-    HCCL_DEBUG("[InsSendExecutor][CalcAlgHierarchyInfo][%d] Success.", myRank_);
-    return HcclResult::HCCL_SUCCESS;
-}
-
 HcclResult InsSendExecutor::CalcAlgHierarchyInfoV2(
     TopoInfoWithNetLayerDetails* topoInfo, AlgHierarchyInfoForAllLevel& algHierarchyInfo, const AlgAttrs& algAttrs)
 {

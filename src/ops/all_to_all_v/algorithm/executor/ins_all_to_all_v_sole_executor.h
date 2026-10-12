@@ -40,9 +40,6 @@ public:
 
     HcclResult GetAlltoAllLocalSendRecvInfo(const OpParam& param, A2ASendRecvInfo& localSendRecvInfo) const;
 
-    HcclResult CalcAlgHierarchyInfo(
-        HcclComm comm, TopoInfoWithNetLayerDetails* topoInfo, AlgHierarchyInfoForAllLevel& algHierarchyInfo) override;
-
     std::vector<CostModelParam> CalcCostCoeff(
         HcclComm comm, TopoInfoWithNetLayerDetails* topoInfo, const char* algName, const OpParam& param) override;
 

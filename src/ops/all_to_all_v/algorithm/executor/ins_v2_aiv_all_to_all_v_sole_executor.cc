@@ -27,17 +27,6 @@ namespace ops_hccl {
 template <typename AlgTopoMatch, typename InsAlgTemplate>
 InsV2AivAlltoAllVSoleExecutor<AlgTopoMatch, InsAlgTemplate>::InsV2AivAlltoAllVSoleExecutor()
 {}
-
-template <typename AlgTopoMatch, typename InsAlgTemplate>
-HcclResult InsV2AivAlltoAllVSoleExecutor<AlgTopoMatch, InsAlgTemplate>::CalcAlgHierarchyInfo(
-    HcclComm comm, TopoInfoWithNetLayerDetails* topoInfo, AlgHierarchyInfoForAllLevel& algHierarchyInfo)
-{
-    (void)comm;
-    AlgTopoMatch topoMatch;
-    CHK_RET(topoMatch.MatchTopo(topoInfo, algHierarchyInfo, AlgAttrs{}));
-    return HCCL_SUCCESS;
-}
-
 template <typename AlgTopoMatch, typename InsAlgTemplate>
 HcclResult InsV2AivAlltoAllVSoleExecutor<AlgTopoMatch, InsAlgTemplate>::CalcAlgHierarchyInfoV2(
     TopoInfoWithNetLayerDetails* topoInfo, AlgHierarchyInfoForAllLevel& algHierarchyInfo, const AlgAttrs& algAttrs)

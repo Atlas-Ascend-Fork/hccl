@@ -29,9 +29,6 @@ public:
     HcclResult OrchestrateWithThread(
         const OpParam& param, const AlgResourceCtxSerializable& resCtx, ThreadHandle sendRecvThread) override;
 
-    HcclResult CalcAlgHierarchyInfo(
-        HcclComm comm, TopoInfoWithNetLayerDetails* topoInfo, AlgHierarchyInfoForAllLevel& algHierarchyInfo) override;
-
     HcclResult CalcAlgHierarchyInfoV2(
         TopoInfoWithNetLayerDetails* topoInfo, AlgHierarchyInfoForAllLevel& algHierarchyInfo,
         const AlgAttrs& algAttrs) override;

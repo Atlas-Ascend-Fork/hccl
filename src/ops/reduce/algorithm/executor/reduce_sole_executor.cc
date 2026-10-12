@@ -89,17 +89,6 @@ AlgNetMeta ReduceSoleExecutor<AlgTopoMatch, AlgTemplate>::GetAlgNetMeta(
     meta.rankSizes = {rankSize};
     return meta;
 }
-
-template <typename AlgTopoMatch, typename AlgTemplate>
-HcclResult ReduceSoleExecutor<AlgTopoMatch, AlgTemplate>::CalcAlgHierarchyInfo(
-    HcclComm comm, TopoInfoWithNetLayerDetails* topoInfo, AlgHierarchyInfoForAllLevel& algHierarchyInfo)
-{
-    (void)comm;
-    AlgTopoMatch topoMatch;
-    CHK_RET(topoMatch.MatchTopo(topoInfo, algHierarchyInfo, AlgAttrs{}));
-    return HCCL_SUCCESS;
-}
-
 template <typename AlgTopoMatch, typename AlgTemplate>
 HcclResult ReduceSoleExecutor<AlgTopoMatch, AlgTemplate>::CalcAlgHierarchyInfoV2(
     TopoInfoWithNetLayerDetails* topoInfo, AlgHierarchyInfoForAllLevel& algHierarchyInfo, const AlgAttrs& algAttrs)

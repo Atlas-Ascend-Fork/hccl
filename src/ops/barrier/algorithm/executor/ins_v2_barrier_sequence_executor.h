@@ -28,8 +28,6 @@ class InsV2BarrierSequenceExecutor : public InsCollAlgBase {
 public:
     InsV2BarrierSequenceExecutor() {}
     ~InsV2BarrierSequenceExecutor() override {}
-    HcclResult CalcAlgHierarchyInfo(
-        HcclComm comm, TopoInfoWithNetLayerDetails* topoInfo, AlgHierarchyInfoForAllLevel& algHierarchyInfo) override;
 
     HcclResult CalcAlgHierarchyInfoV2(
         TopoInfoWithNetLayerDetails* topoInfo, AlgHierarchyInfoForAllLevel& algHierarchyInfo,

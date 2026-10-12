@@ -25,19 +25,19 @@ bool IsRecursiveExecutorEnabled()
     return env != nullptr && std::string(env) == "true";
 }
 
-HcclResult AdaptorExecutorBase::CalcAlgHierarchyInfo(
-    HcclComm comm, TopoInfoWithNetLayerDetails* topoInfo, AlgHierarchyInfoForAllLevel& algHierarchyInfo)
+HcclResult AdaptorExecutorBase::CalcAlgHierarchyInfoV2(
+    TopoInfoWithNetLayerDetails* topoInfo, AlgHierarchyInfoForAllLevel& algHierarchyInfo, const AlgAttrs& algAttrs)
 {
     HcclAlgorithm alg;
     if (!AlgSelector::Instance().GetAlgorithm(algName_, alg)) {
-        HCCL_ERROR("[AdaptorExecutorBase] algorithm [%s] not found for CalcAlgHierarchyInfo.", algName_.c_str());
+        HCCL_ERROR("[AdaptorExecutorBase] algorithm [%s] not found for CalcAlgHierarchyInfoV2.", algName_.c_str());
         return HCCL_E_PARA;
     }
     if (alg.topoMatch == nullptr) {
         HCCL_ERROR("[AdaptorExecutorBase] algorithm [%s] topoMatch is nullptr.", algName_.c_str());
         return HCCL_E_PARA;
     }
-    return alg.topoMatch->MatchTopo(topoInfo, algHierarchyInfo, alg.algAttrs);
+    return alg.topoMatch->MatchTopo(topoInfo, algHierarchyInfo, algAttrs);
 }
 
 HcclResult AdaptorExecutorBase::CalcRes(

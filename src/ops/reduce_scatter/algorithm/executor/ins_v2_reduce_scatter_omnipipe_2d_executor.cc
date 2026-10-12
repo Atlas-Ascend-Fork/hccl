@@ -38,17 +38,6 @@ template <typename AlgTopoMatch, typename InsAlgTempLevel0, typename InsAlgTempL
 InsV2ReduceScatterOmniPipe2dExecutor<
     AlgTopoMatch, InsAlgTempLevel0, InsAlgTempLevel1>::InsV2ReduceScatterOmniPipe2dExecutor()
 {}
-
-template <typename AlgTopoMatch, typename InsAlgTempLevel0, typename InsAlgTempLevel1>
-HcclResult InsV2ReduceScatterOmniPipe2dExecutor<AlgTopoMatch, InsAlgTempLevel0, InsAlgTempLevel1>::CalcAlgHierarchyInfo(
-    HcclComm comm, TopoInfoWithNetLayerDetails* topoInfo, AlgHierarchyInfoForAllLevel& algHierarchyInfo)
-{
-    (void)comm;
-    AlgTopoMatch topoMatch;
-    CHK_RET(topoMatch.MatchTopo(topoInfo, algHierarchyInfo, AlgAttrs{}));
-    return HCCL_SUCCESS;
-}
-
 template <typename AlgTopoMatch, typename InsAlgTempLevel0, typename InsAlgTempLevel1>
 HcclResult
 InsV2ReduceScatterOmniPipe2dExecutor<AlgTopoMatch, InsAlgTempLevel0, InsAlgTempLevel1>::CalcAlgHierarchyInfoV2(

@@ -104,19 +104,6 @@ InsV2AllReduceOrderPreservedExecutor<
 {
     deterministicStrict_ = true;
 }
-
-template <typename AlgTopoMatch, typename InsAlgTemplateRS, typename InsAlgTemplateAGMesh, typename InsAlgTemplateAGNHR>
-HcclResult
-InsV2AllReduceOrderPreservedExecutor<AlgTopoMatch, InsAlgTemplateRS, InsAlgTemplateAGMesh, InsAlgTemplateAGNHR>::
-    CalcAlgHierarchyInfo(
-        HcclComm comm, TopoInfoWithNetLayerDetails* topoInfo, AlgHierarchyInfoForAllLevel& algHierarchyInfo)
-{
-    (void)comm;
-    AlgTopoMatch topoMatch;
-    CHK_RET(topoMatch.MatchTopo(topoInfo, algHierarchyInfo, AlgAttrs{}));
-    return HCCL_SUCCESS;
-}
-
 template <typename AlgTopoMatch, typename InsAlgTemplateRS, typename InsAlgTemplateAGMesh, typename InsAlgTemplateAGNHR>
 HcclResult
 InsV2AllReduceOrderPreservedExecutor<AlgTopoMatch, InsAlgTemplateRS, InsAlgTemplateAGMesh, InsAlgTemplateAGNHR>::
