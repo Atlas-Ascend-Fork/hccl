@@ -13,9 +13,9 @@ if(NOT ENABLE_EXPERIMENTAL)
 endif()
 
 add_subdirectory(op_common)
+add_subdirectory(all_reduce)
 add_subdirectory(reduce_scatter)
 add_subdirectory(reduce_scatter_v)
-add_subdirectory(all_reduce/example)
 
 set(EXPERIMENTAL_INCLUDE_LIST
     ${CMAKE_CURRENT_SOURCE_DIR}/../
@@ -23,18 +23,20 @@ set(EXPERIMENTAL_INCLUDE_LIST
     ${CMAKE_CURRENT_SOURCE_DIR}/op_common/
     ${CMAKE_CURRENT_SOURCE_DIR}/op_common/template
     ${CMAKE_CURRENT_SOURCE_DIR}/op_common/topo
+    ${CMAKE_CURRENT_SOURCE_DIR}/all_reduce/
+    ${CMAKE_CURRENT_SOURCE_DIR}/all_reduce/biar/
+    ${CMAKE_CURRENT_SOURCE_DIR}/all_reduce/biar/template/
+    ${CMAKE_CURRENT_SOURCE_DIR}/all_reduce/example/
+    ${CMAKE_CURRENT_SOURCE_DIR}/all_reduce/example/template/
+    ${CMAKE_CURRENT_SOURCE_DIR}/all_reduce/example/template/ccu/
+    ${CMAKE_CURRENT_SOURCE_DIR}/all_reduce/example/template/ccu/kernel/
+    ${CMAKE_CURRENT_SOURCE_DIR}/all_reduce/example/executor/
     ${CMAKE_CURRENT_SOURCE_DIR}/reduce_scatter/
     ${CMAKE_CURRENT_SOURCE_DIR}/reduce_scatter/birs/
     ${CMAKE_CURRENT_SOURCE_DIR}/reduce_scatter/birs/template/
     ${CMAKE_CURRENT_SOURCE_DIR}/reduce_scatter_v/
     ${CMAKE_CURRENT_SOURCE_DIR}/reduce_scatter_v/birs/
     ${CMAKE_CURRENT_SOURCE_DIR}/reduce_scatter_v/birs/template/
-    ${CMAKE_CURRENT_SOURCE_DIR}/all_reduce/
-    ${CMAKE_CURRENT_SOURCE_DIR}/all_reduce/example/
-    ${CMAKE_CURRENT_SOURCE_DIR}/all_reduce/example/template/
-    ${CMAKE_CURRENT_SOURCE_DIR}/all_reduce/example/template/ccu/
-    ${CMAKE_CURRENT_SOURCE_DIR}/all_reduce/example/template/ccu/kernel/
-    ${CMAKE_CURRENT_SOURCE_DIR}/all_reduce/example/executor/
 )
 
 if(TARGET scatter_aicpu_kernel)
@@ -43,6 +45,10 @@ if(TARGET scatter_aicpu_kernel)
     target_sources(scatter_aicpu_kernel PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/op_common/template/alg_template_base_experimental.cc
         ${CMAKE_CURRENT_SOURCE_DIR}/op_common/topo/topo_experimental.cc
+        ${CMAKE_CURRENT_SOURCE_DIR}/op_common/coll_executor_base_experimental.cc
+        ${CMAKE_CURRENT_SOURCE_DIR}/all_reduce/biar/all_reduce_biar_executor.cc
+        ${CMAKE_CURRENT_SOURCE_DIR}/all_reduce/biar/all_reduce_executor_base.cc
+        ${CMAKE_CURRENT_SOURCE_DIR}/all_reduce/biar/template/all_reduce_biar.cc
         ${CMAKE_CURRENT_SOURCE_DIR}/reduce_scatter/birs/reduce_scatter_birs_executor.cc
         ${CMAKE_CURRENT_SOURCE_DIR}/reduce_scatter/birs/reduce_scatter_executor_base.cc
         ${CMAKE_CURRENT_SOURCE_DIR}/reduce_scatter/birs/template/reduce_scatter_birs.cc

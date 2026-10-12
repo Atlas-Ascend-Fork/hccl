@@ -12,71 +12,12 @@
 
 namespace ops_hccl_experimental {
 using ops_hccl::ExecMem;
-using ops_hccl::HCCL_INTERNODE_MAX_DATA_RATE;
-using ops_hccl::RDMA_SEND_MAX_SIZE;
-using ops_hccl::SDMA_SEND_MAX_SIZE;
 
-ReduceScatterVExecutorBase::ReduceScatterVExecutorBase() : ExecutorBase() {}
+ReduceScatterVExecutorBase::ReduceScatterVExecutorBase() : CollExecutorBaseExperimental() {}
 
-// 执行入口
-HcclResult ReduceScatterVExecutorBase::Orchestrate(const OpParam& param, AlgResourceCtx* resCtx)
+u32 ReduceScatterVExecutorBase::CalcUnitSize(const OpParam& param) const
 {
-    HcclUs startut = TIME_NOW();
-    topoInfo_ = &(resCtx->topoInfo);
-    algResource_ = resCtx;
-    tag_ = std::string(param.tag);
-    algType_ = resCtx->algType;
-    unitSize_ = HCCL_SIZE_TABLE[param.vDataDes.dataType];
-
-    CHK_PTR_NULL(param.inputPtr);
-    CHK_PTR_NULL(param.outputPtr);
-
-    // 做参数的还原
-    ThreadHandle* threadHandlePtr
-        = reinterpret_cast<ThreadHandle*>(reinterpret_cast<char*>(algResource_) + sizeof(AlgResourceCtx));
-    ChannelInfo* channelInfoPtr = reinterpret_cast<ChannelInfo*>(
-        reinterpret_cast<char*>(threadHandlePtr) + sizeof(ThreadHandle) * (algResource_->slaveThreadNum + 1));
-
-    HCCL_DEBUG("[ReduceScatterVExecutorBase][Orchestrate] slaveThreadNum[%u]", algResource_->slaveThreadNum);
-    for (u32 i = 0; i < algResource_->slaveThreadNum + 1; i++) {
-        HCCL_DEBUG("[ReduceScatterVExecutorBase][Orchestrate] threadHandle[%u]=[%llu]", i, threadHandlePtr[i]);
-        if (i == 0) {
-            thread_ = threadHandlePtr[i];
-        } else {
-            slaveThreads_.push_back(threadHandlePtr[i]);
-        }
-    }
-    AlgHierarchyInfo& algHierarchyInfo = resCtx->algHierarchyInfo;
-    channels_.resize(algHierarchyInfo.levels);
-    for (u32 level = 0; level < algHierarchyInfo.levels; level++) {
-        u32 curLevelRankSize = algHierarchyInfo.infos[level].localRankSize;
-        channels_[level].resize(curLevelRankSize);
-        for (u32 rank = 0; rank < curLevelRankSize; rank++) {
-            channels_[level][rank] = channelInfoPtr[rank];
-        }
-        channelInfoPtr += curLevelRankSize;
-    }
-
-    HcclResult ret = RunLoop(param);
-    CHK_PRT_RET(
-        ret != HCCL_SUCCESS,
-        HCCL_ERROR(
-            "[ReduceScatterVExecutorBase][Orchestrate]errNo[0x%016llx]"
-            " ReduceScatterV executor kernel run failed",
-            HCCL_ERROR_CODE(ret)),
-        ret);
-    HCCL_INFO(
-        "[ReduceScatterVExecutorBase][Orchestrate]tag[%s]"
-        " ReduceScatterV executor orchestrate success, take time [%lld]us.",
-        param.tag, DURATION_US(TIME_NOW() - startut));
-    return HCCL_SUCCESS;
-}
-
-bool ReduceScatterVExecutorBase::IsHugeData(u64 curSize) const
-{
-    bool hugeData = curSize * topoInfo_->userRankSize / HCCL_INTERNODE_MAX_DATA_RATE > RDMA_SEND_MAX_SIZE
-                    || curSize > SDMA_SEND_MAX_SIZE;
-    return hugeData;
+    return HCCL_SIZE_TABLE[param.vDataDes.dataType];
 }
 
 HcclResult ReduceScatterVExecutorBase::AcquireCommIfNeeded(const OpParam& param)

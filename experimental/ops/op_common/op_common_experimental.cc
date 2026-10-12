@@ -20,6 +20,7 @@
 #include "hcomm_host_profiling_dl.h"
 #include "reduce_scatter_birs_selector.h"
 #include "reduce_scatter_v_birs_selector.h"
+#include "all_reduce_biar_selector.h"
 #include <algorithm>
 #include <future>
 #include <map>
@@ -175,6 +176,38 @@ SelectAlgReduceScatterV(HcclComm comm, OpParam& param, TopoInfo* topoInfo, AlgTy
     }
 
     CHK_RET(FillAlgTagAndDebugInfo(param, topoInfo, algType, algName, "Reduce_Scatter_V"));
+    return HCCL_SUCCESS;
+}
+
+HcclResult SelectAlgAllReduce(HcclComm comm, OpParam& param, TopoInfo* topoInfo, AlgType& algType, std::string& algName)
+{
+    (void)comm;
+    ValidateAndResetAlgLevel1(algType, "All_Reduce");
+
+    const BiarSelectResult biarResult = DecideAllReduceBiarAlg(*topoInfo, algName);
+    const HcclResult biarRet = BiarSelectResultToCode(biarResult);
+    if (biarRet != HCCL_SUCCESS) {
+        if (biarResult == BiarSelectResult::bRejectServerNumZero) {
+            HCCL_ERROR(
+                "[%s] AllReduceBIAR not supported: serverNum is 0, cannot compute ranks per server "
+                "(userRankSize[%u])",
+                __func__, topoInfo->userRankSize);
+        } else if (biarResult == BiarSelectResult::bRejectRanksPerServerLT4) {
+            HCCL_ERROR(
+                "[%s] AllReduceBIAR not supported: userRankSize[%u] / serverNum[%u] < 4", __func__,
+                topoInfo->userRankSize, topoInfo->serverNum);
+        }
+        return biarRet;
+    }
+    if (biarResult != BiarSelectResult::bSelected || algName.empty()) {
+        HCCL_ERROR(
+            "[%s] AllReduceBIAR not selected: deviceType[%d] and even userRankSize[%u] are required, "
+            "no fallback executor on the BIRS path",
+            __func__, topoInfo->deviceType, topoInfo->userRankSize);
+        return HCCL_E_PARA;
+    }
+
+    CHK_RET(FillAlgTagAndDebugInfo(param, topoInfo, algType, algName, "All_Reduce"));
     return HCCL_SUCCESS;
 }
 
@@ -341,7 +374,12 @@ HcclResult DoAicpuKernelLaunch(OpParam& param, uint64_t& beginTime)
         HCCL_E_OPEN_FILE_FAILURE);
 
     if (HcommIsProfilingSupported()) {
-        std::string profName = "ReduceScatterAicpuKernel";
+        std::string profName = "";
+        if (param.opType == HCCL_CMD_REDUCE_SCATTER) {
+            profName = "ReduceScatterAicpuKernel";
+        } else if (param.opType == HCCL_CMD_ALLREDUCE) {
+            profName = "AllReduceAicpuKernel";
+        }
         HCCL_DEBUG("[%s] profName = [%s]", __func__, profName);
         HcommProfilingReportKernel(beginTime, profName.c_str());
     }
@@ -388,6 +426,8 @@ HcclResult ExecOpBirs(HcclComm comm, OpParam& param)
         CHK_RET(SelectAlgReduceScatter(comm, param, topoInfo, algType, algName));
     } else if (param.opType == HCCL_CMD_REDUCE_SCATTER_V) {
         CHK_RET(SelectAlgReduceScatterV(comm, param, topoInfo, algType, algName));
+    } else if (param.opType == HCCL_CMD_ALLREDUCE) {
+        CHK_RET(SelectAlgAllReduce(comm, param, topoInfo, algType, algName));
     }
 
     std::unique_ptr<ExecutorBase> executor = CollAlgExecRegistry::Instance().GetAlgExec(algName);

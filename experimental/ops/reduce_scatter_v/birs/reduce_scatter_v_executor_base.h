@@ -15,14 +15,12 @@
 #include "executor_base.h"
 #include "config_log.h"
 #include "alg_template_base_experimental.h"
+#include "coll_executor_base_experimental.h"
 
 namespace ops_hccl_experimental {
 using ops_hccl::AlgHierarchyInfo;
-using ops_hccl::AlgResourceCtx;
 using ops_hccl::AlgResourceRequest;
 using ops_hccl::AlgType;
-using ops_hccl::ChannelInfo;
-using ops_hccl::ExecutorBase;
 using ops_hccl::OpParam;
 using ops_hccl::Slice;
 using ops_hccl::TopoInfo;
@@ -31,12 +29,10 @@ using ops_hccl::TopoInfo;
 // 两侧统一引用本常量, 禁止再各自定义
 constexpr u32 BIRS_THREAD_NUM = 2;
 
-class ReduceScatterVExecutorBase : public ExecutorBase {
+class ReduceScatterVExecutorBase : public CollExecutorBaseExperimental {
 public:
     explicit ReduceScatterVExecutorBase();
     ~ReduceScatterVExecutorBase() override = default;
-
-    HcclResult Orchestrate(const OpParam& param, AlgResourceCtx* resCtx) override;
 
     /* *************** 资源计算 *************** */
     HcclResult CalcResRequest(
@@ -45,20 +41,15 @@ public:
 
 protected:
     // 用于需要Loop的Executor
-    virtual HcclResult RunLoop(const OpParam& param);
+    HcclResult RunLoop(const OpParam& param) override;
 
     /* *************** 通用工具 *************** */
     // 根据变长counts/displs准备每个rank的数据切片(变长)
     HcclResult PrepareDataSliceV(
         const u64* sendCounts, const u64* sendDispls, u32 unitSize, u32 sliceNum, std::vector<Slice>& dataSlice);
-    bool IsHugeData(u64 curSize) const;
     HcclResult AcquireCommIfNeeded(const OpParam& param);
     HcclResult ReleaseCommIfNeeded(const OpParam& param);
-
-    ThreadHandle thread_ = 0;
-    std::vector<ThreadHandle> slaveThreads_;
-    std::vector<std::vector<ChannelInfo>> channels_;
-    u32 unitSize_;
+    u32 CalcUnitSize(const OpParam& param) const override;
 };
 
 } // namespace ops_hccl_experimental

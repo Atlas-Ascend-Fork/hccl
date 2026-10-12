@@ -13,6 +13,7 @@ add_subdirectory(recursive_executor)
 
 set(src_list
     ${CMAKE_CURRENT_SOURCE_DIR}/op_common_experimental.cc
+    ${CMAKE_CURRENT_SOURCE_DIR}/coll_executor_base_experimental.cc
 )
 
 if(TARGET hccl)

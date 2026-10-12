@@ -8,6 +8,7 @@
  * See LICENSE in the root of the software repository for the full text of the License.
  */
 
+#include "alg_param.h"
 #include "gtest/gtest.h"
 #include "sim_world.h"
 #include "hccl.h"
@@ -47,7 +48,7 @@ protected:
         auto rankSize = 0;
         for (u32 i = 0; i < topoMeta[0].size(); i++)
             rankSize += topoMeta[0][i].size(); // 参与集合通信的卡数(同topoMeta卡数一致)
-        auto dataUnitSize = sizeof(dataType);
+        auto dataUnitSize = DATATYPE_SIZE_TABLE[dataType];
         // 多线程运行ReduceScatter算子
         std::vector<std::thread> threads;
         for (auto rankId = 0; rankId < rankSize; ++rankId) {

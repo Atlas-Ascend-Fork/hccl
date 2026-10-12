@@ -13,6 +13,7 @@ set(_repo_root ${CMAKE_CURRENT_SOURCE_DIR}/../../..)
 set(_rsv_ut_include_dirs
     ${_repo_root}/experimental/ops/reduce_scatter_v/birs
     ${_repo_root}/experimental/ops/reduce_scatter_v/birs/template
+    ${_repo_root}/experimental/ops/op_common
     ${_repo_root}/experimental/ops/op_common/template
     ${_repo_root}/src/ops/op_common/inc
     ${_repo_root}/src/ops/op_common
@@ -112,6 +113,7 @@ set(core_src_list
     ${_repo_root}/experimental/ops/reduce_scatter_v/birs/reduce_scatter_v_executor_base.cc
     ${_repo_root}/experimental/ops/reduce_scatter_v/birs/template/reduce_scatter_v_birs.cc
     ${_repo_root}/experimental/ops/reduce_scatter_v/birs/template/reduce_scatter_v_birs_inter.cc
+    ${_repo_root}/experimental/ops/op_common/coll_executor_base_experimental.cc
     ${_repo_root}/experimental/ops/op_common/template/alg_template_base_experimental.cc
     ${_repo_root}/src/ops/op_common/algorithm/executor/executor_base.cc
     ${_repo_root}/src/ops/op_common/algorithm/template/registry/alg_template_register.cc

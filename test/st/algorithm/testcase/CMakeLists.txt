@@ -38,6 +38,7 @@ function(add_st_test OP_NAME OP_SRC)
             ${HCCL_DEV_BASE}/src/ops/op_common
             ${HCCL_DEV_BASE}/src/ops/op_common/inc
             ${HCCL_DEV_BASE}/src/common/hcomm_dlsym
+            ${HCCL_DEV_BASE}/src/common/hcomm_dlsym/ccu
 
             ${UTILS_DIR}/sim_world
             ${UTILS_DIR}/common/utils
@@ -134,12 +135,17 @@ if("all" IN_LIST ST_TASKS OR "reduce_scatter" IN_LIST ST_TASKS)
 endif()
 # a3(BIRS/BIRS-V) 用例依赖 experimental 构建的 libhccl(HCCL_BIRS_ENABLE 选路);
 # 非 experimental 构建下 HcclReduceScatter(V)Inner 在 ST 打桩为 E_NOT_SUPPORT, 故仅在 ON 时注册
+# a3(AllReduceBIAR) 用例依赖 experimental 构建的 libhccl(HCCL_BIRS_ENABLE 选路);
+# 非 experimental 构建下老流程在 DEV_TYPE_910_93 仿真拓扑无可用算法(taskQueues 为空), 故仅在 ON 时注册
 if(ENABLE_EXPERIMENTAL)
     if("all" IN_LIST ST_TASKS OR "reduce_scatter_v_a3" IN_LIST ST_TASKS)
         add_st_test(reduce_scatter_v_a3 reduce_scatter_v_testcase_a3.cc)
     endif()
     if("all" IN_LIST ST_TASKS OR "reduce_scatter_a3" IN_LIST ST_TASKS)
         add_st_test(reduce_scatter_a3 reduce_scatter_testcase_a3.cc)
+    endif()
+    if("all" IN_LIST ST_TASKS OR "all_reduce_a3" IN_LIST ST_TASKS)
+        add_st_test(all_reduce_a3 all_reduce_testcase_a3.cc)
     endif()
 endif()
 if("all" IN_LIST ST_TASKS OR "reduce_scatter_3level" IN_LIST ST_TASKS)

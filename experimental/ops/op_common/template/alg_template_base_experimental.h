@@ -26,6 +26,7 @@ constexpr TemplateType TEMPLATE_REDUCE_SCATTER_BIRS = static_cast<TemplateType>(
 constexpr TemplateType TEMPLATE_REDUCE_SCATTER_BIRS_INTER = static_cast<TemplateType>(1002);
 constexpr TemplateType TEMPLATE_REDUCE_SCATTER_V_BIRS = static_cast<TemplateType>(1003);
 constexpr TemplateType TEMPLATE_REDUCE_SCATTER_V_BIRS_INTER = static_cast<TemplateType>(1004);
+constexpr TemplateType TEMPLATE_ALL_REDUCE_BIAR = static_cast<TemplateType>(1005);
 
 class AlgTemplateBaseExperimental : public ops_hccl::AlgTemplateBase {
 public:
