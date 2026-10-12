@@ -18,6 +18,17 @@
 - Atlas训练系列产品：支持
 <!-- end id5 -->
 
+<!-- npu="910b,310p" id6 -->
+> [!NOTE]说明
+>
+> <!-- npu="910b" id7 -->
+> - 针对Atlas A2系列产品，仅支持Atlas 800T A2训练服务器、Atlas 900 A2 PoD集群基础单元、Atlas 200T A2 Box16异构子框。
+> <!-- end id7 -->
+> <!-- npu="310p" id8 -->
+> - 针对Atlas推理系列产品，仅支持Atlas 300I Duo推理卡。
+<!-- end id8 -->
+<!-- end id6 -->
+
 ## 功能说明
 
 异步批量点对点通信操作接口，调用一次接口可以完成本rank上的多个收发任务，本rank发送和接收之间是异步的，发送和接收任务之间不会相互阻塞。
@@ -74,7 +85,7 @@ HcclResult HcclBatchSendRecv(HcclSendRecvItem* sendRecvInfo, uint32_t itemNum, H
     export HCCL_INTRA_ROCE_ENABLE=1
     export HCCL_INTRA_PCIE_ENABLE=0
     ```
-    
+
 - 多个通信域下的所有通信算子在每个Device上需要保证串行下发，不允许乱序、多线程并发下发，也不支持线程重入。
 - 在同一Device上，同一通信域内的所有通信算子的下发线程需要使用相同的Context。
 

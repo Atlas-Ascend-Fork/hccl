@@ -14,11 +14,11 @@
 - 单卡多进程场景：
     由于CCU不支持多进程使用，单卡多进程下，需要保证不同NPU上首个通信域的创建归属于同一组业务进程，以保证CCU被同一组进程的业务占用。<br>若通信算子的展开模式为AICPU_TS（默认值），单卡进程并发数量建议不超过6个。<br>若通信算子的展开模式为AIV，不建议单卡多进程并发执行，多个进程之间建议串行执行。<br>请参考以上建议配置，否则存在任务死锁的风险。通信算子的展开模式可通过环境变量“HCCL_OP_EXPANSION_MODE”设置。
 - 图模式（Ascend IR）或者图捕获（aclgraph）场景，当通信算法采用默认的AI CPU模式时，单卡上的并发图数量不能超过6个，否则可能会因AI CPU核被占满而导致通信阻塞。
-- 新增CCU调度模式，但受CCU硬件资源规格限制，建议结合实际业务场景灵活使用。  
-    CCU适用场景：64P以内通信算子（AlltoAllV算子16P内）场景可考虑开启CCU模式，用以提升通信性能。通信域间CCU资源无法复用，多通信域场景下需评估CCU硬件资源是否充足。  
-    CCU配置方式：HCCL集合通信默认使用AI CPU模式，如需开启CCU，提供如下两种配置方式：  
-        1. 通过环境变量开启CCU调度模式时，资源不足情况下HCCL会回退为AI CPU模式，配置方法详见[HCCL_OP_EXPANSION_MODE](./hccl_env/HCCL_OP_EXPANSION_MODE.md)。  
-        2. 基于通信域粒度配置CCU使能，可将CCU通信域独立管理，按需规划使用CCU资源，配置方法详见[HcclCommInitClusterInfoConfig](https://gitcode.com/cann/hcomm/blob/master/docs/zh/api_ref/comm_mgr_c/HcclCommInitClusterInfoConfig.md)。  
+- 新增CCU调度模式，但受CCU硬件资源规格限制，建议结合实际业务场景灵活使用。
+    CCU适用场景：64P以内通信算子（AlltoAllV算子16P内）场景可考虑开启CCU模式，用以提升通信性能。通信域间CCU资源无法复用，多通信域场景下需评估CCU硬件资源是否充足。
+    CCU配置方式：HCCL集合通信默认使用AI CPU模式，如需开启CCU，提供如下两种配置方式：
+        1. 通过环境变量开启CCU调度模式时，资源不足情况下HCCL会回退为AI CPU模式，配置方法详见[HCCL_OP_EXPANSION_MODE](./hccl_env/HCCL_OP_EXPANSION_MODE.md)。
+        2. 基于通信域粒度配置CCU使能，可将CCU通信域独立管理，按需规划使用CCU资源，配置方法详见[HcclCommInitClusterInfoConfig](https://gitcode.com/cann/hcomm/blob/master/docs/zh/api_ref/comm_mgr_c/HcclCommInitClusterInfoConfig.md)。
     CCU硬件资源规格：
 
     | CCU模式 | 资源分类 | 单位 | 硬件资源规格 |
@@ -26,7 +26,7 @@
     | 调度模式 | Channel | 个 | 120 |
     | 调度模式 | Loop | 个 | 68 |
     | 调度模式 | CCU Buffer | KB | 2048 |
-<!-- end id3 --> 
+<!-- end id3 -->
 
 <!-- npu="A3" id4 -->
 ## Atlas A3系列产品
@@ -56,7 +56,7 @@
 - 单Server场景下，要求实际参与集合通信的AI处理器数目只能为1/2/4/8，且0-3卡和4-7卡各为一个组网，使用2张卡或4张卡训练时，不支持跨组网创建设备集群；Server集群场景，要求参与集合通信的AI处理器数目只能为1\*n、2\*n、4\*n、8\*n（n为参与训练的Server个数），且n为2的指数倍情况下，集群性能最好，建议用户优先采用此种方式进行集群组网。<!-- end id1 -->
 
 <!-- npu="310p" id2 -->
-## Atlas 300I Duo推理卡
+## Atlas推理系列产品
 
 - 不支持单卡多进程的业务场景，即不支持多个业务进程同时共用一个NPU。
 - 仅支持单Server场景，每个集合通信操作支持的最大NPU数量详见[具体API](../api_ref/comm_op_interface/README.md)。

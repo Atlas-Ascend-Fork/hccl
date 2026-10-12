@@ -18,6 +18,11 @@
 - Atlas训练系列产品：支持
 <!-- end id5 -->
 
+<!-- npu="910b" id6 -->
+> [!NOTE]说明
+> 针对Atlas A2系列产品，仅支持Atlas 800T A2训练服务器、Atlas 900 A2 PoD集群基础单元、Atlas 200T A2 Box16异构子框。
+<!-- end id6 -->
+
 ## 功能说明
 
 集合通信算子Broadcast的操作接口，将通信域内root节点的数据广播到其他rank。
@@ -85,7 +90,7 @@ size_t mallocSize = count * sizeof(float);
 aclrtMalloc(&buf, mallocSize, ACL_MEM_MALLOC_HUGE_ONLY);
 
 // 在root 节点构造输入数据
-if (deviceId == rootRank) {    
+if (deviceId == rootRank) {
     aclrtMemcpy(buf, mallocSize, hostBuf, mallocSize, ACL_MEMCPY_HOST_TO_DEVICE);
 }
 

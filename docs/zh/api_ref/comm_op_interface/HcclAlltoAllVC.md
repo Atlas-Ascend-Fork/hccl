@@ -18,6 +18,11 @@
 - Atlas训练系列产品：不支持
 <!-- end id5 -->
 
+<!-- npu="910b" id6 -->
+> [!NOTE]说明
+> 针对Atlas A2系列产品，仅支持Atlas 800T A2训练服务器、Atlas 900 A2 PoD集群基础单元、Atlas 200T A2 Box16异构子框。
+<!-- end id6 -->
+
 ## 功能说明
 
 集合通信算子AlltoAllVC操作接口，向通信域内所有rank发送数据（数据量可以定制），并从所有rank接收数据。相比于AlltoAllV，AlltoAllVC通过输入参数sendCountMatrix传入所有rank的收发参数。

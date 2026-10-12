@@ -18,6 +18,11 @@
 - Atlas训练系列产品：支持
 <!-- end id5 -->
 
+<!-- npu="910b" id6 -->
+> [!NOTE]说明
+> 针对Atlas A2系列产品，仅支持Atlas 800T A2训练服务器、Atlas 900 A2 PoD集群基础单元、Atlas 200T A2 Box16异构子框。
+<!-- end id6 -->
+
 ## 功能说明
 
 集合通信算子Reduce的操作接口，将所有rank的数据相加（或其他归约操作）后，再把结果发送到root节点的指定位置上。

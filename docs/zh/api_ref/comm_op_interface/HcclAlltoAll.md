@@ -18,6 +18,17 @@
 - Atlas训练系列产品：支持
 <!-- end id5 -->
 
+<!-- npu="910b,310p" id8 -->
+> [!NOTE]说明
+>
+> <!-- npu="910b" id9 -->
+> - 针对Atlas A2系列产品，仅支持Atlas 800T A2训练服务器、Atlas 900 A2 PoD集群基础单元、Atlas 200T A2 Box16异构子框。
+> <!-- end id9 -->
+> <!-- npu="310p" id15 -->
+> - 针对Atlas推理系列产品，仅支持Atlas 300I Duo推理卡。
+<!-- end id15 -->
+<!-- end id8 -->
+
 ## 功能说明
 
 集合通信算子AlltoAll操作接口，向通信域内所有rank发送相同数据量的数据，并从所有rank接收相同数据量的数据。
@@ -60,7 +71,7 @@ HcclResult HcclAlltoAll(const void *sendBuf, uint64_t sendCount, HcclDataType se
 - 针对Atlas训练系列产品，支持数据类型：int8、uint8、int16、uint16、int32、uint32、int64、uint64、float16、float32、float64。
 <!-- end id13 -->
 <!-- npu="310p" id6 -->
-- 针对Atlas 300I Duo推理卡，支持数据类型：int8、uint8、int16、uint16、int32、uint32、int64、uint64、float16、float32、float64。
+- 针对Atlas推理系列产品，支持数据类型：int8、uint8、int16、uint16、int32、uint32、int64、uint64、float16、float32、float64。
 <!-- end id6 -->
 
 ## 返回值
@@ -79,13 +90,13 @@ HcclResult HcclAlltoAll(const void *sendBuf, uint64_t sendCount, HcclDataType se
 
 - 所有rank的sendCount、sendType、recvCount、recvType均应相同。
 - AlltoAll操作的性能与NPU之间共享数据的缓存区大小有关，当通信数据量超过缓存区大小时性能将出现明显下降。若业务中AlltoAll通信数据量较大，建议通过配置环境变量[HCCL_BUFFSIZE](../../user_guide/hccl_env/HCCL_BUFFSIZE.md)适当增大缓存区大小以提升通信性能。
-<!-- npu="910" id13 -->
+<!-- npu="910" id7 -->
 - 针对Atlas训练系列产品，AlltoAll的通信域需要满足如下约束：
 
     单Server 1p、2p通信域要在同一个cluster内（Server内0-3卡和4-7卡各为一个cluster），单Server 4p、8p和多Server通信域中rank要以cluster为基本单位，并且Server间cluster选取要一致。
-    
+
 - 针对Atlas训练系列产品，如果是单Server场景，要求网卡的状态是“up”，否则此接口会执行失败。
-<!-- end id13 -->
+<!-- end id7 -->
 <!-- npu="310p" id14 -->
 - 针对Atlas 300I Duo推理卡，仅支持单Server场景，单Server中最大支持部署2张Atlas 300I Duo推理卡（即4个NPU）。
 <!-- end id14 -->

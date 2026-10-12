@@ -1,6 +1,6 @@
-# rank table配置资源信息（Atlas 300I Duo推理卡）
+# rank table配置资源信息（Atlas推理系列产品）
 
-针对Atlas 300I Duo推理卡，以包含两个AI Server，每个AI Server内2个Device为例，rank table文件配置示例如下：
+针对Atlas推理系列产品，以包含两个AI Server，每个AI Server内2个Device为例，rank table文件配置示例如下：
 
 > [!NOTE]说明
 > rank table文件为JSON格式，本节所示JSON文件示例中的注释仅为方便理解，实际使用时，请删除JSON文件中的注释。
@@ -22,7 +22,7 @@
                 },
                 {
                     "device_id":"1",
-                    "device_ip":"192.168.1.9", 
+                    "device_ip":"192.168.1.9",
                     "rank_id":"1"
                 }
             ]
@@ -37,7 +37,7 @@
                 },
                 {
                     "device_id":"1",
-                    "device_ip":"192.168.2.9", 
+                    "device_ip":"192.168.2.9",
                     "rank_id":"3"
                 }
             ]

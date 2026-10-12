@@ -14,7 +14,7 @@
 - [rank table配置资源信息（Atlas训练系列产品）](rank_table_config_910.md)
 <!-- end id4 -->
 <!-- npu="310p" id5 -->
-- [rank table配置资源信息（Atlas 300I Duo推理卡）](rank_table_config_300i_duo.md)
+- [rank table配置资源信息（Atlas推理系列产品）](rank_table_config_300i_duo.md)
 <!-- end id5 -->
 <!-- npu="910b,910" id6 -->
 - [环境变量配置资源信息](env_config_info.md)

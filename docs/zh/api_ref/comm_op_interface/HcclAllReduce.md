@@ -18,6 +18,17 @@
 - Atlas训练系列产品：支持
 <!-- end id5 -->
 
+<!-- npu="910b,310p" id8 -->
+> [!NOTE]说明
+>
+> <!-- npu="910b" id9 -->
+> - 针对Atlas A2系列产品，仅支持Atlas 800T A2训练服务器、Atlas 900 A2 PoD集群基础单元、Atlas 200T A2 Box16异构子框。
+> <!-- end id9 -->
+> <!-- npu="310p" id18 -->
+> - 针对Atlas推理系列产品，仅支持Atlas 300I Duo推理卡。
+<!-- end id18 -->
+<!-- end id8 -->
+
 ## 功能说明
 
 集合通信算子AllReduce的操作接口，将通信域内所有节点的输入数据进行相加（或其他归约操作）后，再把结果发送到所有节点的输出buffer，其中归约操作类型由op参数指定。
@@ -57,7 +68,7 @@ HcclResult HcclAllReduce(void *sendBuf, void *recvBuf, uint64_t count, HcclDataT
 - 针对Atlas训练系列产品，支持数据类型：int8、int32、int64、float16、float32。
 <!-- end id13 -->
 <!-- npu="310p" id6 -->
-- 针对Atlas 300I Duo推理卡，支持数据类型：int8、int16、int32、float16、float32。
+- 针对Atlas推理系列产品，支持数据类型：int8、int16、int32、float16、float32。
 <!-- end id6 -->
 
 ### op说明
@@ -75,7 +86,7 @@ HcclResult HcclAllReduce(void *sendBuf, void *recvBuf, uint64_t count, HcclDataT
 - 针对Atlas训练系列产品，支持的操作类型为sum、prod、max、min。
 <!-- end id17 -->
 <!-- npu="310p" id7 -->
-- 针对Atlas 300I Duo推理卡，支持的操作类型为sum、prod、max、min，其中prod、max、min操作不支持int16数据类型。
+- 针对Atlas推理系列产品，支持的操作类型为sum、prod、max、min，其中prod、max、min操作不支持int16数据类型。
 <!-- end id7 -->
 
 ## 返回值

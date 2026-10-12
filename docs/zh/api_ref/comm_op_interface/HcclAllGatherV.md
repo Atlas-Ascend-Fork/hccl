@@ -18,6 +18,17 @@
 - Atlas训练系列产品：不支持
 <!-- end id5 -->
 
+<!-- npu="910b,310p" id7 -->
+> [!NOTE]说明
+>
+> <!-- npu="910b" id8 -->
+> - 针对Atlas A2系列产品，仅支持Atlas 800T A2训练服务器、Atlas 900 A2 PoD集群基础单元、Atlas 200T A2 Box16异构子框。
+> <!-- end id8 -->
+> <!-- npu="310p" id9 -->
+> - 针对Atlas推理系列产品，仅支持Atlas 300I Duo推理卡。
+<!-- end id9 -->
+<!-- end id7 -->
+
 ## 功能说明
 
 集合通信算子AllGatherV的操作接口，将通信域内所有节点的输入按照rank id重新排序，然后拼接起来，再将结果发送到所有节点的输出。
@@ -60,7 +71,7 @@ HcclResult HcclAllGatherV(void *sendBuf, uint64_t sendCount, void *recvBuf, cons
 - 针对Atlas A2系列产品，支持数据类型：int8、uint8、int16、uint16、int32、uint32、int64、uint64、float16、float32、float64、bfp16。
 <!-- end id13 -->
 <!-- npu="310p" id6 -->
-- 针对Atlas 300I Duo推理卡，支持数据类型：int8、uint8、int16、uint16、int32、uint32、int64、uint64、float16、float32、float64。
+- 针对Atlas推理系列产品，支持数据类型：int8、uint8、int16、uint16、int32、uint32、int64、uint64、float16、float32、float64。
 <!-- end id6 -->
 
 ## 返回值
@@ -85,7 +96,7 @@ HcclResult HcclAllGatherV(void *sendBuf, uint64_t sendCount, void *recvBuf, cons
 - 针对Atlas A2系列产品，仅支持多机对称分布场景，不支持非对称分布（即卡数非对称）的场景。
 <!-- end id16 -->
 <!-- npu="310p" id10 -->
-- 针对Atlas 300I Duo推理卡，仅支持单Server场景，单Server中最大支持部署2张Atlas 300I Duo推理卡（即4个NPU）。
+- 针对Atlas推理系列产品，仅支持单Server场景，单Server中最大支持部署2张推理卡（即4个NPU）。
 <!-- end id10 -->
 - 多个通信域下的所有通信算子在每个Device上需要保证串行下发，不允许乱序、多线程并发下发，也不支持线程重入。
 - 在同一Device上，同一通信域内的所有通信算子的下发线程需要使用相同的Context。

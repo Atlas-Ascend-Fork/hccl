@@ -18,6 +18,17 @@
 - Atlas训练系列产品：支持
 <!-- end id5 -->
 
+<!-- npu="910b,310p" id9 -->
+> [!NOTE]说明
+>
+<!-- npu="910b" id17 -->
+> - 针对Atlas A2系列产品，仅支持Atlas 800T A2训练服务器、Atlas 900 A2 PoD集群基础单元、Atlas 200T A2 Box16异构子框。
+<!-- end id17 -->
+<!-- npu="310p" id18 -->
+> - 针对Atlas推理系列产品，仅支持Atlas 300I Duo推理卡。
+<!-- end id18 -->
+<!-- end id9 -->
+
 ## 功能说明
 
 集合通信算子ReduceScatter的操作接口，将通信域内所有rank的输入数据均分成rank size份，然后分别取每个rank的rank size之一份数据进行归约操作（如sum、prod、max、min）。最后，将结果按照编号分散到各个rank的输出buffer。
@@ -57,7 +68,7 @@ HcclResult HcclReduceScatter(void *sendBuf, void *recvBuf, uint64_t recvCount, H
 - 针对Atlas训练系列产品，支持数据类型：int8、int32、int64、float16、float32。
 <!-- end id13 -->
 <!-- npu="310p" id6 -->
-- 针对Atlas 300I Duo推理卡，支持数据类型：int8、int16、int32、float16、float32。
+- 针对Atlas推理系列产品，支持数据类型：int8、int16、int32、float16、float32。
 <!-- end id6 -->
 
 ### op说明
@@ -72,7 +83,7 @@ HcclResult HcclReduceScatter(void *sendBuf, void *recvBuf, uint64_t recvCount, H
 - 针对Atlas A2系列产品，支持的操作类型为sum、prod、max、min，其中prod操作不支持int16、bfp16数据类型。
 <!-- end id16 -->
 <!-- npu="310p" id7 -->
-- 针对Atlas 300I Duo推理卡，支持的操作类型为sum、prod、max、min，其中prod、max、min操作不支持int16数据类型。
+- 针对Atlas推理系列产品，支持的操作类型为sum、prod、max、min，其中prod、max、min操作不支持int16数据类型。
 <!-- end id7 -->
 
 ## 返回值
@@ -90,9 +101,9 @@ HcclResult HcclReduceScatter(void *sendBuf, void *recvBuf, uint64_t recvCount, H
 ## 约束说明
 
 - 所有rank的recvCount、dataType、op均应相同。
-<!-- npu="310p" id12 -->
-- 针对Atlas 300I Duo推理卡，仅支持单Server场景，单Server中最大支持部署16张Atlas 300I Duo推理卡（即32个NPU）。
-<!-- end id12 -->
+<!-- npu="310p" id8 -->
+- 针对Atlas推理系列产品，仅支持单Server场景，单Server中最大支持部署16张推理卡（即32个NPU）。
+<!-- end id8 -->
 - 算子的输入输出地址（sendBuf与recvBuf）根据不同的数据类型，应满足如下对齐要求：
 
   - int8、hifloat8按照1Byte地址对齐。
