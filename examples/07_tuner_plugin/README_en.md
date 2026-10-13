@@ -4,6 +4,8 @@
 
 This directory provides a reference implementation of the HCCL Tuner Plugin, demonstrating how to modify the cost table via an external `.so` plugin that reads a JSON configuration, thereby influencing the Selector's algorithm choice.
 
+> **Incubating feature**: experimental capability, disabled by default (enable by setting `HCCL_TUNER_PLUGIN`); interface compatibility is not guaranteed until it becomes stable.
+
 ## Build
 
 ```bash
@@ -311,7 +313,7 @@ make
 
 The plugin must export the symbol `hcclTunerPlugin_v1` (type `hcclTunerFuncs_v1_t`), containing two function pointers: `init` and `getCollInfo`. The HCCL core loads the plugin via `dlsym` to obtain this symbol.
 
-See `include/hccl_tuner_plugin.h` for details.
+See `src/ops/op_common/selector/inc/hccl_tuner_plugin.h` for details.
 
 ## Runtime Examples
 
@@ -322,19 +324,15 @@ The following are typical outputs from `./test_plugin`, demonstrating the plugin
 AllReduce with 8 ranks, 4096B, fp32 matches a rule. The target algorithm's cost is changed from 100.0 to 0.0 (optimal preference). The Selector will pick this algorithm:
 
 ```
-[TunerDFX] rule hit: opType=2 nBytes=4096 dataType=3 ruleIdx=0/2
-  engine=aicpu executor=sole template=meshoneshot cost=0.000000
-[TunerDFX] modify: algName=AicpuAllReduceSoleMeshOneShot
-  cost 100.000000 -> 0.000000
+[TunerDFX] rule hit: opType=2 nBytes=4096 dataType=3 ruleIdx=0/2 engine=aicpu executor=sole template=meshoneshot cost=0.000000
+[TunerDFX] modify: algName=AicpuAllReduceSoleMeshOneShot engine=aicpu executor=sole template=meshoneshot cost 100.000000 -> 0.000000
 ```
 
 Multi-level algorithms are also supported. The `template` field is the lowercased remainder string after the executor in the algorithm name:
 
 ```
-[TunerDFX] rule hit: opType=2 nBytes=4096 dataType=3 ruleIdx=0/1
-  engine=aicpu executor=sequence template=meshconcurnhrnhr cost=0.000000
-[TunerDFX] modify: algName=AicpuAllReduceSequenceMeshConcurNHRNHR
-  cost 5.000000 -> 0.000000
+[TunerDFX] rule hit: opType=2 nBytes=4096 dataType=3 ruleIdx=0/1 engine=aicpu executor=sequence template=meshconcurnhrnhr cost=0.000000
+[TunerDFX] modify: algName=AicpuAllReduceSequenceMeshConcurNHRNHR engine=aicpu executor=sequence template=meshconcurnhrnhr cost 5.000000 -> 0.000000
 ```
 
 ### No Match — No Intervention

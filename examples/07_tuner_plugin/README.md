@@ -4,6 +4,8 @@
 
 本目录提供 HCCL Tuner Plugin 的参考实现，演示如何通过外部 `.so` 插件读取 JSON 配置并修改cost table，影响 Selector 的算法选择。
 
+> **孵化中（Incubating）特性**：实验性能力，默认未开放（需设置 `HCCL_TUNER_PLUGIN` 启用）；转稳定前不保证接口兼容。
+
 ## 编译
 
 ```bash
@@ -284,7 +286,7 @@ make
 
 插件需导出符号 `hcclTunerPlugin_v1`（类型 `hcclTunerFuncs_v1_t`），包含 `init` 和 `getCollInfo` 两个函数指针。HCCL 核心通过 `dlsym` 获取该符号加载插件。
 
-详见 `include/hccl_tuner_plugin.h`。
+详见 `src/ops/op_common/selector/inc/hccl_tuner_plugin.h`。
 
 ## 运行示例
 
@@ -295,19 +297,15 @@ make
 AllReduce 8 ranks、4096B、fp32 匹配规则，将目标算法 cost 从 100.0 改为 0.0（最优偏好），Selector 会选这个算法：
 
 ```
-[TunerDFX] rule hit: opType=2 nBytes=4096 dataType=3 ruleIdx=0/2
-  engine=aicpu executor=sole template=meshoneshot cost=0.000000
-[TunerDFX] modify: algName=AicpuAllReduceSoleMeshOneShot
-  cost 100.000000 -> 0.000000
+[TunerDFX] rule hit: opType=2 nBytes=4096 dataType=3 ruleIdx=0/2 engine=aicpu executor=sole template=meshoneshot cost=0.000000
+[TunerDFX] modify: algName=AicpuAllReduceSoleMeshOneShot engine=aicpu executor=sole template=meshoneshot cost 100.000000 -> 0.000000
 ```
 
 多级算法同样支持，`template` 为 executor 后剩余串小写化拼接：
 
 ```
-[TunerDFX] rule hit: opType=2 nBytes=4096 dataType=3 ruleIdx=0/1
-  engine=aicpu executor=sequence template=meshconcurnhrnhr cost=0.000000
-[TunerDFX] modify: algName=AicpuAllReduceSequenceMeshConcurNHRNHR
-  cost 5.000000 -> 0.000000
+[TunerDFX] rule hit: opType=2 nBytes=4096 dataType=3 ruleIdx=0/1 engine=aicpu executor=sequence template=meshconcurnhrnhr cost=0.000000
+[TunerDFX] modify: algName=AicpuAllReduceSequenceMeshConcurNHRNHR engine=aicpu executor=sequence template=meshconcurnhrnhr cost 5.000000 -> 0.000000
 ```
 
 ### 不匹配时不干预
