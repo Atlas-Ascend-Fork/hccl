@@ -482,11 +482,7 @@ std::vector<CostModelParam> InsV2AlltoAllVSoleExecutor<AlgTopoMatch, InsAlgTempl
         } else if (attrs->engine == OpExecuteConfig::AIV || attrs->engine == OpExecuteConfig::AIV_ONLY) {
             return {{0.0f, 0.0f, 2.0f, 0.0f}};
         } else if (attrs->engine == OpExecuteConfig::AICPU || attrs->engine == OpExecuteConfig::AICPU_TS) {
-            if (std::string(algName).find("AicpuAllToAllVSolePairwise") == std::string::npos) {
-                return {{0.0f, 0.0f, 3.0f, 0.0f}};
-            } else {
-                return {{0.0f, 0.0f, 0.5f, 0.0f}};
-            }
+            return {{0.0f, 0.0f, 3.0f, 0.0f}};
         }
     }
     // 探测路径直接调 MatchTopo（不走 CalcAlgHierarchyInfoV2 的 CHK_RET）：
@@ -549,6 +545,9 @@ AlgNetMeta InsV2AlltoAllVSoleExecutor<AlgTopoMatch, InsAlgTemplate>::GetAlgNetMe
     return meta;
 }
 
+constexpr u32 PAIRWISE_RANK_NUM_PER_BOARD = InsTempAllToAllVPairwise::RANK_NUM_PER_BOARD;
+constexpr u32 PAIRWISE_UNIT_RANK_SIZE = InsTempAllToAllVPairwise::THREAD_SET_NUM * PAIRWISE_RANK_NUM_PER_BOARD;
+
 REGISTER_EXEC_V2(
     HcclCMDType::HCCL_CMD_ALLTOALL, AicpuAllToAllSoleMesh, InsV2AlltoAllVSoleExecutor, TopoMatchOneLevel,
     InsTempAlltoAllVMesh1D);
@@ -571,6 +570,11 @@ REGISTER_EXEC_V2(
 REGISTER_ALG_ATTRS(
     AicpuAllToAllVSoleMesh, topo.supportLevel0Topos = LEVEL0_TOPO_ANY; topo.isSupportLevel0PcieMix = true;
     topo.topoCustomCheck = [](const TopoInfoWithNetLayerDetails* t) -> bool {
+        // 在t->userRankSize <= 128P时能选择AicpuAllToAllVSolePairwise，优先使用AicpuAllToAllVSolePairwise
+        if (t->deviceNumPerModule == PAIRWISE_RANK_NUM_PER_BOARD && t->userRankSize >= PAIRWISE_UNIT_RANK_SIZE
+            && t->userRankSize % PAIRWISE_UNIT_RANK_SIZE == 0 && t->level0Symmetric && t->userRankSize <= 128) {
+            return false;
+        }
         if (t->level0Topo == Level0Shape::MESH_1D_CLOS) {
             return t->level0PcieMix;
         }
@@ -594,8 +598,6 @@ REGISTER_EXEC_V2(
 REGISTER_ALG_ATTRS(AicpuAllToAllVCSoleMesh, topo.supportLevel0Topos = LEVEL0_TOPO_ANY;
                    topo.isSupportLevel0PcieMix = true;);
 
-constexpr u32 PAIRWISE_RANK_NUM_PER_BOARD = InsTempAllToAllVPairwise::RANK_NUM_PER_BOARD;
-constexpr u32 PAIRWISE_UNIT_RANK_SIZE = InsTempAllToAllVPairwise::THREAD_SET_NUM * PAIRWISE_RANK_NUM_PER_BOARD;
 REGISTER_EXEC_V2(
     HcclCMDType::HCCL_CMD_ALLTOALL, AicpuAllToAllSolePairwise, InsV2AlltoAllVSoleExecutor, TopoMatchOneLevel,
     InsTempAllToAllVPairwise);
@@ -610,7 +612,7 @@ REGISTER_EXEC_V2(
     InsTempAllToAllVPairwise);
 REGISTER_ALG_ATTRS(
     AicpuAllToAllVSolePairwise, topo.supportLevel0Topos = LEVEL0_TOPO_MESH_1D; topo.minTopoLevelNum = TOPO_LEVEL_NUM_2;
-    // t->userRankSize <= 128P 当前暂时限制128P以内选择该算法
+    // t->userRankSize <= 128P 当前暂时限制128P以内选择该算法，条件改变后AicpuAllToAllVSoleMesh中的过滤条件需要同步适配
     topo.topoCustomCheck = [](const TopoInfoWithNetLayerDetails* t) -> bool {
         return t->deviceNumPerModule == PAIRWISE_RANK_NUM_PER_BOARD && t->userRankSize >= PAIRWISE_UNIT_RANK_SIZE
                && t->userRankSize % PAIRWISE_UNIT_RANK_SIZE == 0 && t->level0Symmetric && t->userRankSize <= 128;
