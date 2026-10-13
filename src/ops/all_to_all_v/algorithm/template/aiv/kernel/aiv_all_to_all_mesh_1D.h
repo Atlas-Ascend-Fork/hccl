@@ -28,12 +28,9 @@ public:
     __aicore__ inline void Process()
     {
         uint64_t smallDataSize = 512 * 1024;
-        if (numBlocks_ < rankSize_) {
-            // 少核场景
+        if (numBlocks_ < rankSize_ || dataSize_ <= smallDataSize) {
+            // 少核或小数据量场景
             ProcessMultiRank();
-        } else if (dataSize_ <= smallDataSize) {
-            // 多核小数据量场景
-            ProcessSmallData();
         } else {
             // 多核大数据量场景
             ProcessMultiCore();
@@ -114,34 +111,6 @@ private:
             CpGM2GM((__gm__ T*)dstOffset_, (__gm__ T*)srcOffset_, len_);
             pipe_barrier(PIPE_ALL);
         }
-    }
-
-    __aicore__ inline void ProcessSmallData()
-    {
-        if (coreIdx_ >= rankSize_) {
-            return;
-        }
-
-        uint32_t dstRank = coreIdx_;
-
-        uint32_t preSyncOffset = rankSize_ * 2;
-        Record(dstRank, preSyncOffset + rank_, curTag_);
-        WaitFlag(rank_, preSyncOffset + dstRank, curTag_);
-
-        // PutRemote
-        srcOffset_ = input_ + dstRank * inputSliceStride_;
-        dstOffset_ = reinterpret_cast<uint64_t>(GetGmIn(dstRank)) + rank_ * dataSize_;
-        CpGM2GM((__gm__ T*)dstOffset_, (__gm__ T*)srcOffset_, len_);
-        pipe_barrier(PIPE_ALL);
-
-        Record(dstRank, rank_, curTag_); // 按照数据源rank编排flag的偏移量
-
-        // PostCopy
-        WaitFlag(rank_, dstRank, curTag_);
-
-        srcOffset_ = reinterpret_cast<uint64_t>(myGmIn_) + dstRank * dataSize_;
-        dstOffset_ = output_ + dstRank * outputSliceStride_;
-        CpGM2GM((__gm__ T*)dstOffset_, (__gm__ T*)srcOffset_, len_);
     }
 
     __aicore__ inline void
