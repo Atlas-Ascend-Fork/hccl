@@ -48,12 +48,12 @@ std::vector<CostModelParam> AivTempAllReduceMesh1DTwoShot::CalcCostCoeff(CalcCos
         int level0Port = 1;
         int level1Port = portNum;
         float A0 = 0.0f;
+        // aiv预估与实测相差太大，这里先保持和pod计算一致
         CostModelManager::Global()->CalcMeshParam(
             TWO_PHASE_DATA_FACTOR * param.dataRatio, CommTopo::COMM_TOPO_1DMESH, level0Port, level0RankSize, A0, false);
         u32 level1RankSize = param.rankSize - level0RankSize;
         CostModelManager::Global()->CalcMeshParam(
-            TWO_PHASE_DATA_FACTOR * param.dataRatio, CommTopo::COMM_TOPO_CLOS, level1Port, level1RankSize, A1,
-            param.isPod);
+            TWO_PHASE_DATA_FACTOR * param.dataRatio, CommTopo::COMM_TOPO_CLOS, level1Port, level1RankSize, A1, true);
         A = std::max(A0, A1);
     } else {
         CostModelManager::Global()->CalcMeshParam(
