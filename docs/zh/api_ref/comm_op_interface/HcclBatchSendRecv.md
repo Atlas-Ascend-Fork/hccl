@@ -62,6 +62,9 @@ HcclResult HcclBatchSendRecv(HcclSendRecvItem* sendRecvInfo, uint32_t itemNum, H
 <!-- npu="910" id13 -->
 - 针对Atlas训练系列产品，支持数据类型：int8、uint8、int16、uint16、int32、uint32、int64、uint64、float16、float32、float64。
 <!-- end id13 -->
+<!-- npu="310p" id14 -->
+- 针对Atlas推理系列产品，支持数据类型：int8、uint8、int16、uint16、int32、uint32、int64、uint64、float16、float32、float64、bfp16。
+<!-- end id14 -->
 
 ## 返回值
 
