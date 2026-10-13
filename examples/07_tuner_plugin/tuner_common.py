@@ -12,22 +12,71 @@
 
 """采集与配置生成公共常量表。
 
-prof_test.py（采集）与 optimize_config.py（生成配置）共用的枚举与 CSV 数据模型，
-只在此处维护。
+perf_test.py（采集）与 optimize_config.py（生成配置）共用的枚举词表、算法名串语法、
+注册名反分解与 probe 名单 JSON 数据模型，只在此处维护。算法名单的真相源是 probe
+阶段运行环境的 costTable 日志（见 perf_test.py），本文件不维护静态注册白名单。
 """
 
-# op_type 白名单（对齐 plugin.cpp op_type_from_name；v 系列不采不产）
-OP_TYPES = ("allreduce", "allgather", "broadcast", "reduce", "reduce_scatter", "scatter", "alltoall", "alltoallv")
+import json
+import re
+import time
 
-# CSV 17 字段。性能数值字段名内嵌单位：latency=us、bandwidth=GB/s、timestamp=ms。
-# algorithm.template_type 落 CSV 为带逗号语义串（"meshconcur,nhr"），
-# 写 conf.json 时须转成 plugin 拼接串（见 templates_to_plugin_name）。
+# ===== 算法名全量词表（真相源：alg_parse.cc；全量表管"解析"，采集白名单管"采集"）=====
+
+# opType Pascal 中缀剥离表（长词优先，与 C++ GetOpTypePatternEntries 同序）；
+# barrier/send 等非采集算子在 _PASCAL_TO_OP 无映射，由上层过滤
+_OP_TYPE_PASCALS = (
+    "ReduceScatterV", "ReduceScatter", "AllGatherV", "AllGather", "AllReduce",
+    "AllToAllVC", "AllToAllV", "AllToAll", "BatchSendRecv", "Broadcast",
+    "Barrier", "Reduce", "Scatter", "Send", "Recv",
+)
+_PASCAL_TO_OP = {
+    "AllReduce": "allreduce", "AllGather": "allgather", "Broadcast": "broadcast", "Reduce": "reduce",
+    "ReduceScatter": "reduce_scatter", "Scatter": "scatter", "AllToAll": "alltoall", "AllToAllV": "alltoallv",
+}
+
+# executor Pascal 词表（alg_parse.cc EXECUTOR_TYPES 全量 7 个）
+_EXECUTOR_PASCALS = ("Sole", "Sequence", "Parallel", "PipeLine", "Concur", "StrictOrdered", "OmniPipe")
+
+# 模板 token 全量 17 个（alg_parse.cc ALGO_TYPES）
+_TEMPLATE_TOKENS = (
+    ("Mesh", "mesh"), ("Mesh2Die", "mesh2die"), ("MeshOneShot", "meshoneshot"),
+    ("MeshTwoShot", "meshtwoshot"), ("MeshConcur", "meshconcur"), ("MeshMultiLink", "meshmultilink"),
+    ("MeshChunk", "meshchunk"), ("MeshChunkTwoShot", "meshchunktwoshot"), ("NHR", "nhr"),
+    ("NHRMultiLink", "nhrmultilink"), ("NHRAicpuReduce", "nhraicpureduce"),
+    ("MeshSingleChannel", "meshsinglechannel"), ("NHRMultiJetty", "nhrmultijetty"),
+    ("MeshMultiJetty", "meshmultijetty"), ("MeshConcurrent", "meshconcurrent"),
+    ("GroupMesh", "groupmesh"), ("Pairwise", "pairwise"),
+)
+# 贪婪匹配按 Pascal 词长降序（同 C++ std::sort size 降序）
+_TEMPLATE_TOKENS_SORTED = tuple(sorted(_TEMPLATE_TOKENS, key=lambda item: -len(item[0])))
+
+# op_type 采集白名单（对齐 plugin.cpp op_type_from_name；v 系列不采不产）——由映射表派生
+OP_TYPES = tuple(_PASCAL_TO_OP.values())
+
+# CSV 17 字段；性能数值字段名内嵌单位（latency=us、bandwidth=GB/s），timestamp 为 17 位紧凑时间戳。
+# algorithm.template_type 落盘为带逗号语义串（"meshconcur,nhr"），写 conf.json 时经 templates_to_plugin_name 转拼接串。
 CSV_FIELDS = (
     "op_type", "size_bytes", "data_type", "reduce_type", "engine",
     "algorithm.executor_type", "algorithm.template_type", "HCCL_BUFFSIZE",
     "ranks.ranks", "ranks.npus_per_server", "ranks.servers", "ranks.pods", "ranks.super_pods",
-    "check_result", "alg_bandwidth(GB/s)", "alg_latency(us)", "timestamp(ms)",
+    "check_result", "alg_bandwidth(GB/s)", "alg_latency(us)", "timestamp",
 )
+
+# timestamp 列：17 位定长（年月日时分秒+毫秒），int 精确比较（超出 float64 精度，禁走 float）
+TIMESTAMP_RE = re.compile(r"20\d{15}")
+
+
+def now_timestamp():
+    """当前时刻的紧凑时间戳（17 位：YYYYMMDDHHMMSSmmm）。"""
+    now = time.time()
+    return time.strftime("%Y%m%d%H%M%S", time.localtime(now)) + "{:03d}".format(int(now * 1000) % 1000)
+
+
+def parse_timestamp(value):
+    """timestamp 列转 int；非法（缺列/旧格式/被改）返回 -1，去重时视作最旧。"""
+    return int(value) if isinstance(value, str) and TIMESTAMP_RE.fullmatch(value) else -1
+
 
 # 拓扑 5 字段（CSV ranks.* 列名）
 RANKS_FIELDS = ("ranks.ranks", "ranks.npus_per_server", "ranks.servers", "ranks.pods", "ranks.super_pods")
@@ -36,15 +85,22 @@ RANKS_FIELDS = ("ranks.ranks", "ranks.npus_per_server", "ranks.servers", "ranks.
 DEVICE_ENGINES = ("aicpu", "aiv", "ccums", "ccusched")
 ENGINE_ALL = DEVICE_ENGINES + ("dpu",)
 
-# executor 权威枚举（对齐 alg_parse.cc EXECUTOR_TYPES）
+# executor 采集白名单（全量词表减 omnipipe；新词元默认不采）
 EXECUTOR_TYPES = ("sole", "sequence", "parallel", "pipeline", "concur", "strictordered")
+# import 期一致性校验：白名单名字必须都在全量词表内（拼写漂移此处立即报错）
+_UNKNOWN = [n for n in EXECUTOR_TYPES if n not in {p.lower() for p in _EXECUTOR_PASCALS}]
+if _UNKNOWN:
+    raise ValueError("EXECUTOR_TYPES 存在全量词表外的名字: {}".format(_UNKNOWN))
 
-# template 权威枚举（对齐 alg_parse.cc ALGO_TYPES）
+# template 采集白名单（multijetty/groupmesh/pairwise 解析得动但不采，记 unresolved；新词元默认不采）
 TEMPLATE_TYPES = (
     "mesh", "mesh2die", "meshoneshot", "meshtwoshot", "meshconcur", "meshmultilink",
     "meshchunk", "meshchunktwoshot", "nhr", "nhrmultilink", "nhraicpureduce",
     "meshsinglechannel", "meshconcurrent",
 )
+_UNKNOWN = [n for n in TEMPLATE_TYPES if n not in {lower for _, lower in _TEMPLATE_TOKENS}]
+if _UNKNOWN:
+    raise ValueError("TEMPLATE_TYPES 存在全量词表外的名字: {}".format(_UNKNOWN))
 
 # template 两种口径：
 # - CSV 语义串（带逗号，"meshconcur,nhr,nhr"）——与 HCCL_ALGO 语法一致
@@ -61,234 +117,243 @@ def templates_to_plugin_name(template_str):
 PLUGIN_OP_TYPES = frozenset(OP_TYPES)
 PLUGIN_ENGINES = frozenset(ENGINE_ALL)
 
-# plugin.cpp 已不对 executor 做枚举校验（合法集合随 HCCL 版本演进）；
-# 此处仍保守排除 strictordered：该 executor 当前不在常规采集集合，放开属后续独立改动
+# plugin.cpp 已不对 executor 做枚举校验（合法集合随版本演进）；仍保守排除 strictordered（不在常规采集集合）
 PLUGIN_EXECUTORS = frozenset(EXECUTOR_TYPES) - frozenset(("strictordered",))
 
-# plugin 对 executor/template 均不做枚举校验，全量放行
 PLUGIN_TEMPLATES = frozenset(TEMPLATE_TYPES)
 
-# ===== 每算子合法 (engine, executor, template) 组合表 =====
+
+# ===== 注册名反分解（规则对齐 alg_attrs_registry.cc ParseAlgName） =====
 #
-# 来源：src/ops/<op>/executor/*.cc 的 REGISTER_EXEC* 注册宏。算子并未注册
-# 全笛卡尔积（如 allreduce 无 aicpu:sole{mesh}），采集时按本表过滤未注册组合。
-# 仅收录能被 13 种 template token 完全分解的注册名；UBX/Pcie/MultiJetty 等
-# 非 token 后缀的注册不入表。
-# 写法 "engine:executor{tpl1,tpl2}"，多模板即多级算法。
+# costTable 日志打印的是注册算法名（如 AicpuAllReduceSoleMeshOneShot），采集计划需要的
+# (engine, executor, templates) 三元组口径由此反分解得到。
 
-_RAW_VALID_ALGOS = {
-    "allreduce": (
-        "aicpu:sole{meshoneshot}", "aicpu:sole{meshtwoshot}", "aicpu:sole{nhr}",
-        "aicpu:sole{meshchunktwoshot}", "aicpu:sole{nhraicpureduce}", "aicpu:sole{meshconcur}",
-        "aicpu:strictordered{mesh}",
-        "aicpu:sequence{meshconcur,nhr}", "aicpu:sequence{meshconcur,nhr,nhr}",
-        "aicpu:parallel{mesh,nhr}", "aicpu:concur{meshtwoshot,nhr}",
-        "aiv:sole{meshoneshot}", "aiv:sole{meshtwoshot}",
-        "ccums:sole{mesh}", "ccums:sole{mesh2die}", "ccums:sole{meshoneshot}", "ccums:sole{meshconcur}",
-        "ccums:sequence{mesh2die}", "ccums:pipeline{mesh,nhr}", "ccums:concur{mesh,nhrmultilink}",
-        "ccusched:sole{mesh}", "ccusched:sole{mesh2die}", "ccusched:sole{nhr}",
-        "ccusched:sole{nhrmultilink}",
-        "ccusched:sequence{mesh2die}", "ccusched:sequence{mesh,mesh}",
-        "ccusched:parallel{mesh,nhr}", "ccusched:pipeline{mesh,nhr}",
-        "ccusched:concur{mesh,nhrmultilink}",
-        "dpu:sequence{mesh,nhr}", "dpu:pipeline{mesh,nhr,mesh}",
-    ),
-    "allgather": (
-        "aicpu:sole{mesh}", "aicpu:sole{meshconcur}", "aicpu:sole{nhr}", "aicpu:sole{nhrmultilink}",
-        "aicpu:sequence{meshconcur,nhr}", "aicpu:sequence{meshconcur,nhr,nhr}",
-        "aicpu:parallel{mesh,nhr}", "aicpu:parallel{nhr,nhr}", "aicpu:concur{mesh,nhr}",
-        "aiv:sole{mesh}",
-        "ccums:sole{mesh}", "ccums:sole{mesh2die}", "ccums:concur{mesh,nhrmultilink}",
-        "ccusched:sole{mesh}", "ccusched:sole{mesh2die}", "ccusched:sole{nhr}",
-        "ccusched:sole{nhrmultilink}", "ccusched:sole{meshconcur}",
-        "ccusched:sequence{mesh,mesh}", "ccusched:parallel{mesh,nhr}",
-        "ccusched:parallel{mesh,nhrmultilink}", "ccusched:concur{mesh,nhrmultilink}",
-        "ccusched:pipeline{mesh,nhr}",
-        "dpu:sole{nhr}", "dpu:sequence{mesh,nhr}", "dpu:pipeline{mesh,nhr,nhr}",
-    ),
-    "broadcast": (
-        "aicpu:sole{meshtwoshot}", "aicpu:sole{nhr}",
-        "aicpu:sequence{meshconcur,nhr}", "aicpu:sequence{meshconcur,nhr,nhr}",
-        "aicpu:parallel{mesh,nhr}",
-        "aiv:sole{mesh}",
-        "ccums:sole{mesh}",
-        "ccusched:sole{mesh}", "ccusched:sole{nhr}", "ccusched:pipeline{mesh,nhr}",
-        "ccusched:parallel{mesh,nhr}",
-        "dpu:sequence{mesh,nhr}",
-    ),
-    "reduce": (
-        "aicpu:sole{mesh}", "aicpu:sole{meshtwoshot}", "aicpu:sole{nhr}", "aicpu:sole{nhraicpureduce}",
-        "aicpu:sequence{meshconcur,nhr}", "aicpu:sequence{meshconcur,nhr,nhr}",
-        "aicpu:parallel{mesh,nhr}",
-        "aiv:sole{mesh}",
-        "ccums:sole{mesh}", "ccums:pipeline{mesh,nhr}",
-        "ccusched:sole{mesh}", "ccusched:sole{meshtwoshot}", "ccusched:sole{nhr}",
-        "ccusched:parallel{mesh,nhr}", "ccusched:pipeline{mesh,nhr}",
-        "dpu:sequence{mesh,nhr}",
-    ),
-    "reduce_scatter": (
-        "aicpu:sole{mesh}", "aicpu:sole{meshchunk}", "aicpu:sole{nhr}", "aicpu:sole{nhraicpureduce}",
-        "aicpu:sole{nhrmultilink}", "aicpu:sole{meshconcur}", "aicpu:strictordered{mesh}",
-        "aicpu:concur{mesh,nhr}", "aicpu:parallel{mesh,nhr}",
-        "aicpu:sequence{meshconcur,nhr}", "aicpu:sequence{meshconcur,nhr,nhr}",
-        "aiv:sole{mesh}",
-        "ccums:sole{mesh}", "ccums:sole{mesh2die}", "ccums:sole{meshconcur}",
-        "ccums:pipeline{mesh,nhr}", "ccums:concur{mesh,nhrmultilink}",
-        "ccusched:sole{mesh}", "ccusched:sole{mesh2die}", "ccusched:sole{nhr}",
-        "ccusched:sole{nhrmultilink}",
-        "ccusched:sequence{mesh,mesh}", "ccusched:parallel{mesh,nhr}",
-        "ccusched:parallel{mesh,nhrmultilink}", "ccusched:pipeline{mesh,nhr}",
-        "ccusched:concur{mesh,nhrmultilink}",
-        "dpu:sequence{mesh,mesh}", "dpu:pipeline{mesh,nhr,mesh}",
-    ),
-    "scatter": (
-        "aicpu:sole{mesh}", "aicpu:sole{nhr}",
-        "aicpu:sequence{meshconcur,nhr}", "aicpu:sequence{meshconcur,nhr,nhr}",
-        "aicpu:parallel{mesh,nhr}",
-        "aiv:sole{mesh}",
-        "ccusched:sole{mesh}", "ccusched:sole{nhr}", "ccusched:pipeline{mesh,nhr}",
-        "ccusched:parallel{mesh,nhr}",
-        "dpu:sequence{mesh,nhr}",
-    ),
-    "alltoall": (
-        "aicpu:sole{mesh}", "aicpu:sole{nhrsinglechannel}", "aicpu:sole{meshconcurrent}",
-        "aiv:sole{mesh}",
-        "ccusched:sole{mesh}", "ccusched:sole{mesh2die}", "ccusched:sole{meshmultilink}",
-        "ccusched:sole{meshconcur}", "ccusched:sole{meshconcurrent}",
-        "dpu:sole{mesh}",
-    ),
-    "alltoallv": (
-        "aicpu:sole{mesh}", "aicpu:sole{meshconcurrent}",
-        "aiv:sole{mesh}",
-        "ccusched:sole{mesh}", "ccusched:sole{mesh2die}", "ccusched:sole{meshmultilink}",
-        "ccusched:sole{meshconcurrent}",
-        "dpu:sole{mesh}",
-    ),
-}
+# engine Pascal 前缀 → 规范名（顺序与 C++ GetEnginePrefixEntries 一致）
+_ENGINE_PREFIX_TO_NAME = (
+    ("CcuSched", "ccusched"), ("CcuMS", "ccums"), ("Aicpu", "aicpu"), ("Aiv", "aiv"), ("Dpu", "dpu"),
+)
+
+# 采集域合法集（加速查表）
+_TEMPLATE_VALID = frozenset(TEMPLATE_TYPES)
+_EXECUTOR_VALID = frozenset(EXECUTOR_TYPES)
 
 
-def _parse_valid_algo(spec):
-    """'engine:executor{tpl1,tpl2}' → (engine, executor, (tpl1, tpl2))。"""
-    engine, rest = spec.split(":", 1)
-    executor, inner = rest.split("{", 1)
-    templates = tuple(inner.rstrip("}").split(","))
-    return (engine, executor, templates)
+def split_algo_name(reg_name):
+    """注册算法名反分解为 (op, engine, executor, templates)；解析失败返回 None。
+
+    四步与 C++ ParseAlgName 一致：
+    1. 剥 engine 前缀；
+    2. 剥 opType 中缀（长词优先）→ 采集域 op 或 None；
+    3. 剥 executor 词（≤2 个，首个记 executor）；
+    4. 剩余串按模板 token 贪婪匹配。
+    任一环节无法消化（UBX/Pcie 等非标后缀）或词不在采集域 → None。
+    """
+    remaining = reg_name
+
+    engine = None
+    for prefix, name in _ENGINE_PREFIX_TO_NAME:
+        if remaining.startswith(prefix) and len(remaining) > len(prefix):
+            engine = name
+            remaining = remaining[len(prefix):]
+            break
+    if engine is None:
+        return None
+
+    op = None
+    for pascal in _OP_TYPE_PASCALS:
+        if remaining.startswith(pascal):
+            remaining = remaining[len(pascal):]
+            op = _PASCAL_TO_OP.get(pascal)
+            break
+    else:
+        return None
+    if op is None:
+        return None  # barrier/send 等非采集算子
+
+    executor = None
+    for _ in range(2):  # C++ 双 pass 剥离
+        for pascal in _EXECUTOR_PASCALS:
+            if remaining.startswith(pascal):
+                if executor is None:
+                    executor = pascal.lower()
+                remaining = remaining[len(pascal):]
+                break
+        else:
+            break
+    if executor is None or executor not in _EXECUTOR_VALID:
+        return None
+
+    templates = []
+    pos = 0
+    while pos < len(remaining):
+        for pascal, lower in _TEMPLATE_TOKENS_SORTED:
+            if remaining.startswith(pascal, pos):
+                templates.append(lower)
+                pos += len(pascal)
+                break
+        else:
+            return None
+    if not templates or any(tpl not in _TEMPLATE_VALID for tpl in templates):
+        return None
+    return (op, engine, executor, tuple(templates))
 
 
-# op → frozenset{(engine, executor, templates_tuple)}
-OP_VALID_ALGOS = {op: frozenset(_parse_valid_algo(s) for s in specs)
-                  for op, specs in _RAW_VALID_ALGOS.items()}
+# ===== 算法名串语法（HCCL_ALGO 串 ↔ 名单 algos 项串） =====
 
-# 同上但保序，供采集侧默认全量展开（含多级组合）
-OP_VALID_ALGO_LIST = {op: [_parse_valid_algo(s) for s in specs]
-                      for op, specs in _RAW_VALID_ALGOS.items()}
 
-# ===== 拓扑层数约束（采集计划剪枝用） =====
+def parse_algos(algos_str):
+    """解析 HCCL_ALGO 语义算法串（";" 分隔多 token），返回 [(executor, [template, ...]), ...]。
+
+    - 完整写法 "executor{tpl1,tpl2}"；简写 "mesh" 等价 "sole{mesh}"（executor 默认 sole）。
+    - 多级模板记逗号序列（如 parallel{mesh,nhr} 的 templates 为 ["mesh","nhr"]）。
+    - 空段跳过；token 中 executor / template 逐一校验权威枚举（6 executor / 13 template）。
+    - 显式 level 语法（如 sequence{level1=nhr}）不表达，报错提示。
+    """
+    result = []
+    for token in algos_str.split(";"):
+        token = token.strip()
+        if not token:
+            continue  # 空段跳过
+        brace_pos = token.find("{")
+        if brace_pos >= 0:
+            if not token.endswith("}"):
+                raise ValueError("invalid algo token (missing '}'): {!r}".format(token))
+            executor = token[:brace_pos].strip()
+            inner = token[brace_pos + 1:-1].strip()
+            if not inner:
+                raise ValueError("invalid algo token (empty template list): {!r}".format(token))
+            templates = [t.strip() for t in inner.split(",") if t.strip()]
+        else:
+            executor = "sole"  # 简写默认 sole
+            templates = [token]
+        if executor not in EXECUTOR_TYPES:
+            raise ValueError("invalid executor {!r} (valid: {})".format(executor, ",".join(EXECUTOR_TYPES)))
+        for tpl in templates:
+            if "=" in tpl:
+                raise ValueError(
+                    "explicit level syntax {!r} not supported (e.g. sequence{{level1=nhr}})".format(token))
+            if tpl not in TEMPLATE_TYPES:
+                raise ValueError("invalid template {!r} (valid: {})".format(tpl, ",".join(TEMPLATE_TYPES)))
+        result.append((executor, templates))
+    return result
+
+
+def algo_to_env(executor, templates):
+    """(executor, templates) → HCCL_ALGO 环境变量串（与 parse_algos 往返一致）。"""
+    return "{}{{{}}}".format(executor, ",".join(templates))
+
+
+def make_algo_string(engine, executor, templates):
+    """(engine, executor, templates) → 名单 algos 项串，如 "aicpu_sole{mesh,nhr}"。"""
+    return "{}_{}".format(engine, algo_to_env(executor, templates))
+
+
+def parse_algo_string(algo_str):
+    """名单 algos 项串 → (engine, executor, [tpl, ...])，与 make_algo_string 往返一致。
+
+    引擎前缀必填（名单项由注册名反分解合成，均带 5 引擎前缀之一），
+    executor{tpl} 段复用 parse_algos 校验（单 token）。
+    """
+    prefix, sep, rest = algo_str.partition("_")
+    engine = prefix.lower()
+    if not sep or engine not in ENGINE_ALL:
+        raise ValueError("invalid algo string (engine prefix required): {!r}".format(algo_str))
+    parsed = parse_algos(rest)
+    if len(parsed) != 1:
+        raise ValueError("invalid algo string (single token expected): {!r}".format(algo_str))
+    executor, templates = parsed[0]
+    return engine, executor, templates
+
+
+# ===== probe 算法名单（JSON） =====
 #
-# 依据各算子 REGISTER_ALG_ATTRS 声明的 min/maxTopoLevelNum 归纳。环境层数
-# 不满足时 HCCL_ALGO 只会白跑出 failed/noresult，脚本据此提前剪枝。
-# 运行时层数拿不到，只能按 CLI 参数估算（见 prof_test.estimate_topo_levels）。
-# 表键 (engine, executor, templates) → (min, max)；表外组合回退默认值 (1, 3)；
-# sequence 且首级 meshconcur 的多级算法要求恰为模板级数层。
-# aiv 的 sole{mesh} 家族（allreduce 的 oneshot/twoshot 与其余算子的 mesh）统一
-# 注册 maxTopoLevelNum=2，须列 (1,2)；aiv 的 alltoall/v sole{mesh} 未声明层数，
-# 回退默认。mesh 家族并非全是单层：scatter 的 aicpu sole{mesh}/{nhr} 注册 max=3
-# （恰好等于默认值，故不列）。ccums/ccusched 采集未放开，条目保留备用。
-# 注意：部分 aiv 注册还带 topoCustomCheck（rank 数上限）等非层数约束，脚本
-# 无法建模，层数估算只是必要条件而非充分条件。
-_TOPO_LEVEL_CONSTRAINTS = {
-    "allreduce": {
-        ("aicpu", "parallel", ("mesh", "nhr")): (2, 2),
-        ("aicpu", "sole", ("meshchunktwoshot",)): (1, 1),
-        ("aicpu", "sole", ("meshconcur",)): (1, 1),
-        ("aicpu", "sole", ("meshoneshot",)): (1, 1),
-        ("aicpu", "sole", ("meshtwoshot",)): (1, 1),
-        ("aiv", "sole", ("meshoneshot",)): (1, 2),
-        ("aiv", "sole", ("meshtwoshot",)): (1, 2),
-        ("ccums", "sole", ("mesh2die",)): (1, 1),
-        ("ccums", "sole", ("meshconcur",)): (1, 1),
-        ("ccums", "sequence", ("mesh2die",)): (1, 1),
-        ("ccusched", "parallel", ("mesh", "nhr")): (1, 2),
-        ("ccusched", "sequence", ("mesh", "mesh")): (1, 2),
-        ("ccusched", "sequence", ("mesh2die",)): (1, 1),
-        ("ccusched", "sole", ("mesh2die",)): (1, 1),
-        ("ccusched", "sole", ("nhr",)): (1, 2),
-        ("ccusched", "sole", ("nhrmultilink",)): (1, 1),
-        ("dpu", "sequence", ("mesh", "nhr")): (2, 3),
-    },
-    "allgather": {
-        ("aicpu", "parallel", ("mesh", "nhr")): (2, 2),
-        ("aicpu", "parallel", ("nhr", "nhr")): (3, 3),
-        ("aicpu", "sole", ("mesh",)): (1, 1),
-        ("aicpu", "sole", ("meshconcur",)): (1, 1),
-        ("aiv", "sole", ("mesh",)): (1, 2),
-        ("ccums", "sole", ("mesh2die",)): (1, 1),
-        ("ccusched", "parallel", ("mesh", "nhr")): (2, 2),
-        ("ccusched", "sequence", ("mesh", "mesh")): (2, 2),
-        ("ccusched", "sole", ("meshconcur",)): (1, 1),
-        ("dpu", "sequence", ("mesh", "nhr")): (2, 3),
-    },
-    "broadcast": {
-        ("aicpu", "sole", ("meshtwoshot",)): (1, 1),
-        ("aiv", "sole", ("mesh",)): (1, 2),
-    },
-    "reduce": {
-        ("aicpu", "parallel", ("mesh", "nhr")): (2, 2),
-        ("aicpu", "sole", ("mesh",)): (1, 1),
-        ("aicpu", "sole", ("meshtwoshot",)): (1, 1),
-        ("aiv", "sole", ("mesh",)): (1, 2),
-    },
-    "reduce_scatter": {
-        ("aicpu", "parallel", ("mesh", "nhr")): (2, 2),
-        ("aicpu", "sole", ("mesh",)): (1, 1),
-        ("aicpu", "sole", ("meshchunk",)): (1, 1),
-        ("aicpu", "sole", ("meshconcur",)): (1, 1),
-        ("aiv", "sole", ("mesh",)): (1, 2),
-        ("ccums", "sole", ("mesh2die",)): (1, 1),
-        ("ccums", "sole", ("meshconcur",)): (1, 1),
-        ("ccusched", "parallel", ("mesh", "nhr")): (2, 2),
-        ("ccusched", "sequence", ("mesh", "mesh")): (2, 2),
-        ("dpu", "sequence", ("mesh", "mesh")): (2, 3),
-    },
-    "scatter": {
-        ("aiv", "sole", ("mesh",)): (1, 2),
-    },
-}
+# probe 阶段从运行环境 costTable 日志收集 cost>=0 的候选算法并反分解落盘，
+# 是采集计划剪枝的唯一真相源（分引擎轮次机制见 perf_test.py）。
 
-# 表外组合的默认约束
-_DEFAULT_LEVEL_CONSTRAINT = (1, 3)
+PROBE_LIST_SCHEMA_VERSION = 4
 
-# 采集黑名单：concur 执行器与含 multilink/meshconcurrent 的模板暂不采集。
-# 老选择逻辑下这些算法在普通机型/组网上大概率静默回退选其他算法（HCCL_ALGO
-# 匹配落空不报错），测出的耗时张冠李戴，故整组排除。meshconcurrent 注册为
-# TopoMatchUBX（meshclos 方阵组网专属），executor 仍是 sole 故 concur 拦不住；
-# meshconcur 模板（sequence{meshconcur,nhr} 等）不在此列，由层数门控负责。
-ALGO_BLACKLIST_KEYWORDS = ("multilink", "meshconcurrent")
+# 分组条目字段（groups[]，每 (op × reduce_op × dtype) 一组；algo_count 为冗余派生字段，
+# 便于速览）。算法池 algos 全组唯一一份，sizes 为 [数据量, [算法池下标...]] 升序列表，
+# 档位间只重复编号不重复内容
+PROBE_GROUP_FIELDS = ("op", "reduce_op", "data_type", "algo_count", "algos", "sizes")
+# 算法池项字段（groups[].algos[]）：index 为池内下标（须等于数组位置，与 sizes 引用对齐），
+# algo 为 HCCL_ALGO 写法（如 "aicpu_sole{mesh}"，不存 cost）；reg_name 为原始注册名，对照日志排查用
+PROBE_ALGO_FIELDS = ("index", "algo", "reg_name")
 
 
-def is_blacklisted(executor, templates):
-    """executor=concur 或任一模板含 multilink/meshconcurrent 时为 True。"""
-    if executor == "concur":
-        return True
-    return any(kw in tpl for tpl in templates for kw in ALGO_BLACKLIST_KEYWORDS)
+def topo_fingerprint(topo):
+    """拓扑 5 字段指纹；probe 名单与采集环境一致性校验用。"""
+    return tuple(topo.get(field) for field in RANKS_FIELDS)
 
 
-def _lookup_level_constraint(op_type, engine, executor, templates):
-    """查 (min, max)：先查表，再回退 meshconcur 多级规则，最后默认值。"""
-    key = (engine, executor, tuple(templates))
-    constraint = _TOPO_LEVEL_CONSTRAINTS.get(op_type, {}).get(key)
-    if constraint is not None:
-        return constraint
-    if executor == "sequence" and templates and templates[0] == "meshconcur":
-        return (len(templates), len(templates))
-    return _DEFAULT_LEVEL_CONSTRAINT
+def save_probe_list(path, payload):
+    """名单 JSON 落盘（覆盖写）；sizes 每档位压成单行，肉眼扫读。"""
+    slots = []  # 压平的 sizes 条目，落盘前按占位符回填
+
+    def _inline(item):
+        slots.append(json.dumps(item, separators=(", ", ": ")))
+        return "@@PROBE_SIZE_{}@@".format(len(slots) - 1)
+
+    compact = json.loads(json.dumps(payload))  # 深拷贝，避免改写入参
+    for group in compact.get("groups", []):
+        group["sizes"] = [_inline(item) for item in group["sizes"]]
+    text = json.dumps(compact, ensure_ascii=False, indent=1)
+    for i, snippet in enumerate(slots):
+        text = text.replace('"@@PROBE_SIZE_{}@@"'.format(i), snippet)
+    with open(path, "w", encoding="utf-8") as handle:
+        handle.write(text)
 
 
-def topo_min_level(op_type, engine, executor, templates):
-    """该注册组合要求的最低拓扑层数。"""
-    return _lookup_level_constraint(op_type, engine, executor, templates)[0]
+def load_probe_list(path):
+    """读名单 JSON 并校验结构；版本不符或缺关键字段抛 ValueError。"""
+    with open(path, "r", encoding="utf-8") as handle:
+        payload = json.load(handle)
+    if not isinstance(payload, dict):
+        raise ValueError("probe list is not a JSON object: {}".format(path))
+    if payload.get("schema_version") != PROBE_LIST_SCHEMA_VERSION:
+        raise ValueError(
+            "probe list schema version mismatch: file={} expected={}. Delete the file to re-probe.".format(
+                payload.get("schema_version"), PROBE_LIST_SCHEMA_VERSION))
+    if not isinstance(payload.get("topo"), dict) or not isinstance(payload.get("groups"), list):
+        raise ValueError("probe list missing 'topo' or 'groups': {}".format(path))
+    if not payload["groups"]:
+        raise ValueError(
+            "probe list has empty groups (last probe found nothing): {}".format(path))
+    for group in payload["groups"]:
+        missing = [field for field in PROBE_GROUP_FIELDS if field not in group]
+        if missing:
+            raise ValueError("probe group missing fields {}: {}".format(missing, group))
+        algos, sizes = group["algos"], group["sizes"]
+        if not isinstance(algos, list) or not algos:
+            raise ValueError("probe group 'algos' must be a non-empty list: {}".format(group))
+        if group["algo_count"] != len(algos):
+            raise ValueError("probe group 'algo_count' != len(algos): {}".format(group))
+        for pos, algo in enumerate(algos):
+            missing = [field for field in PROBE_ALGO_FIELDS if field not in algo]
+            if missing:
+                raise ValueError("probe algo missing fields {}: {}".format(missing, algo))
+            if algo["index"] != pos:
+                raise ValueError("probe algo index must equal array position {}: {}".format(pos, algo))
+        if not isinstance(sizes, list) or not sizes:
+            raise ValueError("probe group 'sizes' must be a non-empty list: {}".format(group))
+        for item in sizes:
+            if (not isinstance(item, list) or len(item) != 2 or not isinstance(item[0], int)
+                    or not isinstance(item[1], list)
+                    or not all(isinstance(idx, int) and 0 <= idx < len(algos) for idx in item[1])):
+                raise ValueError(
+                    "probe group 'sizes' item must be [size_bytes, [algo index...]]: {}".format(item))
+    return payload
 
 
-def topo_max_level(op_type, engine, executor, templates):
-    """该注册组合允许的最高拓扑层数。"""
-    return _lookup_level_constraint(op_type, engine, executor, templates)[1]
+def probe_list_covers(payload, op_types, reduce_ops, data_types, engines, size_params):
+    """复用校验：名单探测参数须覆盖本次采集需求。
+
+    op/reduce_op/dtype/engine 按子集判定（任一需求超出探测范围即不覆盖）；
+    档位参数按相等判定（区间或步进不同则档位集不同，名单档位必然错位）。
+    """
+    params = payload.get("probe_params", {})
+    return (set(op_types) <= set(params.get("op_types") or [])
+            and set(reduce_ops) <= set(params.get("reduce_ops") or [])
+            and set(data_types) <= set(params.get("data_types") or [])
+            and set(engines) <= set(params.get("engines") or [])
+            and size_params == (params.get("size_params") or {}))

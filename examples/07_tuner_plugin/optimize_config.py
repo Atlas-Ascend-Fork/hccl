@@ -12,11 +12,11 @@
 
 """Tuner Plugin 最优配置生成脚本。
 
-读取采集 CSV，按 op_type + data_type + reduce_type + ranks 4 维分组，
+读取采集 CSV，按 op_type + data_type + reduce_type + buffsize + ranks 5 维分组，
 组内跨 engine / executor / template 按 alg_bandwidth 选优，生成 Tuner Plugin JSON。
 
 用法：
-    python3 optimize_config.py --input hccl_prof.csv --output hccl_tuner_config.json
+    python3 optimize_config.py --input hccl_perf.csv --output hccl_tuner_config.json
 """
 
 import argparse
@@ -28,7 +28,7 @@ from collections import OrderedDict
 
 from tuner_common import (
     CSV_FIELDS, DEVICE_ENGINES, PLUGIN_ENGINES, PLUGIN_EXECUTORS, PLUGIN_OP_TYPES, PLUGIN_TEMPLATES,
-    templates_to_plugin_name,
+    parse_timestamp, templates_to_plugin_name,
 )
 
 # ===== 本脚本特有常量 =====
@@ -39,6 +39,7 @@ DPU_ENGINE = "dpu"
 PLUGIN_DATA_TYPES = frozenset((
     "int8", "int16", "int32", "int64", "uint8", "uint16", "uint32", "uint64",
     "fp16", "float16", "fp32", "float32", "fp64", "float64", "bfp16", "bfloat16",
+    "hif8", "fp8e4m3", "fp8e5m2", "fp8e8m0",
 ))
 
 # CSV ranks.* → conf match min/max_*
@@ -101,7 +102,7 @@ def _to_float(value, default=0.0):
 
 
 def dedup_latest(rows):
-    """同 key 行取 timestamp 最大者，其余丢弃。"""
+    """同 key 行取 timestamp 最大者，其余丢弃；非法 timestamp 视作最旧并告警。"""
     best = OrderedDict()
     dropped = 0
     for row in rows:
@@ -109,32 +110,42 @@ def dedup_latest(rows):
         if key not in best:
             best[key] = row
             continue
-        if _to_int(row.get("timestamp(ms)")) > _to_int(best[key].get("timestamp(ms)")):
-            best[key] = row
         dropped += 1
+        if parse_timestamp(row.get("timestamp")) > parse_timestamp(best[key].get("timestamp")):
+            best[key] = row
+    invalid = sum(1 for row in rows if parse_timestamp(row.get("timestamp")) < 0)
+    if invalid:
+        logger.warning("[optimize_config] dedup: {} row(s) with invalid timestamp, treated as oldest "
+                       "(legacy format or edited)".format(invalid))
     if dropped:
         logger.info("[optimize_config] dedup: dropped {} stale row(s) (keep latest by timestamp)".format(dropped))
     return list(best.values()), dropped
 
 
 def dedup_key(row):
-    """去重 key：算法 + 拓扑 + 采集维度全字段。"""
+    """去重 key：算法 + 拓扑 + 采集维度全字段（含 buffsize，多轮采集可拼接）。"""
     return (
         row.get("op_type"), row.get("size_bytes"), row.get("data_type"), row.get("reduce_type"),
+        row.get("HCCL_BUFFSIZE"),
         row.get("engine"), row.get("algorithm.executor_type"), row.get("algorithm.template_type"),
     ) + tuple(row.get(csv_field) for csv_field, _ in TOPO_FIELDS)
 
 
 def filter_failed(rows):
-    """过滤 check_result 为 failed/noresult 的不可信行。"""
+    """过滤 check_result 为 failed/noresult/fallback 的不可信行。
+
+    fallback 由 perf_test 行级回退校验标记：probe 名单不含该 (算法, 档位)，
+    该行实际执行的是 selector 静默回退的其他算法，测的不是目标算法。
+    NULL（hccl_test 比对未执行，无参考结论）按有效数据保留，参与选优。
+    """
     kept, dropped = [], 0
     for row in rows:
-        if row.get("check_result", "").lower() in ("failed", "noresult"):
+        if row.get("check_result", "").lower() in ("failed", "noresult", "fallback"):
             dropped += 1
             continue
         kept.append(row)
     if dropped:
-        logger.info("[optimize_config] filter: dropped {} failed/noresult row(s)".format(dropped))
+        logger.info("[optimize_config] filter: dropped {} failed/noresult/fallback row(s)".format(dropped))
     return kept, dropped
 
 
@@ -169,14 +180,14 @@ def normalize_bytes(rows):
 # ===== 分组与选优 =====
 
 def group_key(row):
-    """分组键：op_type + data_type + reduce_type + ranks 5 字段。"""
+    """分组键：op_type + data_type + reduce_type + buffsize + ranks 共 9 项。"""
     return (
-        row.get("op_type"), row.get("data_type"), row.get("reduce_type"),
+        row.get("op_type"), row.get("data_type"), row.get("reduce_type"), row.get("HCCL_BUFFSIZE"),
     ) + tuple(row.get(csv_field) for csv_field, _ in TOPO_FIELDS)
 
 
 def group_rows(rows):
-    """按 4 维分组（engine 是组内比较维度，不参与分组）。"""
+    """按 5 维分组（engine 是组内比较维度，不参与分组）。"""
     groups = OrderedDict()
     for row in rows:
         groups.setdefault(group_key(row), []).append(row)
@@ -268,6 +279,8 @@ def build_rule(lo, hi, row):
 
     拓扑字段值为 0（未指定）时跳过写入——match 缺失即不约束该维度，规避
     单机采集值 1 与插件运行时 nPods=0 的错位。
+    buffsize 显式设置时等值绑定 buffer_size，规则只在该 buffsize 的运行环境生效；
+    未设置（空）时跳过、规则全局生效，依赖采集与运行环境 HCCL_BUFFSIZE 一致。
     dpu 强制 min_servers>=2：dpu 算法注册 isHostDpuOnly=true，与 device 算法
     运行时拓扑互斥，单机环境 dpu rule 即使命中其目标算法也必被 topo 过滤，
     不加约束就是死配置（first-match-wins 下恒先命中）。
@@ -279,6 +292,11 @@ def build_rule(lo, hi, row):
             continue
         match["min_" + conf_name] = value
         match["max_" + conf_name] = value
+    # 运行时 buffer_size 为收发两份 CCL buffer 总字节数（hcomm 源码：size = in + out），
+    # 等于 HCCL_BUFFSIZE(MB) × 2 × 1MB，实测 HCCL_BUFFSIZE=200 → 419430400
+    buffsize = _to_int(row.get("HCCL_BUFFSIZE"), 0) * 2 * 1024 * 1024
+    if buffsize > 0:
+        match["buffer_size"] = buffsize
     if row.get("engine") == DPU_ENGINE:
         lo_servers = _to_int(match.get("min_servers"), 0)
         if lo_servers < 2:
@@ -362,7 +380,7 @@ def main(argv=None):
     logging.basicConfig(level=logging.INFO, format="%(message)s", stream=sys.stderr)
     parser = argparse.ArgumentParser(
         description="处理采集 CSV，生成 Tuner Plugin 最优 JSON 配置（cost 表改写规则）")
-    parser.add_argument("--input", required=True, help="采集 CSV 路径（prof_test.py 产物）")
+    parser.add_argument("--input", required=True, help="采集 CSV 路径（perf_test.py 产物）")
     parser.add_argument("--output", required=True, help="输出 conf JSON 路径")
     args = parser.parse_args(argv)
 
