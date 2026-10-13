@@ -50,18 +50,27 @@ HcclResult InitRankInfo(HcclComm comm, TopoInfo* topoInfo)
         // 获取本服务器内的链路信息
         CHK_RET(CalcLinkInfo(topoInfo, pairLinkCounter));
     }
-    HCCL_CONFIG_INFO(
-        HCCL_ALG,
-        "[InitRankInfo] userRank[%u] userRankSize[%u] serverIdx[%u] superPodIdx[%u] "
-        "deviceType[%u] deviceNumPerModule[%u] serverNumPerSuperPod[%u] serverNum[%u] moduleNum[%u] superPodNum[%u] "
-        "moduleIdx[%u] "
-        "isDiffDeviceModule[%d] multiModuleDiffDeviceNumMode[%d] multiSuperPodDiffServerNumMode[%d] "
-        "isHCCSSWNumEqualToTwiceSIONum[%d],",
-        topoInfo->userRank, topoInfo->userRankSize, topoInfo->serverIdx, topoInfo->superPodIdx, topoInfo->deviceType,
-        topoInfo->deviceNumPerModule, topoInfo->serverNumPerSuperPod, topoInfo->serverNum, topoInfo->moduleNum,
-        topoInfo->superPodNum, topoInfo->moduleIdx, topoInfo->isDiffDeviceModule,
-        topoInfo->multiModuleDiffDeviceNumMode, topoInfo->multiSuperPodDiffServerNumMode,
-        topoInfo->isHCCSSWNumEqualToTwiceSIONum);
+    if (EqualToOrGreaterThan950(topoInfo->deviceType)) {
+        // 950及以上版本TopoInfo中仅userRank/userRankSize/deviceType有效, 其余字段依赖的
+        // 超节点/服务器层级信息在rank graph中以L0~L2网络层表达, 与server/module等概念不再对应
+        HCCL_CONFIG_INFO(
+            HCCL_ALG, "[InitRankInfo] userRank[%u] userRankSize[%u] deviceType[%u],", topoInfo->userRank,
+            topoInfo->userRankSize, topoInfo->deviceType);
+    } else {
+        HCCL_CONFIG_INFO(
+            HCCL_ALG,
+            "[InitRankInfo] userRank[%u] userRankSize[%u] serverIdx[%u] superPodIdx[%u] "
+            "deviceType[%u] deviceNumPerModule[%u] serverNumPerSuperPod[%u] serverNum[%u] moduleNum[%u] "
+            "superPodNum[%u] "
+            "moduleIdx[%u] "
+            "isDiffDeviceModule[%d] multiModuleDiffDeviceNumMode[%d] multiSuperPodDiffServerNumMode[%d] "
+            "isHCCSSWNumEqualToTwiceSIONum[%d],",
+            topoInfo->userRank, topoInfo->userRankSize, topoInfo->serverIdx, topoInfo->superPodIdx,
+            topoInfo->deviceType, topoInfo->deviceNumPerModule, topoInfo->serverNumPerSuperPod, topoInfo->serverNum,
+            topoInfo->moduleNum, topoInfo->superPodNum, topoInfo->moduleIdx, topoInfo->isDiffDeviceModule,
+            topoInfo->multiModuleDiffDeviceNumMode, topoInfo->multiSuperPodDiffServerNumMode,
+            topoInfo->isHCCSSWNumEqualToTwiceSIONum);
+    }
     return HCCL_SUCCESS;
 }
 
