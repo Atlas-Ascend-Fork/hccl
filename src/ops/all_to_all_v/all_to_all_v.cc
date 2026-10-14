@@ -10,6 +10,7 @@
 
 #include "all_to_all_v.h"
 #include "op_common_ops.h"
+#include "auto_selector_base.h"
 #include "topo_host.h"
 #include <algorithm>
 #include <future>
@@ -781,7 +782,29 @@ HcclResult AlltoAllVExecDispatch(
     // 当前pairwise算法不支持对称内存
     const bool isPairwiseAlgo = algName == "AicpuAllToAllSolePairwise" || algName == "AicpuAllToAllVSolePairwise"
                                 || algName == "AicpuAllToAllVCSolePairwise";
+    constexpr u64 UBX_ALLTOALL_SYM_DATA_SIZE = 4ULL * 1024 * 1024;
+    constexpr u64 UBX_ALLTOALL_MULTI_JETTY_8P_SYM_DATA_SIZE = 1ULL * 1024 * 1024;
+    constexpr u32 UBX_CONCURRENT_MAX_RANK_SIZE = 4;
+    // 在 Concurrent 适用拓扑内，小数据即使选中 MultiJetty 也使用非对称内存路径。
+    bool isUbxConcurrentTopo = false;
+    const bool isUbxMultiJetty8P = probeParam.supportSymmetricMemory && param.engine == CommEngine::COMM_ENGINE_AICPU_TS
+                                   && isSoleAlltoAllUbxSymmetric && topoInfo->userRankSize == 8;
+    bool isUbxSymmetricSmallData = false;
+    if (probeParam.supportSymmetricMemory && param.opType == HcclCMDType::HCCL_CMD_ALLTOALL
+        && param.engine == CommEngine::COMM_ENGINE_AICPU_TS && topoInfo->userRankSize <= UBX_CONCURRENT_MAX_RANK_SIZE
+        && topoInfo->topoLevelNums == TOPO_LEVEL_NUM_1 && topoInfo->level0Topo == Level0Shape::MESH_1D_CLOS
+        && !topoInfo->level0PcieMix) {
+        CHK_RET(AutoSelectorBase::CheckMeshNumEqualToClosNum(topoInfo.get(), isUbxConcurrentTopo));
+    }
+    if (isUbxConcurrentTopo || isUbxMultiJetty8P) {
+        const auto* sendCounts = static_cast<const u64*>(param.all2AllVDataDes.sendCounts);
+        CHK_PTR_NULL(sendCounts);
+        const u64 dataSize = sendCounts[0] * HCCL_SIZE_TABLE[param.all2AllVDataDes.sendType];
+        isUbxSymmetricSmallData = (isUbxConcurrentTopo && dataSize < UBX_ALLTOALL_SYM_DATA_SIZE)
+                                  || (isUbxMultiJetty8P && dataSize < UBX_ALLTOALL_MULTI_JETTY_8P_SYM_DATA_SIZE);
+    }
     if (probeParam.supportSymmetricMemory && param.engine == CommEngine::COMM_ENGINE_AICPU_TS
+        && !isUbxSymmetricSmallData
         && ((topoInfo->level0Topo == Level0Shape::MESH_1D && !isPairwiseAlgo) || isSoleAlltoAllUbxSymmetric
             || isAllToAllConcurrent)) {
         param.supportSymmetricMemory = probeParam.supportSymmetricMemory;

@@ -10,6 +10,7 @@
 
 #include "all_gather.h"
 #include "op_common_ops.h"
+#include "auto_selector_base.h"
 #include <algorithm>
 #include <future>
 #include <map>
@@ -225,8 +226,18 @@ HcclResult AllGatherOutPlaceCommon(
                                        && topoInfo->topoLevelNums == TOPO_LEVEL_NUM_1
                                        && topoInfo->level0Topo == Level0Shape::MESH_1D_CLOS && !topoInfo->level0PcieMix;
     const bool isAllGatherConcurrent = algName == "AicpuAllGatherConcurMeshNHR";
+    constexpr u32 UBX_CONCURRENT_MAX_RANK_SIZE = 4;
+    constexpr u64 UBX_ALLGATHER_SYM_DATA_SIZE = 4ULL * 1024 * 1024;
+    // 在 Concurrent 适用拓扑内，小数据即使选中 SoleMesh 也使用非对称内存路径。
+    bool isUbxConcurrentTopo = false;
+    if (param.opMode == OpMode::OPBASE && param.engine == CommEngine::COMM_ENGINE_AICPU_TS
+        && topoInfo->userRankSize <= UBX_CONCURRENT_MAX_RANK_SIZE && topoInfo->topoLevelNums == TOPO_LEVEL_NUM_1
+        && topoInfo->level0Topo == Level0Shape::MESH_1D_CLOS && !topoInfo->level0PcieMix) {
+        CHK_RET(AutoSelectorBase::CheckMeshNumEqualToClosNum(topoInfo.get(), isUbxConcurrentTopo));
+    }
     if (GetHcommVersion() >= CANN_VERSION(9, 1, 0) && param.opMode == OpMode::OPBASE
         && param.engine == CommEngine::COMM_ENGINE_AICPU_TS
+        && (!isUbxConcurrentTopo || inputSize >= UBX_ALLGATHER_SYM_DATA_SIZE)
         && (topoInfo->level0Topo == Level0Shape::MESH_1D || isTwoLevelMeshNhrOmni || isAllGatherConcurrent)) {
         CheckAndSetSymmetricMemory(param);
     }
