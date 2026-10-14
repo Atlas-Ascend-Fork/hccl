@@ -122,8 +122,9 @@ For whitelist-style parameters (`--op-types` / `--data-types` / `--reduce-ops` /
 #### Collection Behavior Notes
 
 - **Engine mapping**: `--engines` engine names are mapped by the script to the
-  hccl_test `-a` switches (e.g., `aicpu → -a aicpu_ts`; dpu receives no `-a`).
-  Note the config says `aiv`, not `aiv_only`
+  hccl_test `-a` switches (`aicpu → -a aicpu_ts`, `aiv → -a aiv_only`,
+  `ccums → -a ccu_ms`, `ccusched → -a ccu_sched`; dpu has no `-a` value and
+  is not passed). Note the parameter takes `aiv`, not `aiv_only`
 - **Homogeneous setup required**: per-server NPU counts must be identical; a
   heterogeneous hostfile fails at startup
 - **Probe round marks**: failed probe rounds carry `[failed]` /

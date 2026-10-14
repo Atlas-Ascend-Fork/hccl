@@ -110,7 +110,7 @@ python3 perf_test.py --op-types allreduce,allgather --engines aicpu,ccusched --n
 
 #### 采集行为说明
 
-- **引擎映射**：`--engines` 引擎名与 hccl_test 的 `-a` 开关由脚本自动映射（如 `aicpu → -a aicpu_ts`，dpu 不下发 `-a`）；注意 config 里写 `aiv` 而非 `aiv_only`
+- **引擎映射**：`--engines` 引擎名与 hccl_test 的 `-a` 开关由脚本自动映射（`aicpu → -a aicpu_ts`，`aiv → -a aiv_only`，`ccums → -a ccu_ms`，`ccusched → -a ccu_sched`；dpu 无 `-a` 值，不下发）
 - **均质组网**：各机 NPU 数须一致，异构 hostfile 启动时直接报错
 - **probe 异常标记**：探测轮失败带 `[failed]` / `[no costTable log]` / `[costTable empty]` / `[0 valid]` 标记；全程收不到 costTable 锚点或名单为空时直接报错退出（fail-fast）
 - **名单复用**：`--probe-output` 指向的 JSON 存在且拓扑指纹、探测参数匹配时自动复用，删除该文件可强制重探
