@@ -14,9 +14,10 @@ if(NOT DEFINED ST_TASKS)
 endif()
 
 # Function to create a per-operator ST test executable
+# ARGN: 需随用例直接编译的附加源文件（如生产源码）
 function(add_st_test OP_NAME OP_SRC)
     set(target "st_${OP_NAME}_test")
-    add_executable(${target} main.cc ${OP_SRC})
+    add_executable(${target} main.cc ${OP_SRC} ${ARGN})
 
     if (BUILD_OPEN_PROJECT)
         target_include_directories(${target} PUBLIC
@@ -180,4 +181,17 @@ if("all" IN_LIST ST_TASKS OR "alltoallv" IN_LIST ST_TASKS)
 endif()
 if("all" IN_LIST ST_TASKS OR "alltoallvc" IN_LIST ST_TASKS)
     add_st_test(alltoallvc alltoallvc_testcase.cc)
+endif()
+
+# CommWorker/CommWorkerMgr生命周期用例：libhccl.so按hccl.map符号白名单
+# 隐藏内部符号，CommWorker/CommWorkerMgr无法从库链接，故生产源码随用例直接编译，
+# aclrt*/日志语义由ST桩框架与用例内桩提供
+if("all" IN_LIST ST_TASKS OR "comm_worker" IN_LIST ST_TASKS)
+    add_st_test(comm_worker comm_worker_testcase.cc
+        ${HCCL_DEV_BASE}/src/ops/op_common/comm_worker.cc
+        ${HCCL_DEV_BASE}/src/ops/op_common/comm_worker_mgr.cc
+    )
+    # 链接说明: 本用例不直接引用libhccl.so导出符号, 默认--as-needed会将其丢弃;
+    # 桩库libscatter_aicpu_kernel.so已在utils/src/aicpu/CMakeLists.txt补齐hccl_dl.cc与
+    # hccl_device_comm_dl.cc(镜像生产版依赖的hccl_kernel_compat), 自身链接自洽, 无需特殊链接选项
 endif()

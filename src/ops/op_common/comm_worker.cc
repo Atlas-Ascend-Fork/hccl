@@ -34,6 +34,11 @@ HcclResult CommWorker::Submit(aclrtContext ctx, const ErrContext& errCtx, const 
     if (stop_) {
         return HCCL_E_INTERNAL; // 已随comm销毁被回收（销毁与提交并发），本次直接失败
     }
+    if (hasTask_) {
+        HCCL_ERROR("[%s] previous task in flight, concurrent submit not supported.", __func__);
+        return HCCL_E_INTERNAL;
+    }
+
     task_ = task;
     ctx_ = ctx;
     errCtx_ = errCtx;

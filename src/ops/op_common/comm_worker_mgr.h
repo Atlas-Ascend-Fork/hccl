@@ -27,6 +27,7 @@ class CommWorkerMgr {
 public:
     static CommWorkerMgr& GetInstance();
 
+    // 投递协商任务（契约见CommWorker类头：禁止task内嵌套Submit同一comm，自等死锁）
     HcclResult Submit(HcclComm comm, const std::function<HcclResult()>& task);
 
     // comm销毁前调用：遍历各device桶摘除该comm全部worker（正常一个comm仅一个worker，

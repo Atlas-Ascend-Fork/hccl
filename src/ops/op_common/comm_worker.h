@@ -21,7 +21,8 @@
 
 namespace ops_hccl {
 
-// comm级常驻worker：替代"每次协商临时建线程+join"，首个任务到达时创建，后续复用
+// comm级常驻worker：替代"每次协商临时建线程+join"，首个任务到达时创建，后续复用。
+// 禁止在task内对同一comm嵌套Submit：worker线程会等待自己正在执行的外层任务收尾，自等死锁
 class CommWorker {
 public:
     CommWorker() = default;

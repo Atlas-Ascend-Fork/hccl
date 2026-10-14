@@ -11,6 +11,7 @@
 add_subdirectory(common/prepare_ut_env)
 add_subdirectory(common/alg_parse)
 add_subdirectory(common/topo_match)
+add_subdirectory(common/adapter_error_manager)
 add_subdirectory(alltoall_hier)
 # recursive_executor 测试仅在 --experimental 构建（ENABLE_EXPERIMENTAL=ON）时编译
 if(ENABLE_EXPERIMENTAL)

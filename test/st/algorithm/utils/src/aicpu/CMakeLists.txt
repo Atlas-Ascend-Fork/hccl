@@ -164,6 +164,11 @@ add_library(scatter_aicpu_kernel SHARED
     ${HCCL_DEV_BASE}/src/common/dev_type.cc
     ${HCCL_DEV_BASE}/src/common/adapter_error_manager_pub.cc
     ${HCCL_DEV_BASE}/src/common/alg_env_config.cc
+    # hccl_kernel_compat家族源文件: 生产版scatter_aicpu_kernel通过链接hccl_kernel_compat获得
+    # HcclDlsym/HcommIsSupport*等符号, ST桩库直接编译同源文件保持链接自洽;
+    # 缺失时桩库残留强未定义符号, 仅当消费者恰好保留libhccl.so依赖链时才能解析(如--as-needed丢弃即链接失败)
+    ${HCCL_DEV_BASE}/src/common/hcomm_dlsym/hccl_dl.cc
+    ${HCCL_DEV_BASE}/src/common/hcomm_dlsym/hccl_device_comm_dl.cc
     ${HCCL_DEV_BASE}/src/common/hcomm_dlsym/hcomm_primitives_dl.cc
     ${HCCL_DEV_BASE}/src/common/hcomm_dlsym/hccl_sym_win_dl.cc
 

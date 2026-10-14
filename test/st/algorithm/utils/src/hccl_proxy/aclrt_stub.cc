@@ -10,6 +10,7 @@
 
 #include <vector>
 #include <atomic>
+#include <cstdint>
 #include <iostream>
 #include <mutex>
 #include <set>
@@ -33,6 +34,14 @@ namespace {
 // (ST 各 rank 在独立 std::thread 中并发调用, 需加锁)
 std::mutex g_stubMallocMutex;
 std::set<void*> g_stubMallocPtrs;
+
+// SimWorld无真实context对象，句柄直接按deviceId编码（+1避开device 0编码为nullptr），使context桩
+// 对齐真实ACL语义：context携带device绑定，跨线程传递句柄即传递device归属。CommWorker将发起线程
+// ctx下发到worker线程，经SetCurrentContext恢复device绑定；否则worker线程thread_local curr_dev_id
+// 保持UINT32_MAX，task链路触及依赖它的桩（aclrtMalloc/aclrtCreateStream等按rankId定位SimNpu）会异常
+aclrtContext DeviceIdToCtx(uint32_t devId) { return reinterpret_cast<aclrtContext>(static_cast<uintptr_t>(devId + 1)); }
+
+uint32_t CtxToDeviceId(aclrtContext ctx) { return static_cast<uint32_t>(reinterpret_cast<uintptr_t>(ctx)) - 1; }
 } // namespace
 
 extern "C" unsigned int HcclLaunchAicpuKernel(OpParam* param);
@@ -171,18 +180,25 @@ aclError aclrtGetDevice(int32_t* device)
     return ACL_SUCCESS;
 }
 
-// SimWorld无真实context概念，置空ctx使调用方走"ctx为null则跳过SetCurrent"的降级路径
+// 已绑定device的线程返回其device对应的非空context句柄；未绑定（curr_dev_id为UINT32_MAX）返回null，
+// 调用方（如CommWorker::WorkerLoop）走"ctx为null则跳过SetCurrent"降级路径
 aclError aclrtGetCurrentContext(aclrtContext* context)
 {
-    if (context != nullptr) {
-        *context = nullptr;
+    if (context == nullptr) {
+        return ACL_ERROR_INVALID_PARAM;
     }
+    *context = (curr_dev_id == UINT32_MAX) ? nullptr : DeviceIdToCtx(curr_dev_id);
     return ACL_SUCCESS;
 }
 
+// 按句柄恢复当前线程device绑定（对齐真实ACL：SetCurrentContext同时切换线程当前device）
 aclError aclrtSetCurrentContext(aclrtContext context)
 {
-    HCCL_WARNING("[%s] not support.", __func__);
+    if (context == nullptr) {
+        return ACL_ERROR_INVALID_PARAM;
+    }
+    curr_dev_id = CtxToDeviceId(context);
+    HCCL_INFO("[aclstub][aclrtSetCurrentContext]deviceId: %u", curr_dev_id);
     return ACL_SUCCESS;
 }
 
