@@ -50,6 +50,9 @@ DECL_SUPPORT_FLAG(HcclConfigGetInfo);
 DECL_WEAK_FUNC(HcclResult, HcclGroupStatusGet, bool* isGroupEnabled);
 DECL_SUPPORT_FLAG(HcclGroupStatusGet);
 
+DECL_WEAK_FUNC(HcclResult, HcclGroupEnqueueOp, HcclComm comm, const HcclOpDesc* opDesc, aclrtStream stream, void* func);
+DECL_SUPPORT_FLAG(HcclGroupEnqueueOp);
+
 DECL_WEAK_FUNC(
     HcclResult, HcclAicpuKernelLaunch, HcclComm comm, const HcclOpDesc* opInfo, const HcclKernelFuncInfo* funcInfo,
     ThreadHandle aicpuThreadHandle, aclrtStream userStream, const HcclKernelLaunchCfg* kernelLaunchCfg);

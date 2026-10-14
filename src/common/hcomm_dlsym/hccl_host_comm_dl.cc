@@ -20,6 +20,9 @@ DEFINE_WEAK_FUNC(HcclResult, HcclConfigGetInfo, HcclComm comm, HcclConfigType cf
 DEFINE_WEAK_FUNC(HcclResult, HcclGroupStatusGet, bool* isGroupEnabled);
 
 DEFINE_WEAK_FUNC(
+    HcclResult, HcclGroupEnqueueOp, HcclComm comm, const HcclOpDesc* opDesc, aclrtStream stream, void* func);
+
+DEFINE_WEAK_FUNC(
     HcclResult, HcclAicpuKernelLaunch, HcclComm comm, const HcclOpDesc* opInfo, const HcclKernelFuncInfo* funcInfo,
     ThreadHandle aicpuThreadHandle, aclrtStream userStream, const HcclKernelLaunchCfg* kernelLaunchCfg);
 
@@ -36,6 +39,7 @@ void HcclCommDlInit(void* libHcommHandle)
     INIT_SUPPORT_FLAG(libHcommHandle, HcclCommGetStatus);
     INIT_SUPPORT_FLAG(libHcommHandle, HcclConfigGetInfo);
     INIT_SUPPORT_FLAG(libHcommHandle, HcclGroupStatusGet);
+    INIT_SUPPORT_FLAG(libHcommHandle, HcclGroupEnqueueOp);
     INIT_SUPPORT_FLAG(libHcommHandle, HcclAicpuKernelLaunch);
     INIT_SUPPORT_FLAG(libHcommHandle, HcclCommRegCommStateCallback);
     INIT_SUPPORT_FLAG(libHcommHandle, HcclCommSymWinGet);

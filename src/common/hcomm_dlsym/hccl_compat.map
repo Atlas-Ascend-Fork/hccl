@@ -58,6 +58,7 @@
         HcommIsSupportHcclCommGetStatus;
         HcommIsSupportHcclCommRegCommStateCallback;
         HcommIsSupportHcclCommResume;
+        HcommIsSupportHcclGroupEnqueueOp;
         HcommIsSupportHcclGroupStatusGet;
 
         /*

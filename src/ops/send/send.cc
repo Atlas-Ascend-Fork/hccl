@@ -204,6 +204,30 @@ HcclResult SendExec(
         tagTemp += "_Group";
     }
 
+    // Group模式下将Send算子信息按序加入hcomm任务队列缓存，延迟到HcclGroupEnd时批量执行
+    if (isGroupEnabled && opMode == OpMode::OPBASE && HcommIsSupportHcclGroupEnqueueOp()) {
+        HcclOpDesc opDesc;
+        s32 memRet = memset_s(&opDesc, sizeof(HcclOpDesc), 0, sizeof(HcclOpDesc));
+        CHK_PRT_RET(
+            memRet != EOK, HCCL_ERROR("[SendExec][%s] memset opDesc failed, ret[%d].", tagTemp.c_str(), memRet),
+            HcclResult::HCCL_E_INTERNAL);
+        opDesc.opDescType = 1; // 1: P2P算子
+        s32 nameRet = strncpy_s(opDesc.opName, HCCL_OP_DESC_OP_NAME_MAX_LEN, "HcclSend", sizeof("HcclSend") - 1);
+        CHK_PRT_RET(
+            nameRet != EOK, HCCL_ERROR("[SendExec][%s] fill opName failed, ret[%d].", tagTemp.c_str(), nameRet),
+            HcclResult::HCCL_E_INTERNAL);
+        opDesc.p2p.buffer = sendBuf;
+        opDesc.p2p.cmdType = HcclCMDType::HCCL_CMD_SEND;
+        opDesc.p2p.dataType = dataType;
+        opDesc.p2p.count = count;
+        opDesc.p2p.remoteRank = destRank;
+        opDesc.p2p.unfoldStream = stream;
+
+        CHK_RET(HcclGroupEnqueueOp(comm, &opDesc, stream, reinterpret_cast<void*>(HcclBatchSendRecv)));
+        HCCL_INFO("[SendExec][%s] group mode, enqueue op success.", tagTemp.c_str());
+        return HcclResult::HCCL_SUCCESS;
+    }
+
     // 参数构建
     OpParam param;
     CHK_RET(GenerateSendOpParam(param, sendBuf, count, dataType, destRank, comm, stream, tagTemp));
