@@ -9,6 +9,7 @@
  */
 
 #include "ins_v2_all_reduce_parallel_executor.h"
+#include "all_reduce_parallel_scratch.h"
 #include "ins_temp_all_gather_nhr.h"
 #include "ins_temp_all_gather_mesh_1D.h"
 #include "ins_temp_reduce_scatter_nhr.h"
@@ -1059,29 +1060,15 @@ InsAllReduceParallelExecutor<AlgTopoMatch, InsAlgTemplate0, InsAlgTemplate1, Ins
     std::vector<float> dataSplitSize;
     GetParallelDataSplit(dataSplitSize, resCtx);
 
-    u32 multipleIntra = tempAlgIntra.CalcScratchMultiple(BufferType::INPUT, BufferType::OUTPUT);
-    u32 multipleInter = tempAlgInter.CalcScratchMultiple(BufferType::INPUT, BufferType::OUTPUT);
-    u32 defaultMultiple = 2;
-    if (multipleIntra > 0 || multipleInter > 0) {
-        multipleIntra = defaultMultiple;
-        multipleInter = defaultMultiple;
-    }
-
-    // 按照intraData0+interData1，以及intraData1+interData0两种方式分别计算，取multiple最大需求
-    float multiple0 = dataSplitSize.at(0) * float(multipleIntra) + dataSplitSize.at(1) * float(multipleInter);
-    float multiple1 = dataSplitSize.at(1) * float(multipleIntra) + dataSplitSize.at(0) * float(multipleInter);
-    float multiple = std::max(multiple0, multiple1);
+    const u32 scratchRankSize = std::max(intraLocalRankSize_, interLocalRankSize_);
 
     // 数据切分
     u64 sliceCountUB = std::min(static_cast<u64>(UB_MAX_DATA_SIZE) / dataTypeSize_, dataCount_);
     float sliceCountPercent = std::max(
         dataSplitSize.at(0) * float(1.0 / intraLocalRankSize_), dataSplitSize.at(1) * float(1.0 / interLocalRankSize_));
     u64 sliceCountUB0 = sliceCountPercent > 0 ? std::floor(double(sliceCountUB) / sliceCountPercent) : sliceCountUB;
-    u64 sliceCount = sliceCountUB;
-    if (multiple > 0 && maxTmpMemSize_ > 0) {
-        u64 scratchCount = maxTmpMemSize_ / dataTypeSize_; // 按照count来切分
-        sliceCount = std::min(static_cast<u64>(std::floor(double(scratchCount) / multiple)), sliceCountUB0);
-    }
+    u64 scratchCount = maxTmpMemSize_ / dataTypeSize_;
+    u64 sliceCount = CalcAllReduceParallelSliceCount(sliceCountUB0, scratchCount, scratchRankSize);
     // 对称内存零拷贝：不受cclBuffer和UB_MAX_DATA_SIZE限制，一次传完
     if (param.supportSymmetricMemory) {
         sliceCount = dataCount_;
@@ -1094,30 +1081,17 @@ InsAllReduceParallelExecutor<AlgTopoMatch, InsAlgTemplate0, InsAlgTemplate1, Ins
         dataCount_, myRank_, sliceCountUB, sliceCountUB0, sliceCount);
 
     u64 alignSize = AICPU_ALIGN_SIZE;
-    u64 sliceCountPart0 = static_cast<u64>(std::floor(double(sliceCount) * dataSplitSize.at(0)));
-    if (sliceCountPart0 * dataTypeSize_ >= alignSize) {
-        sliceCountPart0 = sliceCountPart0 * dataTypeSize_ / alignSize * alignSize / dataTypeSize_;
-    }
-
     if (sliceCount == 0) {
-        HCCL_WARNING("[InsAllReduceParallelExecutor][GenInsQues] The divisor cannot be zero.");
-        return HcclResult::HCCL_SUCCESS;
+        CHK_PRT_RET(
+            dataCount_ != 0,
+            HCCL_ERROR("[InsAllReduceParallelExecutor][GenInsQues] Scratch buffer cannot hold one data element."),
+            HCCL_E_MEMORY);
+        return HCCL_SUCCESS;
     }
     // 计算循环次数
     u32 loopTimes = dataCount_ / sliceCount + ((dataCount_ % sliceCount == 0) ? 0 : 1);
-    // 计算Scratch偏移，数据尾块必然小于常规块，不用额外计算尾块时的Scratch偏移
-    u64 scratchOffsetCountIntraStage0 = 0;
-    u64 scratchOffsetCountInterStage0 = sliceCountPart0 * multipleIntra;
-    u64 scratchOffsetCountInterStage1 = 0;
-    u64 scratchOffsetCountIntraStage1 = sliceCountPart0 * multipleInter;
-    HCCL_DEBUG(
-        "[InsAllReduceParallelExecutor][GenInsQues] dataCount_[%llu], myRank_[%d], sliceCountPart0[%llu], "
-        "multipleIntra[%u]",
-        dataCount_, myRank_, sliceCountPart0, multipleIntra);
-    HCCL_DEBUG(
-        "[InsAllReduceParallelExecutor][GenInsQues] myRank_[%d],scratchOffsetCountInterStage0[%llu], "
-        "scratchOffsetCountIntraStage1[%llu]",
-        myRank_, scratchOffsetCountInterStage0, scratchOffsetCountIntraStage1);
+    const u64 scratchOffsetCountIntraStage0 = 0;
+    const u64 scratchOffsetCountInterStage1 = 0;
     TemplateDataParams tempAlgParamsIntra0;
     TemplateDataParams tempAlgParamsInter0;
     TemplateDataParams tempAlgParamsInter1;
@@ -1149,6 +1123,14 @@ InsAllReduceParallelExecutor<AlgTopoMatch, InsAlgTemplate0, InsAlgTemplate1, Ins
         CHK_PRT_RET(
             currCountPart0 + currCountPart1 == 0,
             HCCL_ERROR("[InsAllReduceParallelExecutor][GenInsQues] currCount is 0"), HcclResult::HCCL_E_INTERNAL);
+        // 两路数据在所有阶段保持相同的分区边界；每轮按实际数据量为尾块预留 scratch。
+        const u64 scratchOffsetCountInterStage0
+            = param.supportSymmetricMemory ? 0 : CalcAllReduceParallelScratchCount(currCountPart0, scratchRankSize);
+        const u64 scratchOffsetCountIntraStage1 = scratchOffsetCountInterStage0;
+        HCCL_DEBUG(
+            "[InsAllReduceParallelExecutor][GenInsQues] myRank[%u], currCountPart0[%llu], currCountPart1[%llu], "
+            "scratchOffsetCountInterStage0[%llu]",
+            myRank_, currCountPart0, currCountPart1, scratchOffsetCountInterStage0);
         u64 dataOffset0 = processedCount * dataTypeSize_;
         u64 dataOffset1 = dataOffset0 + currCountPart0 * dataTypeSize_;
         // 计算算法模板所需资源
