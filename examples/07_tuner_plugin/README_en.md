@@ -36,111 +36,125 @@ Hand-writing JSON configuration makes it hard to guess the optimal algorithm for
 
 ```mermaid
 flowchart LR
-    A["prof_test.py<br/>launches mpirun + hccl_test per algorithm"] -->|"performance CSV"| B["optimize_config.py<br/>picks the best-bandwidth algorithm per size"]
+    P["probe detection<br/>parse costTable logs into an algorithm list"] -->|"list JSON"| A["perf_test.py<br/>launches mpirun + hccl_test per the list"] -->|"performance CSV"| B["optimize_config.py<br/>picks the best-bandwidth algorithm per size"]
     B -->|"tuner JSON"| C["plugin loads<br/>rewrites cost table"]
 ```
 
-### Step 1: Collect Performance Data (prof_test.py)
+### Step 1: Probe the Algorithm List + Collect Performance Data (perf_test.py)
 
-prof_test.py launches `mpirun + hccl_test` for each algorithm in turn, parses the output tables, and writes the bandwidth and latency of each algorithm at each data size into a CSV.
+The script first probes automatically (embedded in the collection flow, no extra
+steps): it runs hccl_test in per-engine rounds and reads the costTable from the logs to find the
+algorithms the current environment actually supports, saving them as a list JSON.
+It then collects only the algorithms in the list (further filtered by the CLI
+options), writing the bandwidth and latency of each at each data size into a CSV.
+The list comes from real test runs, so what gets measured is what actually works —
+avoiding "configured A but silently ran B" mismatches in the timing data.
 
 Prerequisites:
 
 - Python >= 3.8
-- `mpirun` in PATH (MPICH or Open MPI; the script adapts to both command formats)
-- CANN environment sourced (`$ASCEND_HOME_PATH` set), with hccl_test executables at
-  `$ASCEND_HOME_PATH/tools/hccl_test/bin/` (or specify another location via `--bin-dir`)
-- Run the script outside an mpirun session (a normal login shell). If it detects that
-  it is running inside an MPI session, it exits with an error to avoid nested launches
-  multiplying the collection processes
+- `mpirun` in PATH (MPICH or Open MPI). For version requirements, see the
+  [official install guide (Chinese)](https://gitcode.com/cann/oam-tools/blob/master/docs/zh/hccl_test/inst_and_compile.md):
+  Open MPI 4.1.5 across all products (the only version supporting IPv6); MPICH
+  4.1.3 for 950/A3 series, 3.2.1 for A2/Atlas series
+- CANN environment sourced (`$ASCEND_HOME_PATH` set), with hccl_test at
+  `$ASCEND_HOME_PATH/tools/hccl_test/bin/` (change via `--bin-dir`);
+  the MPI runtime library linked by hccl_test (e.g. libmpi.so.12) must also be
+  in `LD_LIBRARY_PATH`
+- Device requirement: 950/960 series only (probing relies on costTable logs); 910B not supported
+- Run the script outside an mpirun session; it exits with an error when a
+  nested MPI session is detected
+- Multi-node with MPICH: hostfile syntax in the `--hostfile` option; sourcing
+  the CANN environment on the first node suffices, with libraries deployed at
+  the same paths
+- Multi-node with Open MPI: the hostfile must use Open MPI syntax (see the
+  `--hostfile` option); `--prefix`, environment forwarding, and other options
+  are auto-added by the script; sourcing on the first node still suffices, with
+  libraries deployed at the same paths
 
-Typical command:
+Command example:
 
 ```bash
-python3 prof_test.py --op-types allreduce,allgather --engines aicpu --np-total 16 --npus 8 \
+# Environment variables (per the official hccl_test execution guide (Chinese):
+# https://gitcode.com/cann/oam-tools/blob/master/docs/zh/hccl_test/execution.md)
+ulimit -n 65535
+export INSTALL_DIR=/usr/local/Ascend/cann
+source $INSTALL_DIR/set_env.sh
+# MPICH
+export PATH=/usr/local/mpich/bin:$PATH
+export LD_LIBRARY_PATH=/usr/local/mpich/lib:${INSTALL_DIR}/lib64:$LD_LIBRARY_PATH
+# or Open MPI
+export PATH=/usr/local/openmpi/bin:$PATH
+export LD_LIBRARY_PATH=/usr/local/openmpi/lib:${INSTALL_DIR}/lib64:$LD_LIBRARY_PATH
+
+python3 perf_test.py --op-types allreduce,allgather --engines aicpu,ccusched --np-total 16 --npus 8 \
     --hostfile hostfile --minbytes 1K --maxbytes 2G --stepfactor 2 \
-    --data-types fp32 --output hccl_prof.csv
+    --data-types fp32 --reduce-ops sum,prod --output hccl_perf.csv
 ```
 
 #### Parameters
 
-| Parameter | Default | Description |
-|-----------|---------|-------------|
-| `--op-types` | (required) | Operators to collect, comma-separated, `all` supported (8-value whitelist) |
-| `--np-total` | (required) | Total rank count, i.e., the value of `mpirun -n` |
-| `--npus` | unset | NPUs per server, passed to hccl_test `-p` |
-| `--hostfile` | unset | Hostfile for multi-node, not needed on a single node. One `IP:NPU` entry per line (e.g., `10.10.130.22:8`); lines starting with `#` and blank lines are ignored; server count = number of valid lines |
-| `--minbytes` / `--maxbytes` | unset | Data size range, mapped to `-b` / `-e`; both must be given. Units: plain numbers are bytes; `K`/`M`/`G` suffixes are 1024-based (1K=1024B, 1M=1024K); decimals supported (e.g., `1.5K`) |
-| `--stepbytes` | unset | Linear step (bytes), positive integer, mapped to `-i`; mutually exclusive with `--stepfactor`; if neither is given, hccl_test sweeps its default sequence |
-| `--stepfactor` | unset | Geometric step factor, mapped to `-f`, float (typically 2, i.e., 1K→2K→4K…); mutually exclusive with `--stepbytes` |
-| `--data-types` | `fp32` | Data types, comma-separated (16 values), mapped to `-d` |
-| `--reduce-op` | `sum` | Reduce operation type, `-o` is passed only for reduce-type operators |
-| `--engines` | `all` | Collection engine, supports `aicpu` / `aiv` / `dpu`; `all` expands to all of them (see notes below) |
-| `--algos` | all | Explicit algorithm string (`HCCL_ALGO` semantics, e.g., `sole{mesh};parallel{mesh,nhr}`) |
-| `--executors` / `--templates` | all | Expand combinations by executor × template (ignored when `--algos` is present) |
-| `--warmup-iters` | 10 | Warmup iterations, mapped to `-w` |
-| `--iters` | 20 | Iterations, mapped to `-n` |
-| `--run-timeout` | 600 | Per-round timeout in seconds; the process tree is killed on timeout and the round is recorded as failed |
-| `--pods` | 0 | Pod count; 0 means unspecified and the generated config does not constrain this dimension |
-| `--super-pods` | 0 | Super pod count; same as above |
-| `--output` | `hccl_prof.csv` | CSV output path |
-| `--bin-dir` | `tools/hccl_test/bin` | hccl_test directory, relative to `$ASCEND_HOME_PATH` or absolute |
+| Parameter | Required | Default | Description |
+|-----------|----------|---------|-------------|
+| `--op-types` | Yes | — | Operators to collect, comma-separated, `all` supported; see [Supported op_type](#supported-op_type) below for the value list |
+| `--np-total` | Yes | — | Total rank count, i.e., the value of `mpirun -n` |
+| `--npus` | No | auto-derived | NPUs per server, passed to hccl_test `-p`. Auto-derivation when omitted: `np-total / server line count` (non-comment lines in the hostfile), e.g., `--np-total 16` with a 2-line hostfile gives 8 per server; equals `np-total` on a single node; startup errors out when not divisible, specify explicitly |
+| `--hostfile` | No | single-node mode if unset (servers=1) | Hostfile for multi-node, not needed on a single node. MPICH syntax: one entry per line, `IP:npus` (e.g., `10.10.130.22:8`) or bare `IP`; lines starting with `#` and blank lines are ignored; the two formats must not be mixed. Open MPI syntax: `IP slots=npus` per line (e.g., `10.10.130.22 slots=8`) |
+| `--minbytes` / `--maxbytes` | No | no range limit if unset | Data size range, mapped to `-b` / `-e`; both must be given. Units: plain numbers are bytes; `K`/`M`/`G` suffixes are 1024-based (1K=1024B, 1M=1024K); decimals supported (e.g., `1.5K`) |
+| `--stepbytes` | No | hccl_test default sequence if unset | Linear step (bytes), positive integer, mapped to `-i`; mutually exclusive with `--stepfactor`; if neither is given, hccl_test sweeps its default sequence |
+| `--stepfactor` | No | hccl_test default sequence if unset | Geometric step factor, mapped to `-f`, float (typically 2, i.e., 1K→2K→4K…); mutually exclusive with `--stepbytes` |
+| `--data-types` | No | `fp32` | Data types, comma-separated, supporting `int8`/`uint8`/`int16`/`uint16`/`int32`/`uint32`/`int64`/`uint64`/`fp16`/`fp32`/`fp64`/`bfp16`/`fp8e5m2`/`fp8e4m3`/`fp8e8m0`/`hif8`, mapped to `-d` |
+| `--reduce-ops` | No | `sum` | Reduce operation types, comma-separated, supporting `sum`/`prod`/`max`/`min`, mapped to `-o`; probe expands along this dimension, non-reduce operators are unaffected |
+| `--engines` | No | `all` | Collection engine, supports `aicpu` / `aiv` / `dpu` / `ccums` / `ccusched`; `all` expands to all of them (see notes below) |
+| `--algos` | No | all | Explicit algorithm string (`HCCL_ALGO` semantics, e.g., `sole{mesh};parallel{mesh,nhr}`), intersected with the probe list |
+| `--executors` / `--templates` | No | all | Expand combinations by executor × template, intersected with the probe list (ignored when `--algos` is present); see the executor/template sections below for values. Note this differs from the same-named JSON config fields: values are enum-validated here but not in the JSON config |
+| `--warmup-iters` | No | 10 | Warmup iterations, mapped to `-w` |
+| `--iters` | No | 20 | Iterations, mapped to `-n` |
+| `--run-timeout` | No | 600 | Per-round timeout in seconds; the process tree is killed on timeout and the round is recorded as failed |
+| `--pods` | No | 0 | Pod count; 0 means unspecified and the generated config does not constrain this dimension |
+| `--super-pods` | No | 0 | Super pod count; same as above |
+| `--output` | No | `hccl_perf.csv` | CSV output path |
+| `--probe-output` | No | `<output>.algos.json` | Probe algorithm-list JSON path; reused automatically when the existing list matches the topology and parameters, delete the file to force a re-probe |
+| `--bin-dir` | No | `tools/hccl_test/bin` | hccl_test directory, relative to `$ASCEND_HOME_PATH` or absolute |
+
+For whitelist-style parameters (`--op-types` / `--data-types` / `--reduce-ops` / `--engines` / `--executors` / `--templates`), an out-of-whitelist value fails immediately at startup with the valid set listed.
 
 #### Collection Behavior Notes
 
-**Engine scope**: `aicpu` / `aiv` / `dpu` are currently supported (`all` expands to
-all three). `dpu` receives no `-a` argument; the engine is bound by topology.
-`ccums` / `ccusched` are not supported yet and fail immediately: hccl currently
-provides no ccu_sched_only / ccu_ms_only mode, so a configured ccu algorithm may
-silently fall back to an aicpu algorithm — the measured latency does not represent
-the algorithm itself and would pollute the optimization result. ccums / ccusched
-will be enabled later.
-
-**Algorithm blacklist**: algorithms whose executor contains concur or whose template
-contains multilink / meshconcurrent are not collected (meshconcurrent is exclusive
-to the meshclos square-matrix topology while its executor is still sole, so it is
-blacklisted separately). Their selection conditions in the legacy
-selector are very restrictive (specific models, topologies, and data sizes); in
-common environments the fallback algorithm actually runs even when they are
-configured — the measured latency does not represent the algorithm itself, and
-writing it into the config would pollute the optimization result.
-
-**Topology-level pruning**: the script estimates the topology level from the
-`--hostfile` line count, `--pods`, and `--super-pods` (single node = 1 level,
-multi-server/multi-Pod = 2 levels, multi-super-pod = 3 levels) and only collects
-algorithms whose level matches — e.g., 2-level-only algorithms are skipped on a
-single node since they can never be selected at runtime. Note this is only a lower
-bound: pass `--super-pods` explicitly in multi-super-pod environments and `--pods`
-in multi-Pod environments, otherwise level-specific algorithms are pruned by
-mistake. With `--algos` specified, level-mismatched algorithms are skipped and
-reported.
-
-**Timeout tolerance**: each round times out after 600 seconds by default; the whole
-process tree is killed, the round is recorded as failed, and collection continues —
-a single hung round never blocks the run. Failed rounds or rounds without parseable
-data are recorded in the CSV as `check_result=failed` / `noresult` audit rows, and
-the raw output is appended to `<output>.raw` for troubleshooting (missing .so,
-dlopen failures, etc. can all be found there).
-
-**Incremental collection**: the CSV is append-only. If the file exists with a
-matching header, new rows are appended; a header mismatch rejects appending to keep
-mixed formats out of one file. So you can run collection multiple times into the
-same file; config generation deduplicates by timestamp and keeps only the latest
-round per point.
+- **Engine mapping**: `--engines` engine names are mapped by the script to the
+  hccl_test `-a` switches (`aicpu → -a aicpu_ts`, `aiv → -a aiv_only`,
+  `ccums → -a ccu_ms`, `ccusched → -a ccu_sched`; dpu has no `-a` value and
+  is not passed). Note the parameter takes `aiv`, not `aiv_only`
+- **Homogeneous setup required**: per-server NPU counts must be identical; a
+  heterogeneous hostfile fails at startup
+- **Probe round marks**: failed probe rounds carry `[failed]` /
+  `[no costTable log]` / `[costTable empty]` / `[0 valid]` marks; if no
+  costTable anchor is found across all rounds or the list is empty, the script
+  errors out immediately (fail-fast)
+- **List reuse**: if the JSON at `--probe-output` exists with a matching
+  topology fingerprint and probe parameters, it is reused directly; delete the
+  file to force a re-probe
+- **Timeout tolerance**: each round times out after 600 seconds by default; the
+  round's process tree is killed and collection continues. Failed rounds are
+  recorded in the CSV as `check_result=failed` / `noresult` audit rows, with
+  raw output appended to `<output>.raw` for troubleshooting
+- **Incremental collection**: the CSV is append-only with a matching header;
+  when a point is collected multiple times, config generation keeps the latest
+  round per point by timestamp
 
 ### Step 2: Generate the Best Configuration (optimize_config.py)
 
 ```bash
-python3 optimize_config.py --input hccl_prof.csv --output hccl_tuner_config.json
+python3 optimize_config.py --input hccl_perf.csv --output hccl_tuner_config.json
 ```
 
-The script reads the CSV, groups by operator, data type, reduce type, and topology
-dimensions, picks the highest-bandwidth algorithm at each data-size point (latency
-as tiebreaker), merges adjacent points with the same algorithm into intervals, and
-assigns gaps between intervals to the right-hand interval. The output is the
-plugin-format JSON.
+The script reads the CSV, groups by operator, data type, reduce type, buffsize, and
+topology dimensions, picks the highest-bandwidth algorithm at each data-size point
+(latency as tiebreaker), merges adjacent points with the same algorithm into
+intervals, and assigns gaps between intervals to the right-hand interval. The
+output is the plugin-format JSON.
 
-Two unit conversions to be aware of:
+A few conversions and bindings to be aware of:
 
 - **Allgather-family per-rank conversion**: the size collected by hccl_test is the
   total each rank receives, while the plugin matches on what each rank sends at
@@ -151,9 +165,21 @@ Two unit conversions to be aware of:
   The value is multiplied by the rank count before rule generation; the raw CSV
   values are untouched
 - **dpu rules enforce `min_servers>=2`**: see the "engine Available Values" section below
+- **rules are bound to the collected buffsize**: when `HCCL_BUFFSIZE` is explicitly
+  set during collection, rules carry a `buffer_size` exact match (the plugin
+  matches on the total bytes of the two CCL buffers, send + receive, converted
+  automatically by the script; the CSV still records the raw env value) and only
+  take effect in a runtime environment with that buffsize (the plugin stays
+  inactive otherwise); when unset, rules apply globally — keep the collection and
+  runtime environments consistent. For multiple buffsizes, collect one round per
+  value (explicitly set each round; point `--output` at the same CSV, which appends
+  automatically), then generate one config covering all of them in a single run
 
-Rows failing validation (e.g., executors not supported by the plugin) are dropped
-with counts and reasons logged, so one bad row never invalidates the whole config.
+Rows failing validation (e.g., executors not supported by the plugin, or
+`check_result` being `failed` / `noresult` / `fallback`) are dropped with counts
+and reasons logged, so one bad row never invalidates the whole config. `fallback`
+means the row is outside the probe list's per-size set (the runtime silently fell
+back to another algorithm); the data is invalid.
 
 ### Step 3: Load and Activate
 
@@ -162,23 +188,22 @@ export HCCL_TUNER_PLUGIN=/path/to/hccl_tuner_example.so
 export HCCL_TUNER_CONFIG_FILE=/path/to/hccl_tuner_config.json
 ```
 
+For multi-node deployment, the `.so` and JSON must be distributed to the same path on
+every node with identical content; ranks on nodes where the plugin is not loaded select
+algorithms independently with no cross-rank check, and inconsistent algorithm selection
+can deadlock collective communication.
 Then run your business workload as usual; the plugin rewrites the cost table
 according to the config. See the next section for the config format.
 
 ### Other Files in This Directory
 
-`tuner_common.py` holds the constant tables shared by the two scripts (CSV fields,
-algorithm registry, blacklist, etc.). It is imported by both and is not meant to
-be run directly. Two maintenance notes:
-
-- **The algorithm registry is manually maintained**: the valid-algorithm table and
-  the topology-level constraint table are derived from HCCL source registration
-  macros and do not update automatically with HCCL versions. After upgrading HCCL,
-  sync these two tables by hand if new algorithms were added; otherwise the new
-  algorithms cannot be collected (skipped as unregistered combinations)
-- **The blacklist can be lifted**: the exclusion lives in `is_blacklisted` in
-  `tuner_common.py` (the concur check is hard-coded in the function; multilink
-  goes through the keyword list). Modify it there to collect these algorithms
+`tuner_common.py` holds the constant tables and pure functions shared by the two
+scripts (CSV fields, registered-algorithm name splitting, probe list JSON I/O,
+etc.). It is imported by both and is not meant to be run directly. The only
+maintenance note: when HCCL's algorithm naming rules evolve (new
+engine/executor/template tokens), sync the full vocabulary tables of
+`split_algo_name` with the C++ `ParseAlgName` (`src/common/alg_parse.cc`);
+otherwise new algorithms land in `unresolved` and never enter the collection plan.
 
 ## JSON Configuration Format
 
@@ -278,24 +303,38 @@ Take the lowercased remaining string after the executor in algName, e.g., `Aicpu
 
 ### CSV Column Format
 
-Each row of `hccl_prof.csv` is one collection point with fixed columns (for your
+Each row of `hccl_perf.csv` is one collection point with fixed columns (for your
 own post-processing reference):
 
 | Column | Description |
 |--------|-------------|
 | `op_type` / `data_type` / `reduce_type` | Collection dimensions (`reduce_type` is `NA` for non-reduce operators) |
 | `size_bytes` | Data size (bytes) |
-| `engine` | Collection engine (currently fixed to `aicpu`) |
+| `engine` | Collection engine (`aicpu` / `aiv` / `dpu` / `ccums` / `ccusched`) |
 | `algorithm.executor_type` / `algorithm.template_type` | Algorithm (multi-level templates are comma-separated, e.g., `meshconcur,nhr,nhr`) |
 | `HCCL_BUFFSIZE` | Value of the `HCCL_BUFFSIZE` environment variable during collection |
 | `ranks.ranks` / `ranks.npus_per_server` / `ranks.servers` / `ranks.pods` / `ranks.super_pods` | 5 topology fields (unspecified pods/super_pods are recorded as 0) |
-| `check_result` | Result check status: `success` means the algorithm result comparison passed; `failed` / `noresult` means the round failed or produced no data — for reference only, excluded from optimization |
+| `check_result` | Result check status (values explained below) |
 | `alg_bandwidth(GB/s)` / `alg_latency(us)` | Performance data (optimize_config picks by bandwidth) |
-| `timestamp(ms)` | Millisecond timestamp (dedup basis for incremental collection) |
+| `timestamp` | 17-digit compact timestamp `YYYYMMDDHHMMSSmmm` (dedup basis for incremental collection; invalid values are treated as oldest) |
+
+`check_result` values:
+
+| Value | Meaning | Used in optimization |
+|-------|---------|----------------------|
+| `success` | Algorithm result comparison passed | Yes |
+| `NULL` | Result comparison not executed (hccl_test produced no comparison verdict, typical for operators without a reference implementation); treated as valid data | Yes |
+| `failed` | Algorithm ran but the result comparison failed | No |
+| `noresult` | No result data parsed | No |
+| `fallback` | The (algorithm, size) pair is not in the probe list (`--probe-output`, default `<output>.algos.json`): HCCL silently fell back to the default algorithm at runtime, so the data is misattributed and treated as invalid | No |
+
+`fallback` is the core value of the probe list: at probe time HCCL already decided "algorithm X is not applicable at size Y" (filtered from the costTable); if collection still explicitly requests X, HCCL does not error out but silently runs the default algorithm instead, and the output table still labels the row as X — the numbers actually belong to the default algorithm. A large number of `fallback` rows means the collection parameters exceeded the scope of the list (the `--probe-output` file): delete it to re-probe, or adjust `--algos`.
+
+> Tiny sizes (byte-level, e.g. 4B) in the list may include selection rows from HCCL's internal control-plane operations during link setup (barrier/flag); the algorithm set at such sizes is slightly wider than real supportability, and `fallback` marking serves as the safety net during collection.
 
 ## Test
 
-Python unit tests (covering all pure functions of the two scripts):
+Python unit tests (covering all pure functions of `perf_test.py` / `optimize_config.py` / `tuner_common.py`):
 
 ```bash
 python3 test_l0.py

@@ -36,95 +36,98 @@ export HCCL_TUNER_CONFIG_FILE=/path/to/hccl_tuner_config.json
 
 ```mermaid
 flowchart LR
-    A["prof_test.py<br/>逐算法拉起 mpirun + hccl_test"] -->|"性能 CSV"| B["optimize_config.py<br/>逐 size 挑带宽最优算法"]
+    P["probe 探测<br/>解析 costTable 日志得算法名单"] -->|"名单 JSON"| A["perf_test.py<br/>按名单拉起 mpirun + hccl_test"] -->|"性能 CSV"| B["optimize_config.py<br/>逐 size 挑带宽最优算法"]
     B -->|"tuner JSON"| C["插件加载<br/>改写 cost table 生效"]
 ```
 
-### 第一步：采集性能数据（prof_test.py）
+### 第一步：探测算法名单 + 采集性能数据（perf_test.py）
 
-prof_test.py 在环境里逐个算法拉起 `mpirun + hccl_test`，解析输出表格，把各算法在每个数据量下的带宽和时延写入 CSV。
+脚本先自动探测（probe，内嵌在采集流程里，无感知）：先按引擎分轮试跑 hccl_test，从日志的
+costTable 找出当前环境真正支持的算法，存成名单 JSON；然后只测名单里的算法（再按
+命令行参数过滤），把各数据量下的带宽和时延写入 CSV。
+名单来自实际试跑，保证测到的就是真实可用的算法，避免"配了 A、实际跑的是 B
+（静默回退）"导致耗时数据张冠李戴。
 
 运行前请确认：
 
 - Python >= 3.8
-- `mpirun` 在 PATH 中（MPICH 或 Open MPI 均可，脚本自动适配两种命令格式）
-- 已 source CANN 环境变量（`$ASCEND_HOME_PATH` 已设置），hccl_test 可执行文件位于
-  `$ASCEND_HOME_PATH/tools/hccl_test/bin/`（也可通过 `--bin-dir` 指定其他位置）
-- 脚本要在 mpirun 会话外运行（登录节点普通 shell）。如果检测到自己在 MPI 会话里，
-  脚本会直接报错退出，避免嵌套拉起导致采集进程数被放大
+- `mpirun` 在 PATH 中（MPICH 或 Open MPI 均可）。版本要求见[官方安装文档](https://gitcode.com/cann/oam-tools/blob/master/docs/zh/hccl_test/inst_and_compile.md)：
+  Open MPI 统一 4.1.5（IPv6 仅此版本支持）；MPICH 按产品：950/A3 系 4.1.3，A2/Atlas 系 3.2.1
+- 已 source CANN 环境变量（`$ASCEND_HOME_PATH` 已设置），hccl_test 位于
+  `$ASCEND_HOME_PATH/tools/hccl_test/bin/`（可用 `--bin-dir` 改）；
+  hccl_test 链接的 MPI 运行库（如 libmpi.so.12）也需在 `LD_LIBRARY_PATH` 中
+- 设备前提：仅 950/960 系（探测依赖 costTable 日志），910B 暂不支持
+- 脚本要在 mpirun 会话外运行，检测到嵌套 MPI 会话会直接报错退出
+- 多机 + MPICH：hostfile 语法见 `--hostfile` 参数；首节点 source CANN 环境即可，依赖库同路径部署
+- 多机 + Open MPI：hostfile 须用 Open MPI 语法（见 `--hostfile` 参数）；`--prefix`、环境透传等
+  参数由脚本自动补齐，同样只需首节点 source，依赖库同路径部署
 
-典型命令：
+命令示例：
 
 ```bash
-python3 prof_test.py --op-types allreduce,allgather --engines aicpu --np-total 16 --npus 8 \
+# 环境变量（参考 hccl_test 官方执行文档 https://gitcode.com/cann/oam-tools/blob/master/docs/zh/hccl_test/execution.md）
+ulimit -n 65535
+export INSTALL_DIR=/usr/local/Ascend/cann
+source $INSTALL_DIR/set_env.sh
+# MPICH
+export PATH=/usr/local/mpich/bin:$PATH
+export LD_LIBRARY_PATH=/usr/local/mpich/lib:${INSTALL_DIR}/lib64:$LD_LIBRARY_PATH
+# or Open MPI
+export PATH=/usr/local/openmpi/bin:$PATH
+export LD_LIBRARY_PATH=/usr/local/openmpi/lib:${INSTALL_DIR}/lib64:$LD_LIBRARY_PATH
+
+python3 perf_test.py --op-types allreduce,allgather --engines aicpu,ccusched --np-total 16 --npus 8 \
     --hostfile hostfile --minbytes 1K --maxbytes 2G --stepfactor 2 \
-    --data-types fp32 --output hccl_prof.csv
+    --data-types fp32 --reduce-ops sum,prod --output hccl_perf.csv
 ```
 
 #### 参数说明
 
-| 参数 | 默认值 | 说明 |
-|------|--------|------|
-| `--op-types` | （必填） | 采集的算子，逗号分隔，支持 `all`（8 种白名单） |
-| `--np-total` | （必填） | 总 rank 数，即 `mpirun -n` 的值 |
-| `--npus` | 未指定 | 每台服务器的 NPU 数，透传给 hccl_test `-p` |
-| `--hostfile` | 未指定 | 多机 hostfile 文件，单机不用传。每行写一条 `IP:NPU数`（如 `10.10.130.22:8`），`#` 开头的注释行和空行忽略；服务器数按有效行数统计 |
-| `--minbytes` / `--maxbytes` | 未指定 | 数据量区间，对应 `-b` / `-e`；两者必须同时给。单位：纯数字按字节，`K`/`M`/`G` 后缀按 1024 进制（1K=1024B，1M=1024K），支持小数（如 `1.5K`） |
-| `--stepbytes` | 未指定 | 线性步进（字节），正整数，对应 `-i`，与 `--stepfactor` 互斥；两者都不传时由 hccl_test 按默认序列扫点 |
-| `--stepfactor` | 未指定 | 等比步进因子，对应 `-f`，浮点（典型值 2，即 1K→2K→4K…）；与 `--stepbytes` 互斥 |
-| `--data-types` | `fp32` | 数据类型，逗号分隔（16 种），对应 `-d` |
-| `--reduce-op` | `sum` | reduce 操作类型，仅对 reduce 类算子下发 `-o` |
-| `--engines` | `all` | 采集引擎，支持 `aicpu` / `aiv` / `dpu`，`all` 展开全部（见下方说明） |
-| `--algos` | 全量 | 显式指定算法串（`HCCL_ALGO` 语义，如 `sole{mesh};parallel{mesh,nhr}`） |
-| `--executors` / `--templates` | 全量 | 按执行器 × 模板展开组合（`--algos` 存在时忽略） |
-| `--warmup-iters` | 10 | 预热次数，对应 `-w` |
-| `--iters` | 20 | 迭代次数，对应 `-n` |
-| `--run-timeout` | 600 | 单轮超时秒数，超时杀掉整轮进程，按失败继续 |
-| `--pods` | 0 | Pod 数；0 表示未指定，生成的配置不约束该维度 |
-| `--super-pods` | 0 | 超节点数；同上 |
-| `--output` | `hccl_prof.csv` | CSV 输出路径 |
-| `--bin-dir` | `tools/hccl_test/bin` | hccl_test 目录，相对 `$ASCEND_HOME_PATH` 或绝对路径 |
+| 参数 | 必填 | 默认值 | 说明 |
+|------|------|--------|------|
+| `--op-types` | 是 | — | 采集的算子，逗号分隔，支持 `all`；支持值见下方[支持的 op_type](#支持的-op_type) |
+| `--np-total` | 是 | — | 总 rank 数，即 `mpirun -n` 的值 |
+| `--npus` | 否 | 自动推导 | 每台服务器的 NPU 数，透传给 hccl_test `-p`。缺省自动推导：`np-total ÷ 服务器行数`（hostfile 非注释行数），如 `--np-total 16` + 2 行 hostfile → 每机 8；单机即 `np-total`；除不尽时启动报错，需显式指定 |
+| `--hostfile` | 否 | 不传则单机（servers=1） | 多机 hostfile 文件，单机不用传。MPICH 语法：每行写一条 `IP:每机NPU数`（如 `10.10.130.22:8`）或纯 `IP`，`#` 开头的注释行和空行忽略；两种格式不可混用。Open MPI 语法：每行 `IP slots=每机NPU数`（如 `10.10.130.22 slots=8`） |
+| `--minbytes` / `--maxbytes` | 否 | 不传则不限定区间 | 数据量区间，对应 `-b` / `-e`；两者必须同时给。单位：纯数字按字节，`K`/`M`/`G` 后缀按 1024 进制（1K=1024B，1M=1024K），支持小数（如 `1.5K`） |
+| `--stepbytes` | 否 | 不传则 hccl_test 默认序列 | 线性步进（字节），正整数，对应 `-i`，与 `--stepfactor` 互斥；两者都不传时由 hccl_test 按默认序列扫点 |
+| `--stepfactor` | 否 | 不传则 hccl_test 默认序列 | 等比步进因子，对应 `-f`，浮点（典型值 2，即 1K→2K→4K…）；与 `--stepbytes` 互斥 |
+| `--data-types` | 否 | `fp32` | 数据类型，逗号分隔，支持 `int8`/`uint8`/`int16`/`uint16`/`int32`/`uint32`/`int64`/`uint64`/`fp16`/`fp32`/`fp64`/`bfp16`/`fp8e5m2`/`fp8e4m3`/`fp8e8m0`/`hif8`，对应 `-d` |
+| `--reduce-ops` | 否 | `sum` | reduce 类算子的操作类型，逗号分隔，支持 `sum`/`prod`/`max`/`min`，对应 `-o`；probe 按该维度展开，非 reduce 类算子不受影响 |
+| `--engines` | 否 | `all` | 采集引擎，支持 `aicpu` / `aiv` / `dpu` / `ccums` / `ccusched`，`all` 展开全部（见下方说明） |
+| `--algos` | 否 | 全量 | 显式指定算法串（`HCCL_ALGO` 语义，如 `sole{mesh};parallel{mesh,nhr}`），与 probe 名单求交集 |
+| `--executors` / `--templates` | 否 | 全量 | 按执行器 × 模板展开组合，再与 probe 名单求交集（`--algos` 存在时忽略）；支持值见下方 executor/template 可选值。与 JSON 配置的同名字段口径不同：此处枚举校验，JSON 侧不校验 |
+| `--warmup-iters` | 否 | 10 | 预热次数，对应 `-w` |
+| `--iters` | 否 | 20 | 迭代次数，对应 `-n` |
+| `--run-timeout` | 否 | 600 | 单轮超时秒数，超时杀掉整轮进程，按失败继续 |
+| `--pods` | 否 | 0 | Pod 数；0 表示未指定，生成的配置不约束该维度 |
+| `--super-pods` | 否 | 0 | 超节点数；同上 |
+| `--output` | 否 | `hccl_perf.csv` | CSV 输出路径 |
+| `--probe-output` | 否 | `<output>.algos.json` | probe 算法名单 JSON 路径；已有名单且拓扑/参数匹配时自动复用，删除该文件可强制重探 |
+| `--bin-dir` | 否 | `tools/hccl_test/bin` | hccl_test 目录，相对 `$ASCEND_HOME_PATH` 或绝对路径 |
+
+白名单类参数（`--op-types` / `--data-types` / `--reduce-ops` / `--engines` / `--executors` / `--templates`）出现白名单外的值时，启动时直接报错并列出合法集合。
 
 #### 采集行为说明
 
-**引擎范围**：当前支持 `aicpu` / `aiv` / `dpu`（`all` 展开全部三种）。`dpu` 不下发
-`-a` 参数，由拓扑绑定决定。暂不支持 `ccums` / `ccusched`，传入会直接报错：当前
-hccl 不支持 ccu_sched_only / ccu_ms_only 模式，配了 ccu 算法也可能回退到 aicpu
-算法执行，测出的耗时不准，会污染选优结果。后续放开 ccums / ccusched。
-
-**算法黑名单**：执行器带 concur 的算法、模板带 multilink / meshconcurrent 的算法
-不采集（meshconcurrent 为 meshclos 方阵组网专属，executor 仍是 sole，故单独拉
-黑）。这类算法在老选择逻辑下的选中条件很苛刻（特定机型、特定拓扑、特定数据量），
-普通环境下就算配了，实际可能会选中其他算法，导致测出来的耗时不准，会污染选优
-结果。
-
-**拓扑层数剪枝**：脚本按 `--hostfile` 行数、`--pods`、`--super-pods` 估算拓扑
-层数（单机=1 层，跨机/跨 Pod=2 层，跨超节点=3 层），只采集层数匹配的算法，
-比如单机环境不会采 2 层专属算法——采了运行时也选不上。注意这只是估算下限：
-跨超节点环境务必显式传 `--super-pods`，多 Pod 环境要传 `--pods`，否则对应层
-的专属算法会被误剪掉。指定 `--algos` 时，层数不匹配的算法会被跳过并在结果里
-标注。
-
-**超时容错**：每轮默认 600 秒超时，到点杀掉整个进程树，该轮记为失败并继续后续
-采集，单轮挂死不会卡住全程。失败或没解析出数据的轮次会在 CSV 里落一行
-`check_result=failed` / `noresult` 的审计记录，原始输出追加到 `<output>.raw`
-文件里供排查（缺 so、dlopen 失败等原因都能在里面找到）。
-
-**增量采集**：CSV 是追加写的。文件已存在且表头一致就接着写，表头不一致会拒绝
-追加，防止不同格式的数据混进一个文件。因此可以分多次跑，往同一个文件里补数据；
-生成配置时按时间戳去重，同一个点只取最新一轮的结果。
+- **引擎映射**：`--engines` 引擎名与 hccl_test 的 `-a` 开关由脚本自动映射（`aicpu → -a aicpu_ts`，`aiv → -a aiv_only`，`ccums → -a ccu_ms`，`ccusched → -a ccu_sched`；dpu 无 `-a` 值，不下发）
+- **均质组网**：各机 NPU 数须一致，异构 hostfile 启动时直接报错
+- **probe 异常标记**：探测轮失败带 `[failed]` / `[no costTable log]` / `[costTable empty]` / `[0 valid]` 标记；全程收不到 costTable 锚点或名单为空时直接报错退出（fail-fast）
+- **名单复用**：`--probe-output` 指向的 JSON 存在且拓扑指纹、探测参数匹配时自动复用，删除该文件可强制重探
+- **超时容错**：单轮默认 600 秒超时，到点杀掉该轮进程继续下一轮；失败轮在 CSV 落 `check_result=failed` / `noresult` 审计行，原始输出追加到 `<output>.raw` 供排查
+- **增量采集**：CSV 追加写，表头一致才能续写；同一采集点多次跑，生成配置时按时间戳取最新一轮
 
 ### 第二步：生成最优配置（optimize_config.py）
 
 ```bash
-python3 optimize_config.py --input hccl_prof.csv --output hccl_tuner_config.json
+python3 optimize_config.py --input hccl_perf.csv --output hccl_tuner_config.json
 ```
 
-脚本读取 CSV，按算子、数据类型、reduce 类型、拓扑维度分组，在每个数据量点上
+脚本读取 CSV，按算子、数据类型、reduce 类型、buffsize、拓扑维度分组，在每个数据量点上
 挑带宽最高的算法（带宽相同比时延），相邻点同算法的合并成区间，区间之间的缝隙
 划给右边的区间，最后输出插件格式的 JSON。
 
-两处口径换算需要注意：
+几处口径换算需要注意：
 
 - **allgather 系按每 rank 口径换算**：hccl_test 采集的 size 是每个 rank 收到的
   总量，而插件运行时匹配的是每个 rank 发出的量。生成规则前会自动除以 rank 数，
@@ -133,9 +136,17 @@ python3 optimize_config.py --input hccl_prof.csv --output hccl_tuner_config.json
   运行时匹配的是 root 总发出量。生成规则前会自动乘以 rank 数，CSV 里的原始数值
   不受影响
 - **dpu 规则强制 `min_servers>=2`**：原因见下文「engine 可选值」一节
+- **规则绑定采集时 buffsize**：采集时显式设置了 `HCCL_BUFFSIZE` 的，规则写入
+  `buffer_size` 等值匹配（插件侧为收发两份 CCL buffer 总字节数，脚本已自动换算，
+  CSV 仍记录环境变量原值），只在该 buffsize 的运行环境生效（运行环境不同则插件不干预）；
+  未显式设置时规则全局生效，请保持采集与运行环境的 buffsize 一致。多 buffsize 场景
+  可多轮采集（各轮显式设置不同值，`--output` 指向同一 CSV 自动追加），再一次生成
+  一份覆盖所有 buffsize 的配置
 
-校验不通过的行（比如插件不支持的 executor）直接丢弃并在日志里给出计数和原因，
-不会让一条坏数据导致整份配置失效。
+校验不通过的行（比如插件不支持的 executor、`check_result` 为 `failed` /
+`noresult` / `fallback`）直接丢弃并在日志里给出计数和原因，不会让一条坏数据
+导致整份配置失效。`fallback` 表示该采集行不在 probe 名单的 per-size 集合内
+（运行时静默回退到了其他算法），数据无效。
 
 ### 第三步：加载生效
 
@@ -144,18 +155,17 @@ export HCCL_TUNER_PLUGIN=/path/to/hccl_tuner_example.so
 export HCCL_TUNER_CONFIG_FILE=/path/to/hccl_tuner_config.json
 ```
 
+多机部署须把 `.so` 与 JSON 分发到所有节点的相同路径且内容一致，部分节点未加载时各 rank 独立选型且无跨 rank 校验，
+算法选择不一致可致通信卡死。
 之后正常运行业务即可，插件会按配置改写 cost table。配置格式见下一节。
 
 ### 目录下其他文件
 
-`tuner_common.py` 是两个脚本共用的常量表（CSV 字段、算法注册表、黑名单等），
-被两边直接引用，不需要单独运行。有两点维护上的事需要知道：
-
-- **算法注册表是人工维护的**：合法算法组合表、拓扑层数约束表从 HCCL 源码的
-  算法注册宏归纳而来，不会随 HCCL 版本自动更新。升级 HCCL 后如果新增了算法，
-  需要手动同步这两张表，否则新算法采不了（按未注册组合被跳过）
-- **黑名单可以放开**：排除逻辑集中在 `tuner_common.py` 的 `is_blacklisted`
-  （concur 拦截在函数里写死，multilink 走关键词表），想采集这些算法时改这里
+`tuner_common.py` 是两个脚本共用的常量表与纯函数（CSV 字段、算法注册名反分解、
+probe 名单 JSON 读写等），被两边直接引用，不需要单独运行。唯一维护注意点：
+HCCL 侧算法命名规则演进（新增引擎/执行器/模板 token）时，需同步 `split_algo_name`
+的全量词表与 C++ 侧 `ParseAlgName`（`src/common/alg_parse.cc`），否则新算法会被
+记入 `unresolved` 而不进采集计划。
 
 ## JSON 配置格式
 
@@ -252,23 +262,37 @@ template 不做枚举校验：单级是单 template 名，多级是 executor 后
 
 ### CSV 列格式
 
-`hccl_prof.csv` 每行一个采集点，列固定为（供自行后处理参考）：
+`hccl_perf.csv` 每行一个采集点，列固定为（供自行后处理参考）：
 
 | 列 | 含义 |
 |----|------|
 | `op_type` / `data_type` / `reduce_type` | 采集维度（reduce 类之外的算子 `reduce_type` 为 `NA`） |
 | `size_bytes` | 数据量（字节） |
-| `engine` | 采集引擎（当前固定 `aicpu`） |
+| `engine` | 采集引擎（`aicpu` / `aiv` / `dpu` / `ccums` / `ccusched`） |
 | `algorithm.executor_type` / `algorithm.template_type` | 算法（多级模板为逗号分隔串，如 `meshconcur,nhr,nhr`） |
 | `HCCL_BUFFSIZE` | 采集时的 `HCCL_BUFFSIZE` 环境变量值 |
 | `ranks.ranks` / `ranks.npus_per_server` / `ranks.servers` / `ranks.pods` / `ranks.super_pods` | 拓扑 5 字段（未指定的 pods/super_pods 记 0） |
-| `check_result` | 结果校验状态：`success` 表示算法结果比对通过；`failed` / `noresult` 表示该轮执行失败或未产出数据，仅供参考，不参与选优 |
+| `check_result` | 结果校验状态（取值见下方说明） |
 | `alg_bandwidth(GB/s)` / `alg_latency(us)` | 性能数据（optimize_config 以带宽选优） |
-| `timestamp(ms)` | 毫秒时间戳（增量采集去重依据） |
+| `timestamp` | 17 位紧凑时间戳 `YYYYMMDDHHMMSSmmm`（增量采集去重依据，非法值视作最旧） |
+
+`check_result` 取值说明：
+
+| 值 | 含义 | 参与选优 |
+|----|------|----------|
+| `success` | 算法结果比对通过 | 是 |
+| `NULL` | 结果比对未执行（hccl_test 无参考比对结论，常见于无参考实现的算子），按有效数据对待 | 是 |
+| `failed` | 算法执行了但结果比对失败 | 否 |
+| `noresult` | 未解析到结果数据 | 否 |
+| `fallback` | 该行 (算法, 数据量) 组合不在 probe 名单（`--probe-output`，默认 `<output>.algos.json`）内：HCCL 运行时静默回退到默认算法，数据张冠李戴，视为无效 | 否 |
+
+`fallback` 是探测名单机制的核心价值：探测时 HCCL 已明确判定"算法 X 在数据量 Y 下不适用"（costTable 过滤），采集仍显式指定 X 时 HCCL 不报错而是内部换默认算法跑完，输出表格照样写"X 的带宽时延"——数字实际属于默认算法。若 CSV 中大量出现 `fallback`，说明采集参数超出名单（`--probe-output` 文件）覆盖范围，应删除名单重探或调整 `--algos`。
+
+> 极小档位（字节级，如 4B）的名单可能混入 HCCL 建链期内部控制面操作（barrier/flag）的选型行，该档位算法集略宽于真实支持性，采集时由 `fallback` 标记兜底。
 
 ## 测试
 
-Python 单测（覆盖两个脚本的全部纯函数）：
+Python 单测（覆盖 `perf_test.py` / `optimize_config.py` / `tuner_common.py` 的全部纯函数）：
 
 ```bash
 python3 test_l0.py
