@@ -897,9 +897,6 @@ HcclResult ParseOpExpansion()
             g_algEnvConfig.aicpuCacheEnable = 1;
         }
     } else if (opExpansionModeEnv == "AIV") {
-        if (g_algEnvConfig.hcclDeterministic == true) {
-            HCCL_WARNING("Deterministic mode does not support AIV");
-        }
         g_algEnvConfig.aivMode = true;
     } else if (opExpansionModeEnv == "HOST") {
         g_algEnvConfig.aivMode = false;

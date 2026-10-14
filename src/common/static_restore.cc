@@ -619,25 +619,27 @@ static int write_and_verify_tar(
 {
     if (fseek(fp, 0, SEEK_SET) != 0) {
         HCCL_ERROR("Cannot seek to beginning of '%s'", target_path);
+        unlock_and_close(fp);
         return -1;
     }
 
     if (file_exists && ftruncate(fileno(fp), 0) != 0) {
         HCCL_ERROR("Cannot truncate '%s': %s", target_path, strerror(errno));
+        unlock_and_close(fp);
         return -1;
     }
 
     size_t written = fwrite(data, 1, size, fp);
     if (written != size) {
         HCCL_ERROR("Failed to write tar file: expected %zu bytes, wrote %zu", size, written);
-        fclose(fp);
+        unlock_and_close(fp);
         remove_incomplete_file(target_path);
         return -1;
     }
 
     if (fflush(fp) != 0) {
         HCCL_ERROR("Failed to flush file '%s': %s", target_path, strerror(errno));
-        fclose(fp);
+        unlock_and_close(fp);
         remove_incomplete_file(target_path);
         return -1;
     }
@@ -645,7 +647,7 @@ static int write_and_verify_tar(
     uint32_t written_crc = calc_crc32(data, size);
     if (written_crc != expected_crc) {
         HCCL_ERROR("Post-write CRC check failed: 0x%08X vs expected 0x%08X", written_crc, expected_crc);
-        fclose(fp);
+        unlock_and_close(fp);
         remove_incomplete_file(target_path);
         return -1;
     }
