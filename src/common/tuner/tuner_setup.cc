@@ -63,7 +63,7 @@ bool LoadPluginLocked()
     }
 
     /* LOAD_READY：首次加载 */
-    std::string pluginPath = GetEnv("HCCL_TUNER_PLUGIN");
+    std::string pluginPath = GetEnv("HCCL_ALG_TUNER_PLUGIN");
     if (pluginPath.empty() || pluginPath == "none") {
         g_loadStatus = LOAD_FAILED;
         return false;

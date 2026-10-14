@@ -4,7 +4,7 @@
 
 This directory provides a reference implementation of the HCCL Tuner Plugin, demonstrating how to modify the cost table via an external `.so` plugin that reads a JSON configuration, thereby influencing the Selector's algorithm choice.
 
-> **Incubating feature**: experimental capability, disabled by default (enable by setting `HCCL_TUNER_PLUGIN`); interface compatibility is not guaranteed until it becomes stable.
+> **Incubating feature**: experimental capability, disabled by default (enable by setting `HCCL_ALG_TUNER_PLUGIN`); interface compatibility is not guaranteed until it becomes stable.
 
 ## Build
 
@@ -20,13 +20,13 @@ The first build automatically downloads nlohmann/json (header-only) to `third_pa
 ## Usage
 
 ```bash
-export HCCL_TUNER_PLUGIN=/path/to/hccl_tuner_example.so
-export HCCL_TUNER_CONFIG_FILE=/path/to/hccl_tuner_config.json
+export HCCL_ALG_TUNER_PLUGIN=/path/to/hccl_tuner_example.so
+export HCCL_ALG_CONFIG_FILE=/path/to/hccl_tuner_config.json
 ```
 
 The plugin searches for the configuration file in the following order, loading the first readable one:
 
-1. `$HCCL_TUNER_CONFIG_FILE` (skipped if not set)
+1. `$HCCL_ALG_CONFIG_FILE` (skipped if not set)
 2. `./hccl_tuner_config.json`
 3. `/etc/hccl/hccl_tuner_config.json`
 
@@ -184,8 +184,8 @@ back to another algorithm); the data is invalid.
 ### Step 3: Load and Activate
 
 ```bash
-export HCCL_TUNER_PLUGIN=/path/to/hccl_tuner_example.so
-export HCCL_TUNER_CONFIG_FILE=/path/to/hccl_tuner_config.json
+export HCCL_ALG_TUNER_PLUGIN=/path/to/hccl_tuner_example.so
+export HCCL_ALG_CONFIG_FILE=/path/to/hccl_tuner_config.json
 ```
 
 For multi-node deployment, the `.so` and JSON must be distributed to the same path on

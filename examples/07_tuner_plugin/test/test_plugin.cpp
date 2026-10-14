@@ -232,7 +232,7 @@ static void TestInitAndParse(void)
 {
     ResetPluginState();
     WriteTestConfig("/tmp/hccl_tuner_test_cfg.json");
-    setenv("HCCL_TUNER_CONFIG_FILE", "/tmp/hccl_tuner_test_cfg.json", 1);
+    setenv("HCCL_ALG_CONFIG_FILE", "/tmp/hccl_tuner_test_cfg.json", 1);
 
     hcclTunerCommInfo_t commInfo = {};
     commInfo.nRanks = 8;
@@ -265,7 +265,7 @@ static void TestRuleMatchHit(void)
 {
     ResetPluginState();
     WriteTestConfig("/tmp/hccl_tuner_test_cfg.json");
-    setenv("HCCL_TUNER_CONFIG_FILE", "/tmp/hccl_tuner_test_cfg.json", 1);
+    setenv("HCCL_ALG_CONFIG_FILE", "/tmp/hccl_tuner_test_cfg.json", 1);
 
     hcclTunerCommInfo_t commInfo = {};
     commInfo.nRanks = 8;
@@ -303,7 +303,7 @@ static void TestRuleNoMatch(void)
 {
     ResetPluginState();
     WriteTestConfig("/tmp/hccl_tuner_test_cfg.json");
-    setenv("HCCL_TUNER_CONFIG_FILE", "/tmp/hccl_tuner_test_cfg.json", 1);
+    setenv("HCCL_ALG_CONFIG_FILE", "/tmp/hccl_tuner_test_cfg.json", 1);
 
     hcclTunerCommInfo_t commInfo = {};
     commInfo.nRanks = 4; /* 不匹配 min_ranks=8 */
@@ -341,7 +341,7 @@ static void TestFirstMatchWins(void)
 {
     ResetPluginState();
     WriteTestConfig("/tmp/hccl_tuner_test_cfg.json");
-    setenv("HCCL_TUNER_CONFIG_FILE", "/tmp/hccl_tuner_test_cfg.json", 1);
+    setenv("HCCL_ALG_CONFIG_FILE", "/tmp/hccl_tuner_test_cfg.json", 1);
 
     hcclTunerCommInfo_t commInfo = {};
     commInfo.nRanks = 8;
@@ -378,7 +378,7 @@ static void TestDataTypeMatch(void)
 {
     ResetPluginState();
     WriteTestConfig("/tmp/hccl_tuner_test_cfg.json");
-    setenv("HCCL_TUNER_CONFIG_FILE", "/tmp/hccl_tuner_test_cfg.json", 1);
+    setenv("HCCL_ALG_CONFIG_FILE", "/tmp/hccl_tuner_test_cfg.json", 1);
 
     hcclTunerCommInfo_t commInfo = {};
     commInfo.nRanks = 8;
@@ -419,7 +419,7 @@ static void TestCommNameMatch(void)
 {
     ResetPluginState();
     WriteTestConfig("/tmp/hccl_tuner_test_cfg.json");
-    setenv("HCCL_TUNER_CONFIG_FILE", "/tmp/hccl_tuner_test_cfg.json", 1);
+    setenv("HCCL_ALG_CONFIG_FILE", "/tmp/hccl_tuner_test_cfg.json", 1);
 
     hcclTunerCommInfo_t commInfo = {};
     commInfo.nRanks = 8;
@@ -462,7 +462,7 @@ static void TestOpTypeIsolation(void)
 {
     ResetPluginState();
     WriteTestConfig("/tmp/hccl_tuner_test_cfg.json");
-    setenv("HCCL_TUNER_CONFIG_FILE", "/tmp/hccl_tuner_test_cfg.json", 1);
+    setenv("HCCL_ALG_CONFIG_FILE", "/tmp/hccl_tuner_test_cfg.json", 1);
 
     hcclTunerCommInfo_t commInfo = {};
     commInfo.nRanks = 8;
@@ -500,7 +500,7 @@ static void TestSchemaTypoDetection(void)
         "\"executor\":\"sole\",\"template\":\"mesh\",\"cost\":0.0}]}}}",
         fp);
     fclose(fp);
-    setenv("HCCL_TUNER_CONFIG_FILE", "/tmp/hccl_tuner_test_typo.json", 1);
+    setenv("HCCL_ALG_CONFIG_FILE", "/tmp/hccl_tuner_test_typo.json", 1);
 
     hcclTunerCommInfo_t commInfo = {};
     commInfo.nRanks = 8;
@@ -533,7 +533,7 @@ static void TestSchemaMissingRequired(void)
         "\"executor\":\"sole\",\"template\":\"mesh\"}]}}}",
         fp);
     fclose(fp);
-    setenv("HCCL_TUNER_CONFIG_FILE", "/tmp/hccl_tuner_test_typo.json", 1);
+    setenv("HCCL_ALG_CONFIG_FILE", "/tmp/hccl_tuner_test_typo.json", 1);
 
     hcclTunerCommInfo_t commInfo = {};
     commInfo.nRanks = 8;
@@ -575,7 +575,7 @@ static void TestEngineMissingInRule(void)
         "\"executor\":\"sole\",\"template\":\"meshoneshot\",\"cost\":0.0}]}}}",
         fp);
     fclose(fp);
-    setenv("HCCL_TUNER_CONFIG_FILE", "/tmp/hccl_tuner_test_cfg.json", 1);
+    setenv("HCCL_ALG_CONFIG_FILE", "/tmp/hccl_tuner_test_cfg.json", 1);
 
     hcclTunerCommInfo_t commInfo = {};
     commInfo.nRanks = 8;
@@ -606,7 +606,7 @@ static void TestMatchMinRanksZero(void)
         "}",
         fp);
     fclose(fp);
-    setenv("HCCL_TUNER_CONFIG_FILE", "/tmp/hccl_tuner_test_cfg.json", 1);
+    setenv("HCCL_ALG_CONFIG_FILE", "/tmp/hccl_tuner_test_cfg.json", 1);
 
     hcclTunerCommInfo_t commInfo = {};
     commInfo.nRanks = 8;
@@ -644,7 +644,7 @@ static void TestEngineOutOfRange(void)
         "\"engine\":\"invalid_engine\",\"executor\":\"sole\",\"template\":\"mesh\",\"cost\":0.0}]}}}",
         fp);
     fclose(fp);
-    setenv("HCCL_TUNER_CONFIG_FILE", "/tmp/hccl_tuner_test_cfg.json", 1);
+    setenv("HCCL_ALG_CONFIG_FILE", "/tmp/hccl_tuner_test_cfg.json", 1);
 
     hcclTunerCommInfo_t commInfo = {};
     commInfo.nRanks = 8;
@@ -675,7 +675,7 @@ static void TestRequiredFieldMissing(void)
         "\"engine\":\"aicpu\",\"executor\":\"sole\",\"template\":\"mesh\",\"cost\":0.0}]}}}",
         fp);
     fclose(fp);
-    setenv("HCCL_TUNER_CONFIG_FILE", "/tmp/hccl_tuner_test_typo.json", 1);
+    setenv("HCCL_ALG_CONFIG_FILE", "/tmp/hccl_tuner_test_typo.json", 1);
 
     hcclTunerCommInfo_t commInfo = {};
     commInfo.nRanks = 8;
@@ -705,7 +705,7 @@ static void TestRangeValidation(void)
         "\"engine\":\"aicpu\",\"executor\":\"sole\",\"template\":\"mesh\",\"cost\":0.0}]}}}",
         fp);
     fclose(fp);
-    setenv("HCCL_TUNER_CONFIG_FILE", "/tmp/hccl_tuner_test_typo.json", 1);
+    setenv("HCCL_ALG_CONFIG_FILE", "/tmp/hccl_tuner_test_typo.json", 1);
 
     hcclTunerCommInfo_t commInfo = {};
     commInfo.nRanks = 8;
@@ -729,7 +729,7 @@ static void TestCostNegativeSkip(void)
 {
     ResetPluginState();
     WriteTestConfig("/tmp/hccl_tuner_test_cfg.json");
-    setenv("HCCL_TUNER_CONFIG_FILE", "/tmp/hccl_tuner_test_cfg.json", 1);
+    setenv("HCCL_ALG_CONFIG_FILE", "/tmp/hccl_tuner_test_cfg.json", 1);
 
     hcclTunerCommInfo_t commInfo = {};
     commInfo.nRanks = 8;
@@ -774,7 +774,7 @@ static void TestMultiLevelTemplateMatch(void)
         "\"template\":\"meshconcurnhrnhr\",\"cost\":0.0}]}}}",
         fp);
     fclose(fp);
-    setenv("HCCL_TUNER_CONFIG_FILE", "/tmp/hccl_tuner_test_multi.json", 1);
+    setenv("HCCL_ALG_CONFIG_FILE", "/tmp/hccl_tuner_test_multi.json", 1);
 
     hcclTunerCommInfo_t commInfo = {};
     commInfo.nRanks = 8;
@@ -836,7 +836,7 @@ static void TestPerRuleRejection(void)
         "\"engine\":\"dpu\",\"executor\":\"parallel\",\"template\":\"meshoneshot\",\"cost\":1.5}]}}}",
         fp);
     fclose(fp);
-    setenv("HCCL_TUNER_CONFIG_FILE", "/tmp/hccl_tuner_test_mix.json", 1);
+    setenv("HCCL_ALG_CONFIG_FILE", "/tmp/hccl_tuner_test_mix.json", 1);
 
     hcclTunerCommInfo_t commInfo = {};
     commInfo.nRanks = 8;
@@ -881,7 +881,7 @@ static void TestFatalVersionRejected(void)
         "\"engine\":\"aicpu\",\"executor\":\"sole\",\"template\":\"meshoneshot\",\"cost\":0.0}]}}}",
         fp);
     fclose(fp);
-    setenv("HCCL_TUNER_CONFIG_FILE", "/tmp/hccl_tuner_test_fatal.json", 1);
+    setenv("HCCL_ALG_CONFIG_FILE", "/tmp/hccl_tuner_test_fatal.json", 1);
 
     hcclTunerCommInfo_t commInfo = {};
     commInfo.nRanks = 8;
@@ -923,7 +923,7 @@ static void TestExecutorForwardCompat(void)
         "\"engine\":\"aicpu\",\"executor\":\"strictordered\",\"template\":\"mesh\",\"cost\":0.0}]}}}",
         fp);
     fclose(fp);
-    setenv("HCCL_TUNER_CONFIG_FILE", "/tmp/hccl_tuner_test_exec.json", 1);
+    setenv("HCCL_ALG_CONFIG_FILE", "/tmp/hccl_tuner_test_exec.json", 1);
 
     hcclTunerCommInfo_t commInfo = {};
     commInfo.nRanks = 8;
@@ -953,7 +953,7 @@ static void TestAbsentTargetFallThrough(void)
         "\"engine\":\"dpu\",\"executor\":\"parallel\",\"template\":\"meshoneshot\",\"cost\":1.5}]}}}",
         fp);
     fclose(fp);
-    setenv("HCCL_TUNER_CONFIG_FILE", "/tmp/hccl_tuner_test_fall.json", 1);
+    setenv("HCCL_ALG_CONFIG_FILE", "/tmp/hccl_tuner_test_fall.json", 1);
 
     hcclTunerCommInfo_t commInfo = {};
     commInfo.nRanks = 8;
@@ -1003,7 +1003,7 @@ static void TestDisabledTargetFallThrough(void)
         "\"engine\":\"dpu\",\"executor\":\"parallel\",\"template\":\"meshoneshot\",\"cost\":1.5}]}}}",
         fp);
     fclose(fp);
-    setenv("HCCL_TUNER_CONFIG_FILE", "/tmp/hccl_tuner_test_dis.json", 1);
+    setenv("HCCL_ALG_CONFIG_FILE", "/tmp/hccl_tuner_test_dis.json", 1);
 
     hcclTunerCommInfo_t commInfo = {};
     commInfo.nRanks = 8;
@@ -1052,7 +1052,7 @@ static void TestFirstEffectiveRuleWins(void)
         "\"engine\":\"dpu\",\"executor\":\"parallel\",\"template\":\"meshoneshot\",\"cost\":1.5}]}}}",
         fp);
     fclose(fp);
-    setenv("HCCL_TUNER_CONFIG_FILE", "/tmp/hccl_tuner_test_prio.json", 1);
+    setenv("HCCL_ALG_CONFIG_FILE", "/tmp/hccl_tuner_test_prio.json", 1);
 
     hcclTunerCommInfo_t commInfo = {};
     commInfo.nRanks = 8;
@@ -1099,7 +1099,7 @@ static void TestU32OverflowRejected(void)
         "\"engine\":\"aicpu\",\"executor\":\"sole\",\"template\":\"meshoneshot\",\"cost\":0.0}]}}}",
         fp);
     fclose(fp);
-    setenv("HCCL_TUNER_CONFIG_FILE", "/tmp/hccl_tuner_test_ovf.json", 1);
+    setenv("HCCL_ALG_CONFIG_FILE", "/tmp/hccl_tuner_test_ovf.json", 1);
 
     hcclTunerCommInfo_t commInfo = {};
     commInfo.nRanks = 8;
@@ -1128,7 +1128,7 @@ static void TestNegativeRejected(void)
         "\"engine\":\"aicpu\",\"executor\":\"sole\",\"template\":\"meshoneshot\",\"cost\":0.0}]}}}",
         fp);
     fclose(fp);
-    setenv("HCCL_TUNER_CONFIG_FILE", "/tmp/hccl_tuner_test_neg.json", 1);
+    setenv("HCCL_ALG_CONFIG_FILE", "/tmp/hccl_tuner_test_neg.json", 1);
 
     hcclTunerCommInfo_t commInfo = {};
     commInfo.nRanks = 8;
@@ -1156,7 +1156,7 @@ static void TestAboveU64Rejected(void)
         "\"engine\":\"aicpu\",\"executor\":\"sole\",\"template\":\"meshoneshot\",\"cost\":0.0}]}}}",
         fp);
     fclose(fp);
-    setenv("HCCL_TUNER_CONFIG_FILE", "/tmp/hccl_tuner_test_big.json", 1);
+    setenv("HCCL_ALG_CONFIG_FILE", "/tmp/hccl_tuner_test_big.json", 1);
 
     hcclTunerCommInfo_t commInfo = {};
     commInfo.nRanks = 8;
@@ -1184,7 +1184,7 @@ static void TestBoundaryValuesAccepted(void)
         "\"engine\":\"aicpu\",\"executor\":\"sole\",\"template\":\"meshoneshot\",\"cost\":0.0}]}}}",
         fp);
     fclose(fp);
-    setenv("HCCL_TUNER_CONFIG_FILE", "/tmp/hccl_tuner_test_bnd.json", 1);
+    setenv("HCCL_ALG_CONFIG_FILE", "/tmp/hccl_tuner_test_bnd.json", 1);
 
     hcclTunerCommInfo_t commInfo = {};
     commInfo.nRanks = 8;

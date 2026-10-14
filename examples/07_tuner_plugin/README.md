@@ -4,7 +4,7 @@
 
 本目录提供 HCCL Tuner Plugin 的参考实现，演示如何通过外部 `.so` 插件读取 JSON 配置并修改cost table，影响 Selector 的算法选择。
 
-> **孵化中（Incubating）特性**：实验性能力，默认未开放（需设置 `HCCL_TUNER_PLUGIN` 启用）；转稳定前不保证接口兼容。
+> **孵化中（Incubating）特性**：实验性能力，默认未开放（需设置 `HCCL_ALG_TUNER_PLUGIN` 启用）；转稳定前不保证接口兼容。
 
 ## 编译
 
@@ -20,13 +20,13 @@ make
 ## 使用
 
 ```bash
-export HCCL_TUNER_PLUGIN=/path/to/hccl_tuner_example.so
-export HCCL_TUNER_CONFIG_FILE=/path/to/hccl_tuner_config.json
+export HCCL_ALG_TUNER_PLUGIN=/path/to/hccl_tuner_example.so
+export HCCL_ALG_CONFIG_FILE=/path/to/hccl_tuner_config.json
 ```
 
 插件按以下顺序查找配置文件，找到第一个可读的即加载：
 
-1. `$HCCL_TUNER_CONFIG_FILE`（未设置时跳过）
+1. `$HCCL_ALG_CONFIG_FILE`（未设置时跳过）
 2. `./hccl_tuner_config.json`
 3. `/etc/hccl/hccl_tuner_config.json`
 
@@ -151,8 +151,8 @@ python3 optimize_config.py --input hccl_perf.csv --output hccl_tuner_config.json
 ### 第三步：加载生效
 
 ```bash
-export HCCL_TUNER_PLUGIN=/path/to/hccl_tuner_example.so
-export HCCL_TUNER_CONFIG_FILE=/path/to/hccl_tuner_config.json
+export HCCL_ALG_TUNER_PLUGIN=/path/to/hccl_tuner_example.so
+export HCCL_ALG_CONFIG_FILE=/path/to/hccl_tuner_config.json
 ```
 
 多机部署须把 `.so` 与 JSON 分发到所有节点的相同路径且内容一致，部分节点未加载时各 rank 独立选型且无跨 rank 校验，

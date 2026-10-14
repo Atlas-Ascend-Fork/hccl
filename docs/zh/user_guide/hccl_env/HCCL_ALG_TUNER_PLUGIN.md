@@ -1,4 +1,4 @@
-# HCCL_TUNER_PLUGIN
+# HCCL_ALG_TUNER_PLUGIN
 
 ## 功能描述
 
@@ -18,13 +18,13 @@
 ## 配置示例
 
 ```bash
-export HCCL_TUNER_PLUGIN=/path/to/hccl_tuner_example.so
+export HCCL_ALG_TUNER_PLUGIN=/path/to/hccl_tuner_example.so
 ```
 
 禁用插件时，在启动业务进程前执行：
 
 ```bash
-export HCCL_TUNER_PLUGIN=none
+export HCCL_ALG_TUNER_PLUGIN=none
 ```
 
 ## 使用约束
