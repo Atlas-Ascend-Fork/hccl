@@ -14,8 +14,8 @@
  * （hcclTunerAlgoEntry_t[] 命名条目数组）以影响 Selector 算法选择。
  *
  * 编译：make（链接为 hccl_tuner_example.so）
- * 使用：export HCCL_TUNER_PLUGIN=/path/to/hccl_tuner_example.so
- *       export HCCL_TUNER_CONFIG_FILE=/path/to/hccl_tuner_config.json
+ * 使用：export HCCL_ALG_TUNER_PLUGIN=/path/to/hccl_tuner_example.so
+ *       export HCCL_ALG_CONFIG_FILE=/path/to/hccl_tuner_config.json
  */
 
 #include <stdarg.h>
@@ -694,7 +694,7 @@ static HcclResult MyInit(HcclComm comm, const hcclTunerCommInfo_t* commInfo, con
     g_hostFuncsReady = 1;
 
     /* 1. 读文件 + 解析 JSON（临时内存树，不持久化） */
-    const char* envPath = getenv("HCCL_TUNER_CONFIG_FILE");
+    const char* envPath = getenv("HCCL_ALG_CONFIG_FILE");
     const char* paths[] = {envPath, "./hccl_tuner_config.json", "/etc/hccl/hccl_tuner_config.json"};
     char* content = NULL;
     const char* loadedPath = NULL;

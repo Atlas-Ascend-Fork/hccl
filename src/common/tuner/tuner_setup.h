@@ -43,7 +43,7 @@ void TunerLogFunction(int level, const char* file, int line, const char* fmt, ..
  * 慢调用保护：getCollInfo 连续 3 次超过 100ms 则自动禁用插件，回退 CostModel。 */
 
 /* comm 创建时调用：dlopen 插件 + dlsym + 版本校验 + 引用计数 + 构造 hostFuncs + 调用插件 init。
- * topoInfo 用于填充 hcclTunerCommInfo_t。未配置 HCCL_TUNER_PLUGIN 或加载失败时为 no-op，返回 HCCL_SUCCESS。 */
+ * topoInfo 用于填充 hcclTunerCommInfo_t。未配置 HCCL_ALG_TUNER_PLUGIN 或加载失败时为 no-op，返回 HCCL_SUCCESS。 */
 HcclResult HcclTunerInit(HcclComm comm, const ops_hccl::TopoInfoWithNetLayerDetails* topoInfo);
 
 /* 每次 op 时调用：构造 collInfo，调用插件 getCollInfo。
