@@ -158,8 +158,9 @@ static CcuResult DoRepeatWriteReduceSlices(
         CCU_IF(ctx.isRepeatIter == 0)
         {
             if (ctx.axisId == 1) {
-                src.addr += ctx.die0Size;
-                dst.addr += ctx.die0Size;
+                // die1起始偏移须与长度选择一致：last slice的die0份额为die0LastSliceSize而非die0Size
+                src.addr += (islastSlice ? ctx.die0LastSliceSize : ctx.die0Size);
+                dst.addr += (islastSlice ? ctx.die0LastSliceSize : ctx.die0Size);
             }
         }
         ctx.sliceSize = (ctx.axisId == 0) ? (islastSlice ? ctx.die0LastSliceSize : ctx.die0Size) :
@@ -269,8 +270,9 @@ static CcuResult DoRepeatReduceScatterNHR(ReduceScatterNHR1DMem2MemContext& ctx)
         CCU_IF(ctx.isRepeatIter == 0)
         {
             if (ctx.axisId == 1) {
-                ctx.localSrc.addr += ctx.die0Size;
-                ctx.localDst.addr += ctx.die0Size;
+                // die1起始偏移须与长度选择一致：last slice的die0份额为die0LastSliceSize而非die0Size
+                ctx.localSrc.addr += (islastSlice ? ctx.die0LastSliceSize : ctx.die0Size);
+                ctx.localDst.addr += (islastSlice ? ctx.die0LastSliceSize : ctx.die0Size);
             }
         }
         ccu::Variable& localSliceSize = (ctx.axisId == 0) ? (islastSlice ? ctx.die0LastSliceSize : ctx.die0Size) :
