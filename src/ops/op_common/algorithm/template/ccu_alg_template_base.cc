@@ -320,7 +320,11 @@ HcclResult CcuAlgTemplateBase::HasLinkOnNetLayer0(HcclComm comm, uint32_t myRank
 
 // 将SplitChannelsByDie的结果分配到具体kernel槽位。
 // 2Plus6: singleChByDie→FULLMESH，multiChByDie中与fullmesh同dieId的→CLOS_MINOR，其余→CLOS_MAJOR；
-// 非2Plus6: 两个singleChByDie按channel数分配，小的→FULLMESH，大的→CLOS_MAJOR。
+//         FULLMESH恒含myRank用于本地拷贝；singleChByDie为空时FULLMESH仅有本地拷贝无远端channel。
+// 非2Plus6: 按net layer 0链路判定各die归属，FULLMESH恒含myRank用于本地拷贝。
+//   size>=2: it0HasLink则it0→FULLMESH+it1→CLOS_MAJOR，否则反转；
+//   size==1: it0HasLink则→FULLMESH，否则→CLOS_MAJOR（FULLMESH仅做本地拷贝，channels为空）；
+//   size==0: 报错。
 HcclResult CcuAlgTemplateBase::PartitionChannelsFor2Die(
     HcclComm comm, const std::map<uint32_t, std::vector<HcclChannelDesc>>& singleChByDie,
     const std::map<uint32_t, std::vector<HcclChannelDesc>>& multiChByDie, bool is2Plus6, uint32_t myRank,
@@ -359,20 +363,25 @@ HcclResult CcuAlgTemplateBase::PartitionChannelsFor2Die(
         }
     } else {
         CHK_PRT_RET(
-            singleChByDie.size() < 2,
+            singleChByDie.empty(),
             HCCL_ERROR(
-                "[%s][PartitionChannels] singleChByDie size[%zu] is less than 2, "
-                "non-2Plus6 topology requires at least 2 dies but only got [%zu].",
-                tag.c_str(), singleChByDie.size(), singleChByDie.size()),
+                "[%s][PartitionChannels] singleChByDie is empty, "
+                "non-2Plus6 topology requires at least 1 die but got 0.",
+                tag.c_str()),
             HcclResult::HCCL_E_INTERNAL);
         kernelCount = MAX_KERNEL_NUM_2DIE - 1;
         auto it0 = singleChByDie.begin();
-        auto it1 = std::next(it0);
         bool it0HasLink = false;
         CHK_RET(HasLinkOnNetLayer0(comm, myRank, it0->second.front().remoteRank, it0HasLink));
-        fullmeshDieId = it0HasLink ? it0->first : it1->first;
-        for (const auto& [dieId, dieChannels] : singleChByDie) {
-            fillKernel(dieId == fullmeshDieId ? KERNEL_FULLMESH : KERNEL_CLOS_MAJOR, dieChannels);
+        if (singleChByDie.size() == 1) {
+            fullmeshDieId = it0->first;
+            fillKernel(it0HasLink ? KERNEL_FULLMESH : KERNEL_CLOS_MAJOR, it0->second);
+        } else {
+            auto it1 = std::next(it0);
+            fullmeshDieId = it0HasLink ? it0->first : it1->first;
+            for (const auto& [dieId, dieChannels] : singleChByDie) {
+                fillKernel(dieId == fullmeshDieId ? KERNEL_FULLMESH : KERNEL_CLOS_MAJOR, dieChannels);
+            }
         }
         kernelRankGroup[KERNEL_FULLMESH].push_back(myRank);
     }
