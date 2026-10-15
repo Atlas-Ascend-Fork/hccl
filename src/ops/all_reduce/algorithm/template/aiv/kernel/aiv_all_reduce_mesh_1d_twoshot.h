@@ -159,23 +159,43 @@ public:
             processCount = smallSliceCount;
         }
 
-        // 统一Reduce到本端rank的数据上
-        uint64_t dstOffset = reduceBuffOffset + dstSliceIdx * chunkSize;
-        uint64_t dst = reinterpret_cast<uint64_t>(myGmIn_) + dstOffset;
-        for (uint64_t dataIdx = 0; dataIdx < rankSize_; ++dataIdx) {
-            if (dataIdx == rank_) {
-                continue;
+        // 树形折叠（与 Aicpu 保序 RunLocalReduce 同序）：累加器 = rank0 的 slice 槽（Aicpu 基准），slot(dst) +=
+        // slot(src) 零存储 flag 等待：源槽仅当 src >= k 时等待（[1,k) 已在作为目的槽被折入时等待过）；
+        // 目的槽仅首次被折入时等待（新目的槽只出现在第 0/1 轮）
+        uint64_t baseOffset = reduceBuffOffset + idxInGroup * chunkSize;
+        uint64_t base = reinterpret_cast<uint64_t>(myGmIn_) + baseOffset;
+        uint32_t curBlocks = static_cast<uint32_t>(rankSize_);
+        uint32_t m0 = GetLargestPowerOf2LessThan(curBlocks);
+        uint32_t firstRoundDstNum = curBlocks - m0;
+        uint32_t k = (firstRoundDstNum > (m0 >> 1)) ? firstRoundDstNum : (m0 >> 1);
+        uint32_t round = 0;
+        while (curBlocks > 1) {
+            uint32_t M = GetLargestPowerOf2LessThan(curBlocks);
+            if (M == 0) {
+                break;
             }
-
-            uint64_t srcSliceIdx = dataIdx * groupSize + idxInGroup;
-            WaitFlag(rank_, getRemoteFlagOffset + srcSliceIdx, curTag_);
-            if (processCount > 0) {
-                uint64_t srcOffset = reduceBuffOffset + srcSliceIdx * chunkSize;
-                uint64_t src = reinterpret_cast<uint64_t>(myGmIn_) + srcOffset;
-                CpGM2GM((__gm__ T*)dst, (__gm__ T*)src, processCount, reduceOp_);
-                pipe_barrier(PIPE_ALL);
+            for (uint32_t src = M; src < curBlocks; ++src) {
+                uint32_t dst = src % M;
+                if (src >= k) {
+                    WaitFlag(rank_, getRemoteFlagOffset + src * groupSize + idxInGroup, curTag_);
+                }
+                if (round == 0 || (round == 1 && dst >= firstRoundDstNum)) {
+                    WaitFlag(rank_, getRemoteFlagOffset + dst * groupSize + idxInGroup, curTag_);
+                }
+                if (processCount > 0) {
+                    uint64_t srcOffset = reduceBuffOffset + (src * groupSize + idxInGroup) * chunkSize;
+                    uint64_t src = reinterpret_cast<uint64_t>(myGmIn_) + srcOffset;
+                    uint64_t dstOffset = (dst == 0) ? base :
+                                                      (reinterpret_cast<uint64_t>(myGmIn_) + reduceBuffOffset
+                                                       + (dst * groupSize + idxInGroup) * chunkSize);
+                    CpGM2GM((__gm__ T*)dstOffset, (__gm__ T*)src, processCount, reduceOp_);
+                    pipe_barrier(PIPE_ALL);
+                }
             }
+            curBlocks = M;
+            ++round;
         }
+        // 结果留在 rank0 槽（累加器），AllGather 直接读 rank0 槽，无需额外拷贝
         // 单核全部Reduce完成再Record
         Record(rank_, localReduceFlagOffset + idxInGroup, curTag_);
     }
@@ -204,7 +224,9 @@ public:
             processCount = smallSliceCount;
             dstOffset = bigSliceNum * bigSliceSize + (sliceIdx - bigSliceNum) * smallSliceSize;
         }
-        uint64_t srcOffset = reduceBuffOffset + sliceIdx * chunkSize;
+        // 归约结果落在各卡的 rank0 槽（reduceBuffOffset + idxInGroup*chunkSize），直接从该槽读取，
+        // 消除归约段内的结果拷回本端槽
+        uint64_t srcOffset = reduceBuffOffset + idxInGroup * chunkSize;
 
         WaitFlag(rmtRank, localReduceFlagOffset + idxInGroup, curTag_);
 
@@ -266,16 +288,37 @@ public:
                       (dataCount <= rank_ * rankChunkStride ? 0 : (dataCount - rank_ * rankChunkStride));
             ;
             if (myRankChuckSize > 0) {
-                for (uint32_t i = 0; i < rankSize_; i++) {
-                    WaitFlag(rank_, i, curTag_);
-                    if (i == 0) { // 需要等待第0个rank的scatter数据到达，但是不能自身重复reduce
-                        continue;
+                // 树形折叠（与 Aicpu 保序 RunLocalReduce 同序）：累加器 = rank0 槽（myGmIn_+0，初值已是
+                // rank0），slot(dst) += slot(src) 零存储 flag 等待：源槽仅当 src >= k 时等待（[1,k)
+                // 已在作为目的槽被折入时等待过）； 目的槽仅首次被折入时等待（新目的槽只出现在第 0/1 轮）
+                uint32_t curBlocks = static_cast<uint32_t>(rankSize_);
+                uint32_t m0 = GetLargestPowerOf2LessThan(curBlocks);
+                uint32_t firstRoundDstNum = curBlocks - m0;
+                uint32_t k = (firstRoundDstNum > (m0 >> 1)) ? firstRoundDstNum : (m0 >> 1);
+                uint32_t round = 0;
+                while (curBlocks > 1) {
+                    uint32_t M = GetLargestPowerOf2LessThan(curBlocks);
+                    if (M == 0) {
+                        break;
                     }
-                    // reduce
-                    uint64_t inputOffset = reinterpret_cast<uint64_t>(myGmIn_) + (i * myRankChuckSize) * sizeof(T);
-                    uint64_t outputOffset = reinterpret_cast<uint64_t>(myGmIn_);
-                    CpGM2GM((__gm__ T*)outputOffset, (__gm__ T*)inputOffset, myRankChuckSize, reduceOp_);
-                    pipe_barrier(PIPE_ALL);
+                    for (uint32_t src = M; src < curBlocks; ++src) {
+                        uint32_t dst = src % M;
+                        if (src >= k) {
+                            WaitFlag(rank_, src, curTag_);
+                        }
+                        if (round == 0 || (round == 1 && dst >= firstRoundDstNum)) {
+                            WaitFlag(rank_, dst, curTag_);
+                        }
+                        // reduce
+                        uint64_t inputOffset
+                            = reinterpret_cast<uint64_t>(myGmIn_) + (src * myRankChuckSize) * sizeof(T);
+                        uint64_t outputOffset
+                            = reinterpret_cast<uint64_t>(myGmIn_) + (dst * myRankChuckSize) * sizeof(T);
+                        CpGM2GM((__gm__ T*)outputOffset, (__gm__ T*)inputOffset, myRankChuckSize, reduceOp_);
+                        pipe_barrier(PIPE_ALL);
+                    }
+                    curBlocks = M;
+                    ++round;
                 }
             }
             Record(rank_, ipc_reduce_flag_offset + 1, curTag_);

@@ -68,6 +68,8 @@ namespace {
 
 constexpr u32 MAX_RANK_NUM_FOR_CONCURRENT_ALGO = 4; // 与selector保持一致：并发算法的卡数上限
 constexpr u32 MAX_RANK_NUM_FOR_REDUCE_MS_ALGO = 8;  // 与selector保持一致：reduce MS 算法的卡数上限
+constexpr u64 AIV_ORDER_PRESERVED_PER_RANK_DATA_LIMIT
+    = 2 * 1024 * 1024; // Byte，保序场景 Aiv 每卡数据量/rankSize 上限（超出回退 aicpu）
 
 template <typename AlgTopoMatch, typename InsAlgTemplate>
 InsV2AllReduceSoleExecutor<AlgTopoMatch, InsAlgTemplate>::InsV2AllReduceSoleExecutor()
@@ -443,9 +445,19 @@ REGISTER_ALG_ATTRS(
     topo.topoCustomCheck = [](const TopoInfoWithNetLayerDetails* topo) -> bool {
         return !topo->topLevelUboe;
     };
+    op.isSupportProd = false; op.isSupportFloatOrderPreserved = true; op.unsupportedDataTypes = UNSUPPORTED_UINT64_FP64;
+    op.opCustomCheck = [](const OpParam& opParam, const TopoInfoWithNetLayerDetails* topo) -> bool {
+        // 非 AIV_ONLY 且保序场景下，每卡数据量/rankSize 超过 2M 时不选 Aiv（回退 aicpu）
+        if (opParam.opExecuteConfig != OpExecuteConfig::AIV_ONLY
+            && IsNeedStrictModeForOrderPreserved(opParam, topo->userRankSize)) {
+            u64 dataSize = opParam.DataDes.count * DATATYPE_SIZE_TABLE[opParam.DataDes.dataType];
+            if (dataSize / topo->userRankSize >= AIV_ORDER_PRESERVED_PER_RANK_DATA_LIMIT) {
+                return false;
+            }
+        }
+        return CheckAivSoleBufferSize(opParam, topo);
+    });
 
-    op.isSupportProd = false; op.unsupportedDataTypes = UNSUPPORTED_UINT64_FP64;
-    op.opCustomCheck = CheckAivSoleBufferSize);
 REGISTER_EXEC_V2(
     HcclCMDType::HCCL_CMD_ALLREDUCE, AivAllReduceSoleMeshTwoShot, InsV2AllReduceSoleExecutor, TopoMatchOneLevel,
     AivTempAllReduceMesh1DTwoShot);
@@ -457,9 +469,19 @@ REGISTER_ALG_ATTRS(
     topo.topoCustomCheck = [](const TopoInfoWithNetLayerDetails* topo) -> bool {
         return !topo->topLevelUboe;
     };
+    op.isSupportProd = false; op.isSupportFloatOrderPreserved = true; op.unsupportedDataTypes = UNSUPPORTED_UINT64_FP64;
+    op.opCustomCheck = [](const OpParam& opParam, const TopoInfoWithNetLayerDetails* topo) -> bool {
+        // 非 AIV_ONLY 且保序场景下，每卡数据量/rankSize 超过 2M 时不选 Aiv（回退 aicpu）
+        if (opParam.opExecuteConfig != OpExecuteConfig::AIV_ONLY
+            && IsNeedStrictModeForOrderPreserved(opParam, topo->userRankSize)) {
+            u64 dataSize = opParam.DataDes.count * DATATYPE_SIZE_TABLE[opParam.DataDes.dataType];
+            if (dataSize / topo->userRankSize >= AIV_ORDER_PRESERVED_PER_RANK_DATA_LIMIT) {
+                return false;
+            }
+        }
+        return CheckAivSoleBufferSize(opParam, topo);
+    });
 
-    op.isSupportProd = false; op.unsupportedDataTypes = UNSUPPORTED_UINT64_FP64;
-    op.opCustomCheck = CheckAivSoleBufferSize);
 #if CANN_VERSION_NUM >= CANN_VERSION(9, 0, 0)
 REGISTER_EXEC_V2(
     HcclCMDType::HCCL_CMD_ALLREDUCE, CcuSchedAllReduceSoleNHR, InsV2AllReduceSoleExecutor, TopoMatchOneLevel,

@@ -243,6 +243,19 @@ public:
         inOutQue.FreeTensor(localIn);
     }
 
+    // 计算小于给定值的最大 2 次幂，用于树形折叠确定每轮分割点（与 Aicpu 保序算法 GetLargestPowerOf2LessThan 语义一致）
+    static __aicore__ inline uint32_t GetLargestPowerOf2LessThan(uint32_t value)
+    {
+        if (value <= 1) {
+            return 0;
+        }
+        uint32_t power = 1;
+        while (power * 2 < value) {
+            power *= 2;
+        }
+        return power;
+    }
+
     __aicore__ inline uint64_t CeilDiv(uint64_t a, uint64_t b);
 
     template <typename T>

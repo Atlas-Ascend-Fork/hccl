@@ -681,6 +681,17 @@ REGISTER_ALG_ATTRS(
     topo.maxTopoLevelNum = 2; topo.isSupportLevel0PcieMix = true;
     topo.topoCustomCheck = [](const TopoInfoWithNetLayerDetails* t) -> bool {
         return !t->topLevelUboe;
+    };
+    op.opCustomCheck = [](const OpParam& opParam, const TopoInfoWithNetLayerDetails* topo) -> bool {
+        void* bufAddr = nullptr;
+        uint64_t bufSize = 0;
+        if (HcclGetHcclBuffer(opParam.hcclComm, &bufAddr, &bufSize) != HCCL_SUCCESS) {
+            return false;
+        }
+        u32 dataTypeSize = DATATYPE_SIZE_TABLE[opParam.all2AllVDataDes.sendType];
+        u64* sendCounts = reinterpret_cast<u64*>(opParam.all2AllVDataDes.sendCounts);
+        u64 dataSize = sendCounts[0] * dataTypeSize * topo->userRankSize;
+        return dataSize <= bufSize * AIV_MAX_CCL_LOOP_NUM;
     };);
 #if !defined(HCCL_CANN_COMPAT_850)
 REGISTER_EXEC_V2(

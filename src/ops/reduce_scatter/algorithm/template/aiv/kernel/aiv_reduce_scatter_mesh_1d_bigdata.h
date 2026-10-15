@@ -95,19 +95,46 @@ public:
             // 把所有数据放到cclBuffer之后，开始本地做reduce
             // 前面做过数据搬运的core现在是空闲状态，顺路帮忙做一下reduce
             if (targetRank == 0) {
-                WaitFlag(rank_, coreIndex, curTag);
+                // 归约初值：rank0 数据（srcCclInOffset = card0 槽 rank_）已由上面的 WaitFlag(targetRank, ...)
+                // 保证就位， 直接覆盖 output 作为累加器初值
                 uint64_t usrOutOffset = output_ + innerDispls * sizeof(T);
-                for (int index = 0; index < rankSize_; index++) {
-                    // 按照顺序把数据reduce 到 output
-                    WaitFlag(rank_, rankSize_ * coreNumPerRank + index * coreNumPerRank + coreIndex, curTag);
-                    uint64_t cclOutOffset = reinterpret_cast<uint64_t>(myGmIn_) + cclBufferStride
-                                            + (index * len + innerDispls) * sizeof(T);
-                    if (index == 0) { // 通过直接覆盖output把数据清一下
-                        CpGM2GM((__gm__ T*)usrOutOffset, (__gm__ T*)srcCclInOffset, recvCurCount);
-                    } else { // 其他卡往output上做atomic add
-                        CpGM2GM((__gm__ T*)usrOutOffset, (__gm__ T*)cclOutOffset, recvCurCount, reduceOp_);
+                CpGM2GM((__gm__ T*)usrOutOffset, (__gm__ T*)srcCclInOffset, recvCurCount);
+                PipeBarrier<PIPE_ALL>();
+                // 树形折叠（与 Aicpu 保序 RunLocalReduce 同序）：slot(dst) += slot(src)，dst==0 累加进 output_，dst>=1
+                // 累加进 cclBuffer 槽 零存储 flag 等待：源槽仅当 src >= k 时等待（[1,k)
+                // 已在作为目的槽被折入时等待过）； 目的槽仅首次被折入时等待（新目的槽只出现在第 0/1 轮）
+                uint32_t curBlocks = static_cast<uint32_t>(rankSize_);
+                uint32_t m0 = GetLargestPowerOf2LessThan(curBlocks);
+                uint32_t firstRoundDstNum = curBlocks - m0;
+                uint32_t k = (firstRoundDstNum > (m0 >> 1)) ? firstRoundDstNum : (m0 >> 1);
+                uint32_t round = 0;
+                while (curBlocks > 1) {
+                    uint32_t M = GetLargestPowerOf2LessThan(curBlocks);
+                    if (M == 0) {
+                        break;
                     }
-                    PipeBarrier<PIPE_ALL>();
+                    for (uint32_t src = M; src < curBlocks; ++src) {
+                        uint32_t dst = src % M;
+                        if (src >= k) {
+                            WaitFlag(rank_, rankSize_ * coreNumPerRank + src * coreNumPerRank + coreIndex, curTag);
+                        }
+                        if (round == 0 || (round == 1 && dst >= firstRoundDstNum)) {
+                            WaitFlag(rank_, rankSize_ * coreNumPerRank + dst * coreNumPerRank + coreIndex, curTag);
+                        }
+                        uint64_t srcOff = reinterpret_cast<uint64_t>(myGmIn_) + cclBufferStride
+                                          + (src * len + innerDispls) * sizeof(T);
+                        if (dst == 0) {
+                            CpGM2GM((__gm__ T*)usrOutOffset, (__gm__ T*)srcOff, recvCurCount, reduceOp_);
+                        } else {
+                            CpGM2GM(
+                                (__gm__ T*)(reinterpret_cast<uint64_t>(myGmIn_) + cclBufferStride
+                                            + (dst * len + innerDispls) * sizeof(T)),
+                                (__gm__ T*)srcOff, recvCurCount, reduceOp_);
+                        }
+                        PipeBarrier<PIPE_ALL>();
+                    }
+                    curBlocks = M;
+                    ++round;
                 }
             }
         }

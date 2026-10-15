@@ -381,6 +381,15 @@ REGISTER_ALG_ATTRS(
             return topo->level0PcieMix || topo->userRankSize <= BROADCAST_UBX_AIV_MAX_RANK;
         }
         return true;
+    };
+    op.opCustomCheck = [](const OpParam& opParam, const TopoInfoWithNetLayerDetails* topo) -> bool {
+        void* bufAddr = nullptr;
+        uint64_t bufSize = 0;
+        if (HcclGetHcclBuffer(opParam.hcclComm, &bufAddr, &bufSize) != HCCL_SUCCESS) {
+            return false;
+        }
+        u64 dataSize = opParam.DataDes.count * DATATYPE_SIZE_TABLE[opParam.DataDes.dataType];
+        return dataSize <= bufSize * AIV_MAX_CCL_LOOP_NUM;
     };);
 REGISTER_EXEC_V2(
     HcclCMDType::HCCL_CMD_BROADCAST, AivBroadcastSoleMesh, InsV2BroadcastSoleExecutor, TopoMatchOneLevel,

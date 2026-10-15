@@ -32,18 +32,43 @@ public:
 
     __aicore__ inline void Consumer()
     {
-        uint32_t waitRank = 0;
-        uint64_t outerOffset = waitRank * len_ * sizeof(T); // rank_  * len;
-        inputOffset = reinterpret_cast<uint64_t>(myGmIn_) + outerOffset;
-        WaitFlag(rank_, waitRank, curTag_);
-        CpGM2GM((__gm__ T*)output_, (__gm__ T*)inputOffset, len_);
+        // 初值：rank0 数据（myGmIn_ 槽 0）就位后覆盖到 output_
+        WaitFlag(rank_, 0, curTag_);
+        CpGM2GM((__gm__ T*)output_, (__gm__ T*)myGmIn_, len_);
         pipe_barrier(PIPE_ALL);
-        for (waitRank = 1; waitRank < rankSize_; waitRank++) {
-            outerOffset = waitRank * len_ * sizeof(T); // rank_  * len;
-            inputOffset = reinterpret_cast<uint64_t>(myGmIn_) + outerOffset;
-            WaitFlag(rank_, waitRank, curTag_);
-            CpGM2GM((__gm__ T*)output_, (__gm__ T*)inputOffset, len_, reduceOp_);
-            pipe_barrier(PIPE_ALL);
+        // 树形折叠（与 Aicpu 保序 RunLocalReduce 同序）：slot(dst) += slot(src)，dst==0 累加进 output_，dst>=1 累加进
+        // myGmIn_ 槽 零存储 flag 等待：源槽仅当 src >= k 时等待（[1,k) 已在作为目的槽被折入时等待过）；
+        // 目的槽仅首次被折入时等待（新目的槽只出现在第 0/1 轮）
+        uint32_t curBlocks = static_cast<uint32_t>(rankSize_);
+        uint32_t m0 = GetLargestPowerOf2LessThan(curBlocks);
+        uint32_t firstRoundDstNum = curBlocks - m0;
+        uint32_t k = (firstRoundDstNum > (m0 >> 1)) ? firstRoundDstNum : (m0 >> 1);
+        uint32_t round = 0;
+        while (curBlocks > 1) {
+            uint32_t M = GetLargestPowerOf2LessThan(curBlocks);
+            if (M == 0) {
+                break;
+            }
+            for (uint32_t src = M; src < curBlocks; ++src) {
+                uint32_t dst = src % M;
+                if (src >= k) {
+                    WaitFlag(rank_, src, curTag_);
+                }
+                if (round == 0 || (round == 1 && dst >= firstRoundDstNum)) {
+                    WaitFlag(rank_, dst, curTag_);
+                }
+                uint64_t srcOff = reinterpret_cast<uint64_t>(myGmIn_) + src * len_ * sizeof(T);
+                if (dst == 0) {
+                    CpGM2GM((__gm__ T*)output_, (__gm__ T*)srcOff, len_, reduceOp_);
+                } else {
+                    CpGM2GM(
+                        (__gm__ T*)(reinterpret_cast<uint64_t>(myGmIn_) + dst * len_ * sizeof(T)), (__gm__ T*)srcOff,
+                        len_, reduceOp_);
+                }
+                pipe_barrier(PIPE_ALL);
+            }
+            curBlocks = M;
+            ++round;
         }
     }
 
@@ -111,7 +136,6 @@ public:
     uint32_t coreNumPerStage;
     uint32_t targetRank;
     GM_ADDR peerMemThisCore;
-    uint64_t inputOffset;
     uint64_t outputOffset;
     uint64_t curCount;
     uint64_t dataBufferSize;

@@ -434,7 +434,7 @@ REGISTER_ALG_ATTRS(
         return !topo->level2UbRtp && !topo->topLevelUboe;
     };
 
-    op.isSupportProd = false; op.unsupportedDataTypes = UNSUPPORTED_UINT64_FP64;
+    op.isSupportProd = false; op.isSupportFloatOrderPreserved = true; op.unsupportedDataTypes = UNSUPPORTED_UINT64_FP64;
     op.opCustomCheck = [](const OpParam& opParam, const TopoInfoWithNetLayerDetails* topo) -> bool {
         u64 totalSize = opParam.DataDes.count * DATATYPE_SIZE_TABLE[opParam.DataDes.dataType] * topo->userRankSize;
         void* bufAddr = nullptr;
