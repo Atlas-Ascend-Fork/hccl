@@ -65,7 +65,7 @@ run日志和debug日志对应：
 
 结合对端debug日志，按照以下流程逐步定位：
 
-![link_create_debug_method](figures/link_create_debug_method.png)
+![debug_thinking](figures/debug_thinking.png)
 
 #### 排查点1：对端没有任何异常日志
 

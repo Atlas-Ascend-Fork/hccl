@@ -45,7 +45,7 @@ run/plog/plog-2111666_20251024111652405.log:[INFO] HCCL(2111666,all_reduce_test)
 
 检查通信域内所有rank的debug日志，所有rank都报通信算子执行超时为全量超时，仅部分rank报通信算子超时时为非全量超时。超时问题定位思路如下图所示：
 
-![op_execute_timeout_debug](figures/op_execute_timeout_debug.png)
+![notify_wait_timeout_debug](figures/notify_wait_timeout_debug.png)
 
 #### 非全量超时
 
