@@ -38,8 +38,8 @@ static const std::map<std::string, std::string> OP_TYPES
        {"send", "Send"},
        {"recv", "Recv"}};
 static const std::map<std::string, std::string> EXECUTOR_TYPES
-    = {{"sole", "Sole"},     {"sequence", "Sequence"},           {"parallel", "Parallel"}, {"pipeline", "PipeLine"},
-       {"concur", "Concur"}, {"strictordered", "StrictOrdered"}, {"omnipipe", "OmniPipe"}};
+    = {{"sole", "Sole"},         {"sequence", "Sequence"}, {"parallel", "Parallel"},
+       {"pipeline", "PipeLine"}, {"concur", "Concur"},     {"strictordered", "StrictOrdered"}};
 static const std::map<std::string, std::string> ALGO_TYPES
     = {{"mesh", "Mesh"},
        {"mesh2die", "Mesh2Die"},
@@ -56,7 +56,6 @@ static const std::map<std::string, std::string> ALGO_TYPES
        {"nhrmultijetty", "NHRMultiJetty"},
        {"meshmultijetty", "MeshMultiJetty"},
        {"meshconcurrent", "MeshConcurrent"},
-       {"groupmesh", "GroupMesh"},
        {"pairwise", "Pairwise"}};
 
 // 小写字符串转换（自由函数，供全局使用）
