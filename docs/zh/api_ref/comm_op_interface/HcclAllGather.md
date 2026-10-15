@@ -77,7 +77,7 @@ HcclResult HcclAllGather(void *sendBuf, void *recvBuf, uint64_t sendCount, HcclD
 ## 约束说明
 
 - 所有rank的sendCount、dataType均应相同。
-- 针对Atlas 300I Duo 推理卡，仅支持单Server场景，单Server中最大支持部署16张Atlas 300I Duo 推理卡（即32个NPU）。
+- 针对Atlas 300I Duo推理卡，仅支持单Server场景，单Server中最大支持部署16张Atlas 300I Duo推理卡（即32个NPU）。
 - 多个通信域下的所有通信算子在每个Device上需要保证串行下发，不允许乱序、多线程并发下发，也不支持线程重入。
 - 在同一Device上，同一通信域内的所有通信算子的下发线程需要使用相同的Context。
 

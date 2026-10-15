@@ -26,10 +26,11 @@ This sample demonstrates how to call the `HcclAllReduce()` API to perform an `Al
 
 This sample supports the following products in a single-server N-card configuration (N >= 2):
 
-- Ascend 950PR/Ascend 950DT
-- Atlas A3 training products/Atlas A3 inference products
+- Ascend 950PR&950DT products
+- Atlas A3 products
 - Atlas A2 training products
-- Atlas training products/Atlas inference products
+- Atlas training products
+- Atlas inference products
 
 ### Setting Environment Variables
 
