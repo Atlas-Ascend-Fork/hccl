@@ -37,21 +37,21 @@ export HCCL_ALGO="<ExecutorType>{level0=<algoType>,level1=<algoType>};not(<Execu
     - `level*`：指定的算法层级，例如：level0、level1。
     - `<algoType>`：通信算法的类型，支持如下配置：
 
-      - Mesh（mesh）：全互联mesh算法。
-      - NHR（nhr）：华为自研非均衡层次环算法。
-      - Mesh2Die（mesh2die）：单NPU分布端口跨Die mesh算法。
-      - MeshOneShot（meshoneshot）：OneShot mesh算法。
-      - MeshTwoShot（meshtwoshot）：TwoShot mesh算法。
-      - MeshConcur（meshconcur）：CLOS Z轴绕路。
-      - MeshMultiLink（meshmultilink）：多链路Mesh通信算法，类似Concur。
-      - MeshChunk（meshchunk）：Mesh通信算法，支持chunk。
-      - MeshChunkTwoShot（meshchunktwoshot）：TwoShot mesh算法，支持chunk。
-      - MeshSingleChannel（meshsinglechannel）：单通道Mesh算法。
-      - MeshMultiJetty（meshmultijetty）：多Jetty Mesh通信算法。
-      - MeshConcurrent（meshconcurrent）：多路径并发Mesh通信算法。
-      - NHRMultiLink（nhrmultilink）：多链路NHR通信算法。
-      - NHRAicpuReduce（nhraicpureduce）：INT64/FP64等数据类型对应的NHR算法。
-      - NHRMultiJetty（nhrmultijetty）：多Jetty NHR通信算法。
+      - Mesh（mesh）：全互联算法，每个rank与其余所有rank建立直连并直接收发（一步完成），时延最优；适合节点内直连fullmesh拓扑或者跨节点的小数据量低时延场景。
+      - NHR（nhr）：非均衡层次环算法，按“递归减半收集+倍增分发”在log2(N)步内完成，非2的整数次幂规模下也不引入额外通信量；适合多层拓扑下Server间/超节点间的大数据量场景。
+      - Mesh2Die（mesh2die）：端口跨Die分布的mesh算法，把mesh通信按本端Die分组，两个Die分组并发执行直连收发后汇总结果；适用于fullmesh链路分布在2个Die的拓扑。
+      - MeshOneShot（meshoneshot）：OneShot mesh算法，每个rank把完整输入直接写入其余N-1个对端，再本地归约N份数据；一步完成、时延最优，但流量为(N-1)×全量数据，仅适合AllReduce小数据量场景。
+      - MeshTwoShot（meshtwoshot）：TwoShot mesh算法，把AllReduce拆分为ReduceScatter+AllGather两步（先切N片分发归约、再全收集），通信量约为OneShot的2/N；适合通信数据量较大的场景，适用于AllReduce、Reduce、Broadcast算子。
+      - MeshConcur（meshconcur）：CLOS轴绕路算法，同时合并level0直连mesh链路与level1 CLOS上行链路，按两侧带宽比对每个对端的数据分流，让部分数据“向上绕行”；该算法同时使用fullmesh和CLOS链路。
+      - MeshChunk（meshchunk）：支持chunk的Mesh算法，把数据切成多块（ReduceScatter下为N-1块、(N-1)步）逐步与对端交换，收发与归约融合；适用于fullmesh直连的ReduceScatter。
+      - MeshChunkTwoShot（meshchunktwoshot）：TwoShot版MeshChunk算法，AllReduce走ReduceScatter+AllGather两步，其中ReduceScatter阶段使用mesh chunk。
+      - MeshSingleChannel（meshsinglechannel）：单通道Mesh算法，与默认mesh同算法，但每对rank只建立1条channel、不做多通道数据切分；适合需要降低通道/流同步开销或链路资源受限的AllToAll算子场景。
+      - Pairwise（pairwise）：逐对通信算法，多机多卡场景下，每机（单机多卡）作为一组，每轮按对称配对矩阵配对一个目标组（避免网络一打多），本机各卡与目标组的对端逐对建立channel并发收发。当前仅AllToAll/AllToAllV/AllToAllVC（AICPU）支持，要求level0为MESH_1D、单机8卡、rankSize ≥ 16且为16的倍数。
+      - MeshMultiLink（meshmultilink）：多链路Mesh算法，适用于每对rank有多条链路的拓扑。按本端Die划分链路，数据根据各链路包含的port数量在两个Die的链路上分流并发，适用于端口分布在两个Die上的AllToAll/AllToAllV算子。
+      - NHRMultiLink（nhrmultilink）：多链路NHR算法，每条链路可含多个物理port，每步交换的数据按port数切片到各条链路并发；适用于每对rank有多条链路的拓扑。
+      - MeshMultiJetty（meshmultijetty）：多Jetty Mesh算法，对每个对端建多条channel（每个channel一个jetty），数据按jetty切片在多端口上聚合并发，可用于每对rank有多个物理端口的AllToAll/AllToAllV算子。
+      - NHRMultiJetty（nhrmultijetty）：多Jetty NHR算法，对每个对端建立多条channel（每个channel一个jetty），数据按jetty切片在多端口上聚合并发，适合每对rank有多个物理端口的NHR通信。
+      - NHRAicpuReduce（nhraicpureduce）：先按NHR式log2(N)步减半交换收集数据，再使用AICPU标量归约保证正确性；适用于常规NHR/mesh模板不支持的数据类型（INT64/UINT64/FP64及PROD归约等）的NHR算法变体。
 
     - 若不指定`level`，`<algoType>`默认按照算法层级从低到高匹配。例如{Mesh, NHR}，代表level0使用Mesh算法，level1使用NHR算法。
 
