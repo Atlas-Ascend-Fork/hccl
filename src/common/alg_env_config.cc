@@ -892,8 +892,8 @@ HcclResult ParseOpExpansion()
             g_algEnvConfig.aicpuUnfold = true;
         }
 
-        // A5默认开启aicpu task cache
-        if (EqualTo950(deviceType)) {
+        // A5及后续代际默认开启aicpu task cache
+        if (EqualToOrGreaterThan950(deviceType)) {
             g_algEnvConfig.aicpuCacheEnable = 1;
         }
     } else if (opExpansionModeEnv == "AIV") {

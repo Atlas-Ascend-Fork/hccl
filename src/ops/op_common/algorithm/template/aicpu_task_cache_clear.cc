@@ -99,9 +99,9 @@ HcclResult AicpuTaskCacheCommStateCallback(HcclComm comm, HcclCommStatePhase sta
     (void)args;
     HcclDevType deviceType;
     CHK_RET(HcclGetDeviceType(deviceType));
-    if (!EqualTo950(deviceType)) {
+    if (!EqualToOrGreaterThan950(deviceType)) {
         HCCL_DEBUG(
-            "[%s] deviceType[%u] is not DEV_TYPE_950, skip evict aicpu task cache", __func__,
+            "[%s] deviceType[%u] does not support aicpu task cache, skip evict", __func__,
             static_cast<u32>(deviceType));
         return HCCL_SUCCESS;
     }
