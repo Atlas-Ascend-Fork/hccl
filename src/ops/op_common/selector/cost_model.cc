@@ -20,7 +20,7 @@
 #include "auto_selector_base.h"
 #include "alg_parse.h"
 // tuner 插件查询(HcclTunerIsLoaded)仅 host 侧选路管线(InitModel 等 phase)使用(已在 AICPU_COMPILE 保护内);
-// device 核库(scatter_aicpu_kernel)的 include 路径不含 src/common/tuner, 无保护会 fatal error(2026-09-21 PR#3286 CI
+// device 核库(hccl_aicpu_kernel)的 include 路径不含 src/common/tuner, 无保护会 fatal error(2026-09-21 PR#3286 CI
 // 实证)
 #ifndef AICPU_COMPILE
 #include "tuner_setup.h"

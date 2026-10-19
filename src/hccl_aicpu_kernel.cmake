@@ -8,7 +8,7 @@
 # See LICENSE in the root of the software repository for the full text of the License.
 # -----------------------------------------------------------------------------------------------------------
 
-add_library(scatter_aicpu_kernel SHARED
+add_library(hccl_aicpu_kernel SHARED
     ${CMAKE_CURRENT_SOURCE_DIR}/common/utils.cc
     # ${CMAKE_CURRENT_SOURCE_DIR}/common/adapter_acl.cc
     ${CMAKE_CURRENT_SOURCE_DIR}/common/config_log.cc
@@ -166,7 +166,7 @@ add_library(scatter_aicpu_kernel SHARED
 )
 
 if(NOT HCCL_CANN_COMPAT_850)
-    target_sources(scatter_aicpu_kernel PRIVATE
+    target_sources(hccl_aicpu_kernel PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/ops/send/algorithm/executor/ins_send_dpu_executor.cc
         ${CMAKE_CURRENT_SOURCE_DIR}/ops/recv/algorithm/executor/ins_recv_dpu_executor.cc
         ${CMAKE_CURRENT_SOURCE_DIR}/ops/send/algorithm/template/host_nic/ins_temp_send_host_nic_dpu.cc
@@ -220,11 +220,11 @@ if(NOT HCCL_CANN_COMPAT_850)
     )
 endif()
 
-target_include_directories(scatter_aicpu_kernel PRIVATE
+target_include_directories(hccl_aicpu_kernel PRIVATE
     ${INCLUDE_LIST}
 )
 
-target_compile_options(scatter_aicpu_kernel PRIVATE
+target_compile_options(hccl_aicpu_kernel PRIVATE
     $<$<CONFIG:Debug>:-g>
     $<$<CONFIG:Release>:-O3>
     -fstack-protector-all
@@ -238,37 +238,37 @@ target_compile_options(scatter_aicpu_kernel PRIVATE
     -Wno-unused-value
 )
 
-target_link_options(scatter_aicpu_kernel PRIVATE
+target_link_options(hccl_aicpu_kernel PRIVATE
     -Wl,-z,relro
     -Wl,-z,now
     -Wl,-z,noexecstack
     $<$<CONFIG:Release>:-s>
 )
 
-set(SCATTER_AICPU_KERNEL_EXPORT_MAP
-    "${CMAKE_CURRENT_LIST_DIR}/scatter_aicpu_kernel.map"
+set(HCCL_AICPU_KERNEL_EXPORT_MAP
+    "${CMAKE_CURRENT_LIST_DIR}/hccl_aicpu_kernel.map"
 )
 
-target_link_options(scatter_aicpu_kernel PRIVATE
-    "-Wl,--version-script=${SCATTER_AICPU_KERNEL_EXPORT_MAP}"
+target_link_options(hccl_aicpu_kernel PRIVATE
+    "-Wl,--version-script=${HCCL_AICPU_KERNEL_EXPORT_MAP}"
 )
 
-set_property(TARGET scatter_aicpu_kernel APPEND PROPERTY
-    LINK_DEPENDS "${SCATTER_AICPU_KERNEL_EXPORT_MAP}"
+set_property(TARGET hccl_aicpu_kernel APPEND PROPERTY
+    LINK_DEPENDS "${HCCL_AICPU_KERNEL_EXPORT_MAP}"
 )
 
-target_compile_definitions(scatter_aicpu_kernel PRIVATE
+target_compile_definitions(hccl_aicpu_kernel PRIVATE
     -DAICPU_COMPILE
 )
 
-hccl_apply_cann_compat(scatter_aicpu_kernel)
+hccl_apply_cann_compat(hccl_aicpu_kernel)
 
-target_link_directories(scatter_aicpu_kernel PRIVATE
+target_link_directories(hccl_aicpu_kernel PRIVATE
     ${ASCEND_CANN_PACKAGE_PATH}/devlib/device
 )
 
 if(NOT HCCL_CANN_COMPAT_850)
-    target_link_libraries(scatter_aicpu_kernel PRIVATE
+    target_link_libraries(hccl_aicpu_kernel PRIVATE
         $<BUILD_INTERFACE:intf_pub>
         $<BUILD_INTERFACE:runtime_headers>
         $<BUILD_INTERFACE:mmpa_headers>
@@ -281,11 +281,11 @@ if(NOT HCCL_CANN_COMPAT_850)
         -Wl,--no-as-needed
     )
 else()
-    target_link_libraries(scatter_aicpu_kernel PRIVATE
+    target_link_libraries(hccl_aicpu_kernel PRIVATE
         $<BUILD_INTERFACE:intf_pub>
         -Wl,--no-as-needed
         hccl_kernel_compat
         -Wl,--no-as-needed
     )
 endif()
-add_dependencies(scatter_aicpu_kernel hccl_kernel_compat)
+add_dependencies(hccl_aicpu_kernel hccl_kernel_compat)

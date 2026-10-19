@@ -888,7 +888,7 @@ endif()
 
 - **include 复用 src 内部头**：`RE_INCLUDE_LIST` 直接引用 `src/ops/op_common/...` 等路径，recursive\_executor 与 src 共享同一套 `OpParam`/`AlgResourceRequest`/`AlgResourceCtxSerializable`/`InsCollAlgBase` 类型，天然类型一致，无需包装层。
 - **架构约束合规**：recursive\_executor 只 include src（HCCL 同层）头文件；对 HCOMM 的调用继续通过 `src/common/hcomm_dlsym/` 的符号表 + dlsym（`alg_param.h` 引入的 `hccl_res_dl.h` 等即 dlsym 封装），不引入对 `cann/hcomm` 的编译期硬依赖。
-- **device 侧同源编译**：存在 `scatter_aicpu_kernel` 目标时，把 `RE_CORE_SRC` 注入该 AICPU 内核，保证 Host/Device 两端都有 recursive\_executor 的注册表与执行器。
+- **device 侧同源编译**：存在 `hccl_aicpu_kernel` 目标时，把 `RE_CORE_SRC` 注入该 AICPU 内核，保证 Host/Device 两端都有 recursive\_executor 的注册表与执行器。
 
 #### 3.2 选择期：Selector 的 4 级拓扑分支
 

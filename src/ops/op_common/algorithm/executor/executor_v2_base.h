@@ -148,7 +148,7 @@ protected:
     };
 
     /*
-     * 解析算法属性: AICPU 独立核库(scatter_aicpu_kernel.so)不链接 host-only 的
+     * 解析算法属性: AICPU 独立核库(hccl_aicpu_kernel.so)不链接 host-only 的
      * AlgAttrsRegistry, 返回 nullptr 由调用方走 skip 分支; algName 判空兜底。
      */
     const AlgAttrs* ResolveProbeAlgAttrs(const char* algName) const;

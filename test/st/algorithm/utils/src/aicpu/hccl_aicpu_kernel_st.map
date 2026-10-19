@@ -9,7 +9,7 @@
 # -----------------------------------------------------------------------------------------------------------
 
 /*
- * Symbol isolation rules for the ST-only libscatter_aicpu_kernel.so.
+ * Symbol isolation rules for the ST-only libhccl_aicpu_kernel.so.
  *
  * ST relies on global weak-symbol interposition provided by hccl_stub.cc,
  * so symbols remain globally visible by default.

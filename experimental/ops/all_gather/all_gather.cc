@@ -43,7 +43,7 @@ static HcclAlgorithm MakeAicpuAllGatherSequenceMeshNHRNHRMesh()
 #ifndef AICPU_COMPILE
     AlgAttrsRegistry::ParseAlgName("AicpuAllGatherSequenceMeshNHRNHRMesh", algo.algAttrs);
 #else
-    // AICPU 独立核库(scatter_aicpu_kernel.so)不链接 host-only 的 AlgAttrsRegistry,
+    // AICPU 独立核库(hccl_aicpu_kernel.so)不链接 host-only 的 AlgAttrsRegistry,
     // 直接引用会导致 dlopen 阶段 undefined symbol, 与 REGISTER_ALG_ATTRS 在 AICPU_COMPILE 下置空同理。
     algo.algAttrs.name = "AicpuAllGatherSequenceMeshNHRNHRMesh";
 #endif

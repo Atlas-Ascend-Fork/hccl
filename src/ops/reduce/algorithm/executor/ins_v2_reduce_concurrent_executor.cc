@@ -54,7 +54,7 @@ InsV2ReduceConcurrentExecutor<AlgTopoMatch, InsAlgTemplate0, InsAlgTemplate1>::C
 #ifndef AICPU_COMPILE
     const AlgAttrs* attrs = AlgAttrsRegistry::Instance().Get(std::string(algName));
 #else
-    // AICPU 独立核库(scatter_aicpu_kernel.so)不链接 host-only 的 AlgAttrsRegistry,
+    // AICPU 独立核库(hccl_aicpu_kernel.so)不链接 host-only 的 AlgAttrsRegistry,
     // device 侧亦无 costmodel 调用链, 置空走 skip 分支
     const AlgAttrs* attrs = nullptr;
 #endif
@@ -141,7 +141,7 @@ AlgNetMeta InsV2ReduceConcurrentExecutor<AlgTopoMatch, InsAlgTemplate0, InsAlgTe
 #ifndef AICPU_COMPILE
     const AlgAttrs* attrs = AlgAttrsRegistry::Instance().Get(std::string(algName));
 #else
-    // AICPU 独立核库(scatter_aicpu_kernel.so)不链接 host-only 的 AlgAttrsRegistry,
+    // AICPU 独立核库(hccl_aicpu_kernel.so)不链接 host-only 的 AlgAttrsRegistry,
     // device 侧亦无 costmodel 调用链, 置空走 skip 分支
     const AlgAttrs* attrs = nullptr;
 #endif

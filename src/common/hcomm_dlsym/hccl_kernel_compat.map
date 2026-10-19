@@ -21,14 +21,14 @@
     global:
         /*
          * Source: hcomm_device_dlsym.cc
-         * Consumer: scatter_aicpu_kernel.so device compatibility
+         * Consumer: hccl_aicpu_kernel.so device compatibility
          * initialization in common/device_compat.cc.
          */
         HcommDeviceDlInit;
 
         /*
          * Source: hcomm_primitives_dl.cc
-         * Consumer: scatter_aicpu_kernel.so algorithm templates,
+         * Consumer: hccl_aicpu_kernel.so algorithm templates,
          * AICPU kernel launch, task cache and DPU data-transfer paths.
          *
          * Weak Hcomm* definitions intentionally remain dynamically
@@ -36,7 +36,7 @@
          * override them at runtime.
          *
          * HcommIsSupport* functions expose the runtime capability
-         * detection results to scatter_aicpu_kernel.so.
+         * detection results to hccl_aicpu_kernel.so.
          */
         HcclChannelNotifyWaitDefault;
         HcclChannelNotifyWaitOnThreadDefault;
@@ -121,7 +121,7 @@
 
         /*
          * Source: hcomm_diag_dl.cc
-         * Consumer: scatter_aicpu_kernel.so AICPU kernel-launch
+         * Consumer: hccl_aicpu_kernel.so AICPU kernel-launch
          * diagnostics and task-exception reporting paths.
          */
         HcommIsSupportHcommRegOpInfo;
@@ -129,7 +129,7 @@
 
         /*
          * Source: hccl_device_comm_dl.cc
-         * Consumer: scatter_aicpu_kernel.so communication-status checks
+         * Consumer: hccl_aicpu_kernel.so communication-status checks
          * and send/receive executor group-status checks.
          *
          * HcclGroupStatusGet is a weak fallback definition directly

@@ -271,7 +271,7 @@ add_definitions(-DORION_MODE)
 if(PRODUCT_SIDE STREQUAL "host")
     include(hccl.cmake)
 else()
-    include(scatter_aicpu_kernel.cmake)
+    include(hccl_aicpu_kernel.cmake)
 endif()
 
 add_subdirectory(common)

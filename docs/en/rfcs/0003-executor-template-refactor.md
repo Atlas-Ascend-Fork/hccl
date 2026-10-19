@@ -889,7 +889,7 @@ Key points:
 
 - **include reuses src internal headers**: `RE_INCLUDE_LIST` directly references paths like `src/ops/op_common/...`; recursive_executor and src share the same set of `OpParam`/`AlgResourceRequest`/`AlgResourceCtxSerializable`/`InsCollAlgBase` types, naturally type-consistent, with no wrapper layer needed.
 - **Architecture constraint compliance**: recursive_executor only includes src (HCCL same-layer) headers; calls to HCOMM continue through `src/common/hcomm_dlsym/` symbol table + dlsym (`hccl_res_dl.h` etc. introduced by `alg_param.h` are dlsym wrappers), introducing no compile-time hard dependency on `cann/hcomm`.
-- **Device-side same-source compilation**: When the `scatter_aicpu_kernel` target exists, `RE_CORE_SRC` is injected into that AICPU kernel, ensuring both Host/Device ends have recursive_executor's registry and executor.
+- **Device-side same-source compilation**: When the `hccl_aicpu_kernel` target exists, `RE_CORE_SRC` is injected into that AICPU kernel, ensuring both Host/Device ends have recursive_executor's registry and executor.
 
 #### 3.2 Selection Time: Selector's 4-Level Topology Branch
 

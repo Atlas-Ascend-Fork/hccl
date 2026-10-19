@@ -41,7 +41,7 @@ void RptEnvErr(std::string error_code, std::vector<std::string> key, std::vector
 }
 
 // 设备侧（aicpu）环境无liberror_manager且加载链带-z now，强引用会使
-// libscatter_aicpu_kernel.so加载失败（HcclLaunchAicpuKernel不可解析），故设备侧整体裁剪
+// libhccl_aicpu_kernel.so加载失败（HcclLaunchAicpuKernel不可解析），故设备侧整体裁剪
 #ifndef AICPU_COMPILE
 ErrContext haclrtGetErrMgrContext(void)
 {

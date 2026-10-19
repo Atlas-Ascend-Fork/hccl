@@ -39,10 +39,10 @@ set(EXPERIMENTAL_INCLUDE_LIST
     ${CMAKE_CURRENT_SOURCE_DIR}/reduce_scatter_v/birs/template/
 )
 
-if(TARGET scatter_aicpu_kernel)
-    target_include_directories(scatter_aicpu_kernel PRIVATE ${EXPERIMENTAL_INCLUDE_LIST})
-    target_compile_definitions(scatter_aicpu_kernel PRIVATE ENABLE_EXPERIMENTAL)
-    target_sources(scatter_aicpu_kernel PRIVATE
+if(TARGET hccl_aicpu_kernel)
+    target_include_directories(hccl_aicpu_kernel PRIVATE ${EXPERIMENTAL_INCLUDE_LIST})
+    target_compile_definitions(hccl_aicpu_kernel PRIVATE ENABLE_EXPERIMENTAL)
+    target_sources(hccl_aicpu_kernel PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/op_common/template/alg_template_base_experimental.cc
         ${CMAKE_CURRENT_SOURCE_DIR}/op_common/topo/topo_experimental.cc
         ${CMAKE_CURRENT_SOURCE_DIR}/op_common/coll_executor_base_experimental.cc
@@ -59,7 +59,7 @@ if(TARGET scatter_aicpu_kernel)
         ${CMAKE_CURRENT_SOURCE_DIR}/reduce_scatter_v/birs/template/reduce_scatter_v_birs_inter.cc
     )
 endif()
-# host 构建存在 hccl 目标; device 构建无 hccl 目标(仅 scatter_aicpu_kernel),此处需守护以兼容 device 复用本目录
+# host 构建存在 hccl 目标; device 构建无 hccl 目标(仅 hccl_aicpu_kernel),此处需守护以兼容 device 复用本目录
 if(TARGET hccl)
     target_include_directories(hccl PRIVATE ${EXPERIMENTAL_INCLUDE_LIST})
     target_compile_definitions(hccl PRIVATE ENABLE_EXPERIMENTAL)

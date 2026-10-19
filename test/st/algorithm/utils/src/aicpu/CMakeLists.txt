@@ -155,7 +155,7 @@ list(APPEND INCLUDE_LIST
     ${ASCEND_HOME_PATH}/pkg_inc/trace/
 )
 
-add_library(scatter_aicpu_kernel SHARED
+add_library(hccl_aicpu_kernel SHARED
     ${HCCL_DEV_BASE}/src/common/utils.cc
     # ${HCCL_DEV_BASE}/src/common/adapter_acl.cc
     ${HCCL_DEV_BASE}/src/common/config_log.cc
@@ -306,19 +306,19 @@ add_library(scatter_aicpu_kernel SHARED
     ${HCCL_DEV_BASE}/src/ops/reduce/algorithm/template/aicpu/reduce_aicpu_reduce_nhr.cc
 )
 
-set(ST_SCATTER_AICPU_EXPORT_MAP
-    "${CMAKE_CURRENT_LIST_DIR}/scatter_aicpu_kernel_st.map"
+set(ST_HCCL_AICPU_EXPORT_MAP
+    "${CMAKE_CURRENT_LIST_DIR}/hccl_aicpu_kernel_st.map"
 )
 
-target_link_options(scatter_aicpu_kernel PRIVATE
-    "-Wl,--version-script=${ST_SCATTER_AICPU_EXPORT_MAP}"
+target_link_options(hccl_aicpu_kernel PRIVATE
+    "-Wl,--version-script=${ST_HCCL_AICPU_EXPORT_MAP}"
 )
 
-set_property(TARGET scatter_aicpu_kernel APPEND PROPERTY
-    LINK_DEPENDS "${ST_SCATTER_AICPU_EXPORT_MAP}"
+set_property(TARGET hccl_aicpu_kernel APPEND PROPERTY
+    LINK_DEPENDS "${ST_HCCL_AICPU_EXPORT_MAP}"
 )
 
-target_sources(scatter_aicpu_kernel PRIVATE
+target_sources(hccl_aicpu_kernel PRIVATE
     # ST-local HCCL configuration stub.
     ${CMAKE_CURRENT_LIST_DIR}/hccl_algo_stub.cc
 
@@ -348,7 +348,7 @@ target_sources(scatter_aicpu_kernel PRIVATE
 )
 
 if(_ST_CANN_VERSION_NUM GREATER_EQUAL 90000000)
-    target_sources(scatter_aicpu_kernel PRIVATE
+    target_sources(hccl_aicpu_kernel PRIVATE
         # AicpuBroadcastSequenceMeshConcurNHRNHR
         # DpuBroadcastSequenceMeshNHR
         ${HCCL_DEV_BASE}/src/ops/broadcast/algorithm/executor/ins_v2_broadcast_sequence_executor.cc
@@ -369,35 +369,35 @@ if(_ST_CANN_VERSION_NUM GREATER_EQUAL 90000000)
     )
 endif()
 
-target_include_directories(scatter_aicpu_kernel PRIVATE
+target_include_directories(hccl_aicpu_kernel PRIVATE
     ${INCLUDE_LIST}
 )
 
-target_compile_options(scatter_aicpu_kernel PRIVATE
+target_compile_options(hccl_aicpu_kernel PRIVATE
     -g
     -O0
     -fstack-protector-all
     -D_GLIBCXX_USE_CXX11_ABI=0
 )
 
-target_link_options(scatter_aicpu_kernel PRIVATE
+target_link_options(hccl_aicpu_kernel PRIVATE
     -Wl,-z,relro
     -Wl,-z,now
     -Wl,-z,noexecstack
     $<$<CONFIG:Release>:-s>
 )
 
-target_compile_definitions(scatter_aicpu_kernel PRIVATE
+target_compile_definitions(hccl_aicpu_kernel PRIVATE
     -DAICPU_COMPILE
 )
 
-target_link_libraries(scatter_aicpu_kernel PRIVATE
+target_link_libraries(hccl_aicpu_kernel PRIVATE
     -Wl,--no-as-needed
     $<BUILD_INTERFACE:intf_llt_pub>
 )
 
 # 实验算法(ReduceScatter/ReduceScatterV BIRS、recursive_executor 等):
-# 复用 experimental/ops/CMakeLists.txt 中 if(TARGET scatter_aicpu_kernel) 的注入逻辑
+# 复用 experimental/ops/CMakeLists.txt 中 if(TARGET hccl_aicpu_kernel) 的注入逻辑
 # (sources/includes/ENABLE_EXPERIMENTAL 定义), 与 host/device 构建保持单一来源;
 # ST 构建无 hccl 目标, 其 host 侧源码注入(if(TARGET hccl))自动跳过
 if(NOT DEFINED ASCEND_CANN_PACKAGE_PATH OR "${ASCEND_CANN_PACKAGE_PATH}" STREQUAL "")

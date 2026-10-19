@@ -210,7 +210,7 @@ function build_device(){
     fi
 
     log "Info: build_device" 
-    TARGET_LIST="scatter_aicpu_kernel" 
+    TARGET_LIST="hccl_aicpu_kernel" 
     echo "TARGET_LIST=${TARGET_LIST}" 
     PKG_TARGET_LIST="generate_device_aicpu_package" 
     echo "PKG_TARGET_LIST=${PKG_TARGET_LIST}" 
@@ -832,7 +832,7 @@ while [[ $# -gt 0 ]]; do
         TEST_TASK_NAME="executor_pipeline_hccl_test"
         shift
         ;;
-    --aicpu)  # 新增选项，用于只编译 scatter_aicpu_kernel
+    --aicpu)  # 新增选项，用于只编译 hccl_aicpu_kernel
         ENABLE_BUILD_DEVICE="ON"
         shift
         ;;

@@ -1079,7 +1079,7 @@ HcclResult HcclAicpuKernelEntranceLaunch(
         HcclKernelFuncInfo funcInfo;
         CHK_SAFETY_FUNC_RET(memset_s(&funcInfo, sizeof(HcclKernelFuncInfo), 0, sizeof(HcclKernelFuncInfo)));
 
-        int soRet = sprintf_s(funcInfo.kernelSoName, sizeof(funcInfo.kernelSoName), "libscatter_aicpu_kernel.so");
+        int soRet = sprintf_s(funcInfo.kernelSoName, sizeof(funcInfo.kernelSoName), "libhccl_aicpu_kernel.so");
         CHK_PRT_RET(soRet <= 0, HCCL_ERROR("[%s] failed to fill kernelSoName", __func__), HCCL_E_INTERNAL);
 
         int funcRet = sprintf_s(funcInfo.kernelFuncName, sizeof(funcInfo.kernelFuncName), "HcclLaunchP2pAicpuKernel");

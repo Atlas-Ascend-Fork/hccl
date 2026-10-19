@@ -49,7 +49,7 @@ HcclResult AicpuCacheEvictKernelLaunch(HcclComm comm)
     aclrtFuncHandle funcHandle;
     aclrtArgsHandle argsHandle;
 
-    // 共用libscatter_aicpu_kernel.so, 如果没有加载过，当前没有aicpu算子，直接返回即可。
+    // 共用libhccl_aicpu_kernel.so, 如果没有加载过，当前没有aicpu算子，直接返回即可。
     const aclrtBinHandle handle = g_binKernelHandle.load(std::memory_order_acquire);
     if (handle == nullptr) {
         HCCL_INFO("[%s] aicpu file not loaded, ignore", __func__);

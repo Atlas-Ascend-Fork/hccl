@@ -70,11 +70,11 @@ set(RE_INCLUDE_LIST
     ${ASCEND_CANN_PACKAGE_PATH}/include/mmpa
 )
 
-# device 构建分支：注入核心源码到 scatter_aicpu_kernel
-if(TARGET scatter_aicpu_kernel AND NOT TARGET hccl)
-    target_include_directories(scatter_aicpu_kernel PRIVATE ${RE_INCLUDE_LIST})
-    target_compile_definitions(scatter_aicpu_kernel PRIVATE ENABLE_EXPERIMENTAL)
-    target_sources(scatter_aicpu_kernel PRIVATE ${RE_CORE_SRC})
+# device 构建分支：注入核心源码到 hccl_aicpu_kernel
+if(TARGET hccl_aicpu_kernel AND NOT TARGET hccl)
+    target_include_directories(hccl_aicpu_kernel PRIVATE ${RE_INCLUDE_LIST})
+    target_compile_definitions(hccl_aicpu_kernel PRIVATE ENABLE_EXPERIMENTAL)
+    target_sources(hccl_aicpu_kernel PRIVATE ${RE_CORE_SRC})
     return()
 endif()
 

@@ -28,7 +28,7 @@ const AlgAttrs* InsCollAlgBase::ResolveProbeAlgAttrs(const char* algName) const
 #ifndef AICPU_COMPILE
     return AlgAttrsRegistry::Instance().Get(std::string(algName != nullptr ? algName : ""));
 #else
-    // AICPU 独立核库(scatter_aicpu_kernel.so)不链接 host-only 的 AlgAttrsRegistry,
+    // AICPU 独立核库(hccl_aicpu_kernel.so)不链接 host-only 的 AlgAttrsRegistry,
     // device 侧亦无 costmodel 调用链, 置空走 skip 分支
     (void)algName;
     return nullptr;
