@@ -2,21 +2,6 @@
 
 下面分别给出Server间不同型号的产品支持的算法，以及对应算法下支持的通信算子介绍，表格中未列出的则代表不支持。
 
-<!-- npu="950" id2 -->
-## Ascend 950PR&950DT系列产品
-
-- **NHR算法**
-
-  | 集合通信算子 | 数据类型 | 网络运行模式 | 通信算子展开模式 |
-  | --- | --- | --- | --- |
-  | ReduceScatter | int8、int16、int32、float16、float32、bfp16 | - 单算子模式<br>  - 图模式（Ascend IR） | AI_CPU/CCU_SCHED |
-  | AllGather | int8、int16、int32、int64、uint8、uint16、uint32、uint64、float16、float32、float64、bfp16、fp8-e5m2、fp8-e4m3、hif8、fp8-e8m0 | - 单算子模式<br>  - 图模式（Ascend IR） | AI_CPU/CCU_SCHED |
-  | AllReduce | int8、int16、int32、float16、float32、bfp16 | - 单算子模式<br>  - 图模式（Ascend IR） | AI_CPU/CCU_SCHED |
-  | Broadcast | int8、int16、int32、int64、uint8、uint16、uint32、uint64、float16、float32、float64、bfp16、fp8-e5m2、fp8-e4m3、hif8、fp8-e8m0 | - 单算子模式<br>  - 图模式（Ascend IR） | AI_CPU/CCU_SCHED |
-  | Reduce | int8、int16、int32、float16、float32、bfp16 | - 单算子模式<br>  - 图模式（Ascend IR） | AI_CPU/CCU_SCHED |
-  | Scatter | int8、int16、int32、int64、uint8、uint16、uint32、uint64、float16、float32、float64、bfp16、fp8-e5m2、fp8-e4m3、hif8、fp8-e8m0 | - 单算子模式 | AI_CPU/CCU_SCHED |
-<!-- end id2 -->
-
 <!-- npu="A3" id3 -->
 ## Atlas A3系列产品
 

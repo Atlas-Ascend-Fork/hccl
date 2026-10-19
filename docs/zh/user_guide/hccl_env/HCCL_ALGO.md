@@ -8,7 +8,6 @@
 >
 > - HCCL提供自适应算法选择功能，默认会根据产品形态、数据量和Server个数选择合适的算法，一般情况下用户无需手工指定。若通过此环境变量指定了Server间或超节点间通信算法，则自适应算法选择功能不再生效。
 > - 在某些通信算子中，当使用特定类型的AI处理器且数据量较小时，通信算法会由HCCL自适应选择，不受此环境变量的控制。
-> - 本节所列出的算法为HCCL支持配置的全量通信算法，不同产品下支持的Server间通信算法与超节点间通信算法可参见[Server间通信算法支持度列表](inter_server_algo_support.md)与[超节点间通信算法支持度列表](inter_superpod_algo_support.md)。
 
 <!-- npu="950" id2 -->
 ## 配置说明（Ascend 950PR&950DT系列产品）
@@ -144,13 +143,13 @@ export HCCL_ALGO="level0:NA;level1:<algo>;level2:<algo>"
   - NB：非均匀的数据块通信算法（Nonuniform Bruck），通信步数少（对数复杂度），时延相对较低。适合通信域内超节点个数较多的场景。
   - pipeline：流水线并行算法，可并发使用超节点内与超节点间的链路，适合通信数据量较大且通信域内每个超节点包含多卡的场景。
 
-  超节点间每种通信算法支持的通信算子、数据类型、网络运行模式等说明可参见[超节点间通信算法支持度列表](inter_superpod_algo_support.md)。
-
   不设置level2时，当通信域内超节点个数小于8且不是2的整数次幂时，采用ring算法；其他场景采用H-D_R算法。
 
   level2配置当前仅适用于Atlas A3系列产品，仅支持通信算子展开模式为AI_CPU的场景。
 
   通信算子展开模式可通过环境变量[HCCL_OP_EXPANSION_MODE](HCCL_OP_EXPANSION_MODE.md)配置。
+
+  不同产品下支持的Server间通信算法与超节点间通信算法可参见[Server间通信算法支持度列表](inter_server_algo_support.md)与[超节点间通信算法支持度列表](inter_superpod_algo_support.md)。
 
 配置示例：
 
