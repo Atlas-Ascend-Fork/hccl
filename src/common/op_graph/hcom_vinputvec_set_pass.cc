@@ -187,7 +187,8 @@ HcclResult SetReduceScatterVVInputVec(ge::GNode& node)
     }
     bool hasSendDispls = IsInputConst(node, SEND_DISPLS_INPUT_INDEX);
     if (hasSendDispls) {
-        hasSendDispls = (node.GetInputConstData(SEND_DISPLS_INPUT_INDEX, sendDisplsTensor) == ge::GRAPH_SUCCESS);
+        hasSendDispls = (node.GetInputConstData(SEND_DISPLS_INPUT_INDEX, sendDisplsTensor) == ge::GRAPH_SUCCESS)
+                        && (sendDisplsTensor.GetSize() != 0);
     }
     std::vector<int64_t> recvCount;
     std::vector<int64_t> sendCounts;
@@ -229,7 +230,8 @@ HcclResult SetAllGatherVVInputVec(ge::GNode& node)
     }
     bool hasRecvDispls = IsInputConst(node, AGV_RECV_DISPLS_INPUT_INDEX);
     if (hasRecvDispls) {
-        hasRecvDispls = (node.GetInputConstData(AGV_RECV_DISPLS_INPUT_INDEX, recvDispsTensor) == ge::GRAPH_SUCCESS);
+        hasRecvDispls = (node.GetInputConstData(AGV_RECV_DISPLS_INPUT_INDEX, recvDispsTensor) == ge::GRAPH_SUCCESS)
+                        && (recvDispsTensor.GetSize() != 0);
     }
     std::vector<int64_t> sendCount;
     std::vector<int64_t> recvCounts;

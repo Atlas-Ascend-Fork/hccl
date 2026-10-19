@@ -56,11 +56,12 @@ static ge::graphStatus HcomAllGatherVInferShapeV2(gert::InferShapeContext* conte
         return GRAPH_FAILED;
     }
 
-    // 计算recvDisp：recv_displacements为可选输入(index 3)，有const数据时使用真实值，
-    // 否则按recvCounts连续累加（与HcomVInputVecSetPass中CalcDisplacements的行为一致）
+    // 计算recvDisp：recv_displacements为可选输入(index 3)，有非空const数据时使用真实值，
+    // 未传入或为空列表（size为0）时按recvCounts连续累加
     const gert::Tensor* recvDisplsTensor = context->GetInputTensor(3);
     vector<int64_t> recvDisp;
-    if ((recvDisplsTensor != nullptr) && HcomIsConstData(opName, recvDisplsTensor)) {
+    if ((recvDisplsTensor != nullptr) && HcomIsConstData(opName, recvDisplsTensor)
+        && recvDisplsTensor->GetShapeSize() != 0) {
         HcomGetConstValue(opName, recvDisplsTensor, recvDisplsTensor->GetDataType(), recvDisp);
         if (recvDisp.size() != recvCounts.size()) {
             CUBE_INNER_ERR_REPORT(
