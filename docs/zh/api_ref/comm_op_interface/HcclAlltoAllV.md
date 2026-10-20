@@ -78,13 +78,13 @@ HcclResult HcclAlltoAllV(const void *sendBuf, const void *sendCounts, const void
 ## 约束说明
 
 - AlltoAllV操作的性能与NPU之间共享数据的缓存区大小有关，当通信数据量超过缓存区大小时性能将出现明显下降。若业务中AlltoAllV通信数据量较大，建议通过配置环境变量[HCCL_BUFFSIZE](../../user_guide/hccl_env/HCCL_BUFFSIZE.md)适当增大缓存区大小以提升通信性能。
-<!-- npu="910" id13 -->
+<!-- npu="910" id7 -->
 - 针对Atlas训练系列产品，AlltoAllV的通信域需要满足如下约束：
 
   集群组网下，单Server 1p、2p通信域要在同一个cluster内（Server内0-3卡和4-7卡各为一个cluster），单Server 4p、8p和多Server通信域中rank要以cluster为基本单位，并且Server间cluster选取要一致。
   
 - 针对Atlas训练系列产品，如果是单Server场景，要求网卡的状态是“up”，否则此接口会执行失败。
-<!-- end id13 -->
+<!-- end id7 -->
 <!-- npu="310p" id14 -->
 - 针对Atlas 300I Duo推理卡，仅支持单Server场景，单Server中最大支持部署2张Atlas 300I Duo推理卡（即4个NPU）。
 <!-- end id14 -->

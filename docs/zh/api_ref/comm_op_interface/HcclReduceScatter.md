@@ -90,9 +90,9 @@ HcclResult HcclReduceScatter(void *sendBuf, void *recvBuf, uint64_t recvCount, H
 ## 约束说明
 
 - 所有rank的recvCount、dataType、op均应相同。
-<!-- npu="310p" id12 -->
+<!-- npu="310p" id8 -->
 - 针对Atlas 300I Duo推理卡，仅支持单Server场景，单Server中最大支持部署16张Atlas 300I Duo推理卡（即32个NPU）。
-<!-- end id12 -->
+<!-- end id8 -->
 - 算子的输入输出地址（sendBuf与recvBuf）根据不同的数据类型，应满足如下对齐要求：
 
   - int8按照1Byte地址对齐。
