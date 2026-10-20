@@ -299,6 +299,32 @@ SelectorEngine::Run(HcclComm comm, OpParam& param, TopoInfoWithNetLayerDetails* 
     return HCCL_SUCCESS;
 }
 
+// 将u32列表拼接为"a,b,c"形式, 用于config日志
+static std::string JoinUintList(const std::vector<u32>& list)
+{
+    std::string result;
+    for (size_t i = 0; i < list.size(); ++i) {
+        if (i > 0) {
+            result += ",";
+        }
+        result += std::to_string(list[i]);
+    }
+    return result;
+}
+
+// 将每层各网络实例的rank数拼接为"8,8;64"形式(层间分号分隔), 用于config日志
+static std::string JoinInstSizeListOfLayer(const std::vector<std::vector<u32>>& instSizeListOfLayer)
+{
+    std::string result;
+    for (size_t i = 0; i < instSizeListOfLayer.size(); ++i) {
+        if (i > 0) {
+            result += ";";
+        }
+        result += JoinUintList(instSizeListOfLayer[i]);
+    }
+    return result;
+}
+
 void SelectorEngine::LogSelectedAlgo(
     const OpParam& param, const TopoInfoWithNetLayerDetails* topoInfo, const std::string& algName)
 {
@@ -312,22 +338,42 @@ void SelectorEngine::LogSelectedAlgo(
             ENGINE_STR_MAP.at(param.opExecuteConfig), param.commName, algName.c_str());
     }
 
+    // rank graph层级/网络实例划分信息; 全部取自序列化字段, topoInfo经ctx缓存(DeSerialize)恢复时同样有效
+    std::string netLayersStr = JoinUintList(topoInfo->netLayerDetails.netLayers);
+    std::string netInstNumOfLayerStr = JoinUintList(topoInfo->netLayerDetails.netInstNumOfLayer);
+    std::string localNetInsSizeOfLayerStr = JoinUintList(topoInfo->netLayerDetails.localNetInsSizeOfLayer);
+    // 每层各topoInstance的拓扑类型(按层索引, 与netLayerDetails同维); ranksInTopo为全rank列表、
+    // rankNumForTopoType为其派生汇总, 信息冗余且过长, 不打印
+    std::vector<std::vector<u32>> topoInstTypeOfLayer;
+    topoInstTypeOfLayer.reserve(topoInfo->topoInstDetailsOfLayer.size());
+    for (const auto& details : topoInfo->topoInstDetailsOfLayer) {
+        std::vector<u32> typeList;
+        typeList.reserve(details.typeOfTopo.size());
+        for (auto type : details.typeOfTopo) {
+            typeList.push_back(static_cast<u32>(type));
+        }
+        topoInstTypeOfLayer.push_back(std::move(typeList));
+    }
+    std::string topoInstTypeOfLayerStr = JoinInstSizeListOfLayer(topoInstTypeOfLayer);
+
     HCCL_CONFIG_INFO(
         HCCL_ALG,
         "op[%s] algName[%s] engine[%s] executor[%s] templates[%s] "
         "opMode[%d] deterministic[%u] isCapture[%d] "
         "dataSize[%llu] dataType[%s] reduceType[%s] root[%u] "
-        "userRank[%u] rankSize[%u] serverNum[%u] superPodNum[%u] "
+        "userRank[%u] rankSize[%u] "
         "topoLevelNums[%u] level0Topo[%d] level0MeshType[%d] level0PcieMix[%d] "
-        "deviceType[%d] commName[%s] enableDetour[%d] symMem[%d]",
+        "deviceType[%d] commName[%s] enableDetour[%d] symMem[%d] "
+        "netLayers[%s] netInstNumOfLayer[%s] localNetInsSizeOfLayer[%s] topoInstTypeOfLayer[%s]",
         HcclCMDTypeToString(param.opType).c_str(), algName.c_str(), ENGINE_STR_MAP.at(param.opExecuteConfig),
         QueryExecutorName(algName).c_str(), QueryTemplateInfo(algName).c_str(), static_cast<int>(param.opMode),
         GetExternalInputHcclDeterministic(), static_cast<int>(param.isCapture), param.inputSize,
         GetDataTypeEnumStr(param.DataDes.dataType).c_str(), GetReduceOpEnumStr(param.reduceType).c_str(), param.root,
-        topoInfo->userRank, topoInfo->userRankSize, topoInfo->serverNum, topoInfo->superPodNum, topoInfo->topoLevelNums,
-        static_cast<int>(topoInfo->level0Topo), static_cast<int>(topoInfo->level0MeshType),
-        static_cast<int>(topoInfo->level0PcieMix), static_cast<int>(param.deviceType), param.commName,
-        static_cast<int>(param.enableDetour), static_cast<int>(param.supportSymmetricMemory));
+        topoInfo->userRank, topoInfo->userRankSize, topoInfo->topoLevelNums, static_cast<int>(topoInfo->level0Topo),
+        static_cast<int>(topoInfo->level0MeshType), static_cast<int>(topoInfo->level0PcieMix),
+        static_cast<int>(param.deviceType), param.commName, static_cast<int>(param.enableDetour),
+        static_cast<int>(param.supportSymmetricMemory), netLayersStr.c_str(), netInstNumOfLayerStr.c_str(),
+        localNetInsSizeOfLayerStr.c_str(), topoInstTypeOfLayerStr.c_str());
 }
 
 // 按名查找注册的算法条目
