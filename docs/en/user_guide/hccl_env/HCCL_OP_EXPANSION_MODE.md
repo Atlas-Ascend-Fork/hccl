@@ -34,13 +34,15 @@ Configures the expansion mode of communication operators.
     - This config supports only symmetric networking and inference features.
     - This config does not support parallel communicators (because multiple communicators cannot be simultaneously configured in `AIV` mode). Otherwise, unpredictable behavior may occur. You can set the operator expansion mode of a specific communicator to `AIV` through `HcclCommConfig` when initializing a communicator with specific configurations.
     - This config supports only the Broadcast, Reduce, AllReduce, ReduceScatter, Scatter, AllGather, AlltoAll, AlltoAllV, AlltoAllVC, Send, and Recv operators.
-      - For Reduce, AllReduce, and ReduceScatter operators, the supported data types are int8, int16, int32, int64, float16, float32, and bfp16.
+      - For Reduce, AllReduce, and ReduceScatter operators, the supported data types are int8, int16, int32, int64, float16, float32, and bfp16. Only sum, max, and min reduction operations are supported; prod is not supported.
 
     - Under this config, core control is supported. Set the number of Vector Cores based on the concurrency of computation operators and communication operators in actual use.
 
   - **CCU_MS**: Communication operators are expanded on the CCU, using CcuBuffer for memory read/write. Ascend 950PR does not support this config.
 
     In this mode, when the CCU communicates with multiple remote ends, CcuBuffer serves as a relay to save memory read/write bandwidth. CcuBuffer features a small size but high speed.
+
+    This mode does not support in-place operations.
 
     When CCU resources are insufficient, the system automatically switches to AI_CPU mode.
     This config supports only the Broadcast, Reduce, AllReduce, ReduceScatter, and AllGather operators, and only in single-node use cases.
@@ -49,6 +51,8 @@ Configures the expansion mode of communication operators.
   - **CCU_SCHED**: Communication operators are expanded on the CCU with scheduling enabled.
 
     This config uses the CCU as a scheduler to dispatch UB WQE tasks to the UB engine. CcuBuffer is not used, and data is transferred directly between two ranks from on-chip memory to on-chip memory.
+
+    This mode does not support in-place operations.
 
     For AllReduce, ReduceScatter, and Reduce operators in single-node communication, when the data volume exceeds a specified threshold, the system automatically switches to AI_CPU mode to prevent performance degradation. (This threshold is not fixed and may vary depending on factors such as the operator running mode and network scale.)
 

@@ -32,14 +32,16 @@
     - 该配置项仅支持对称组网、推理特性。
     - 该配置项不支持多通信域并行的场景（因为不支持多个通信域同时配置为“AIV”模式），否则可能会导致不可预期行为。您可以在初始化具有特定配置的通信域时，通过“HcclCommConfig”将某个通信域的算子展开模式设置为“AIV”。
     - 该配置项仅支持Broadcast、Reduce、AllReduce、ReduceScatter、Scatter、AllGather、AlltoAll、AlltoAllV、AlltoAllVC、Send、Recv算子。
-      - 针对Reduce、AllReduce算子，数据类型支持int8、int16、int32、int64、float16、float32、bfp16。
-      - 针对ReduceScatter算子，数据类型支持int8、int16、int32、int64、float16、float32、bfp16、hifloat8。
+      - 针对Reduce、AllReduce算子，数据类型支持int8、int16、int32、int64、float16、float32、bfp16，reduce的操作类型仅支持sum、max、min，不支持prod。
+      - 针对ReduceScatter算子，数据类型支持int8、int16、int32、int64、float16、float32、bfp16、hifloat8，reduce的操作类型仅支持sum、max、min，不支持prod。
 
     - 该配置项下，支持控核能力，建议业务根据实际使用场景中计算算子与通信算子的并发情况进行Vector Core核数的配置。
 
   - **CCU_MS**：代表通信算子在CCU展开，使用CcuBuffer进行内存读写。Ascend 950PR不支持此配置。
 
     此模式下，当CCU与多个远端通信时，使用CcuBuffer作为中转，用于节省内存读写带宽，CcuBuffer的特点是大小较小，但速度较快。
+
+    此模式不支持inplace场景。
 
     当CCU资源不足时，系统会自动切换为AI_CPU模式。
     该配置项仅支持Broadcast、Reduce、AllReduce、ReduceScatter、AllGather算子，当前仅支持单机场景。
@@ -48,6 +50,8 @@
   - **CCU_SCHED**：代表通信算子在CCU展开，使用调度模式。
 
     调度模式指使用CCU作为调度器，向UB引擎调度UB WQE任务。调度模式下不使用CcuBuffer，直接在两个rank间进行片上内存到片上内存的数据传输。
+
+    此模式不支持inplace场景。
 
     该配置项支持Broadcast、AllGather、ReduceScatter、AllReduce、Reduce、Scatter、AlltoAll、AlltoAllV、AlltoAllVC、AllGatherV、ReduceScatterV算子。针对AllReduce、ReduceScatter、Reduce算子，数据类型仅支持int8、int16、int32、float16、float32、bfp16。针对ReduceScatterV算子，数据类型仅支持int16、int32、float16、float32、bfp16。其他通信算子支持的数据类型可参见对应的集合通信接口参考。
 
