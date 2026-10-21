@@ -97,6 +97,12 @@ HcclResult ScatterExecutorBase::RunLoop(const OpParam& param)
     // 中转内存单次最多能够接受的output count
     u64 maxCountPerLoop
         = cclInputMem.size / topoInfo_->userRankSize / HCCL_MIN_SLICE_ALIGN * HCCL_MIN_SLICE_ALIGN / unitSize_;
+    CHK_PRT_RET(
+        maxCountPerLoop == 0,
+        HCCL_ERROR(
+            "[%s] maxCountPerLoop is 0, cclInputMem.size[%llu], userRankSize[%u].", __func__, cclInputMem.size,
+            topoInfo_->userRankSize),
+        HCCL_E_INTERNAL);
     HCCL_DEBUG(
         "[ScatterExecutorBase][RunLoop]tag[%s], userRankSize is [%u], root is [%u], "
         "maxCountPerLoop is [%llu], totalRecvCount is [%llu]",

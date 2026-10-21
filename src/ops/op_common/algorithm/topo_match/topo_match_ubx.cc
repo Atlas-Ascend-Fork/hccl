@@ -117,6 +117,10 @@ HcclResult TopoMatchUBX::TopoForLayer3(
 HcclResult TopoMatchUBX::CheckVecElementAllSame(const uint32_t* instSizeList, uint32_t listSize) const
 {
 #ifndef AICPU_COMPILE
+    if (instSizeList == nullptr || listSize == 0) {
+        HCCL_ERROR("[TopoMatchUBX::CheckVecElementAllSame] instSizeList is null or empty, listSize[%u].", listSize);
+        return HcclResult::HCCL_E_PARA;
+    }
     uint32_t firstSize = instSizeList[0];
     for (uint32_t i = 1; i < listSize; i++) {
         if (firstSize != instSizeList[i]) {

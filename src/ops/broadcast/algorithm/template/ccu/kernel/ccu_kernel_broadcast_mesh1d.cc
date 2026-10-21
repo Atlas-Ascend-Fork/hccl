@@ -32,6 +32,12 @@ static CcuResult InitResource(BroadcastMesh1DContext& ctx)
         HCCL_ERROR("[CcuKernelBroadcastMesh1D] channels is empty!");
         return CcuResult::CCU_E_INTERNAL;
     }
+    if (arg->rankSize != static_cast<uint64_t>(arg->channelCount) + 1) {
+        HCCL_ERROR(
+            "[CcuKernelBroadcastMesh1D] rankSize[%llu] and channelCount[%u] mismatch.", arg->rankSize,
+            arg->channelCount);
+        return CcuResult::CCU_E_INTERNAL;
+    }
     HCCL_INFO("[CcuKernelBroadcastMesh1D] channels.size: [%u]", arg->channelCount);
 
     ctx.output.resize(arg->rankSize);

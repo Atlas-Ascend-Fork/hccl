@@ -39,6 +39,12 @@ static CcuResult InitResource(ReduceScatterMesh1DContext& ctx)
         HCCL_ERROR("[CcuKernelReduceScatterMesh1D] channels is empty!");
         return CcuResult::CCU_E_INTERNAL;
     }
+    if (arg->rankSize != static_cast<uint64_t>(arg->channelCount) + 1) {
+        HCCL_ERROR(
+            "[CcuKernelReduceScatterMesh1D] rankSize[%llu] and channelCount[%u] mismatch.", arg->rankSize,
+            arg->channelCount);
+        return CcuResult::CCU_E_INTERNAL;
+    }
 
     // 按照rank号从小到大遍历channels，遇到本rank就填充本地资源，否则依次取远端资源，要求算法返回的Link同样是按顺序排列的
     ctx.input.resize(arg->rankSize);

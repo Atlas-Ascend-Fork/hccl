@@ -62,6 +62,9 @@ u32 CalGCD(std::vector<u32>& nums)
 HcclResult CalcGeneralTopoInfoForA2(const HcclComm comm, const TopoInfo* topoInfo, AlgHierarchyInfo& algHierarchyInfo)
 {
     (void)comm;
+    CHK_PRT_RET(
+        topoInfo->deviceNumPerModule == 0,
+        HCCL_ERROR("[CalcGeneralTopoInfoForA2] deviceNumPerModule is 0, Invalid topo."), HCCL_E_INTERNAL);
     algHierarchyInfo.levels = 2;
     algHierarchyInfo.infos[COMM_LEVEL0].localRank = topoInfo->userRank % topoInfo->deviceNumPerModule;
     algHierarchyInfo.infos[COMM_LEVEL0].localRankSize = topoInfo->deviceNumPerModule;
@@ -78,6 +81,10 @@ HcclResult CalcGeneralTopoInfoForA2(const HcclComm comm, const TopoInfo* topoInf
 HcclResult CalcGeneralTopoInfoForA3(const HcclComm comm, const TopoInfo* topoInfo, AlgHierarchyInfo& algHierarchyInfo)
 {
     (void)comm;
+    CHK_PRT_RET(
+        topoInfo->deviceNumPerModule == 0 || topoInfo->serverNumPerSuperPod == 0,
+        HCCL_ERROR("[CalcGeneralTopoInfoForA3] deviceNumPerModule or serverNumPerSuperPod is 0, Invalid topo."),
+        HCCL_E_INTERNAL);
     algHierarchyInfo.levels = 3;
     algHierarchyInfo.infos[COMM_LEVEL0].localRank = topoInfo->userRank % topoInfo->deviceNumPerModule;
     algHierarchyInfo.infos[COMM_LEVEL0].localRankSize = topoInfo->deviceNumPerModule;
@@ -135,6 +142,9 @@ HcclResult GetSubCommRankByUserRank(u32 userRank, u32 curLevel, AlgHierarchyInfo
 {
     u32 preLevelsRankSize = 1;
     for (u32 level = 0; level < algHierarchyInfo.levels; level++) {
+        CHK_PRT_RET(
+            preLevelsRankSize == 0 || algHierarchyInfo.infos[level].localRankSize == 0,
+            HCCL_ERROR("[GetSubCommRankByUserRank] level[%u] rankSize is 0, Invalid topo.", level), HCCL_E_INTERNAL);
         if (level == curLevel) {
             subCommRank = userRank / preLevelsRankSize % algHierarchyInfo.infos[level].localRankSize;
             HCCL_INFO(

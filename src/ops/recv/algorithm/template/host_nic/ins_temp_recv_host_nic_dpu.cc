@@ -131,7 +131,8 @@ HcclResult InsTempRecvHostNicDpu::DPUKernelRun(
     std::vector<u32> rankIds = subCommRanks[0];
 
     for (u32 rankIdx = 0; rankIdx < rankIds.size(); rankIdx++) {
-        if (rankIdx == myRank) {
+        u32 rankId = rankIds[rankIdx]; // 组内rankId未必从0连续起始, 需用真实rankId做比较与查表
+        if (rankId == myRank) {
             continue;
         }
         uint64_t notifyNum = 2;
@@ -143,23 +144,23 @@ HcclResult InsTempRecvHostNicDpu::DPUKernelRun(
 
         for (u64 sizeResidue = outputSize; sizeResidue > 0; sizeResidue -= sizePerRound) {
             // 前同步
-            CHK_RET(static_cast<HcclResult>(HcommChannelNotifyRecordOnThread(0, channels.at(rankIdx)[0].handle, 0)));
+            CHK_RET(static_cast<HcclResult>(HcommChannelNotifyRecordOnThread(0, channels.at(rankId)[0].handle, 0)));
 
             CHK_RET(static_cast<HcclResult>(
-                HcommChannelNotifyWaitOnThread(0, channels.at(rankIdx)[0].handle, 0, CUSTOM_TIMEOUT)));
+                HcommChannelNotifyWaitOnThread(0, channels.at(rankId)[0].handle, 0, CUSTOM_TIMEOUT)));
 
             // 等待数据接收完成
             offset += sizePerRound;
             sizePerRound = (sizeResidue > cclOutputSize) ? cclOutputSize : sizeResidue;
             HCCL_DEBUG("rx async outputmem's offset[%llu], size[%llu]", offset, sizePerRound);
             CHK_RET(static_cast<HcclResult>(
-                HcommChannelNotifyWaitOnThread(0, channels.at(rankIdx)[0].handle, 1, CUSTOM_TIMEOUT)));
+                HcommChannelNotifyWaitOnThread(0, channels.at(rankId)[0].handle, 1, CUSTOM_TIMEOUT)));
 
             // 后同步，通知发送端数据接收完成
-            CHK_RET(static_cast<HcclResult>(
-                HcommChannelNotifyRecordOnThread(0, channels.at(rankIdx)[0].handle, notifyNum)));
+            CHK_RET(
+                static_cast<HcclResult>(HcommChannelNotifyRecordOnThread(0, channels.at(rankId)[0].handle, notifyNum)));
 
-            CHK_RET(HcommChannelDrainOnThreadWithCompat(0, channels.at(rankIdx)[0].handle));
+            CHK_RET(HcommChannelDrainOnThreadWithCompat(0, channels.at(rankId)[0].handle));
         }
     }
 #endif

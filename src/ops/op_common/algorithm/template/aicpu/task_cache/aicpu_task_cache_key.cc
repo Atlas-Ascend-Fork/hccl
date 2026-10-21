@@ -111,8 +111,7 @@ HcclResult AicpuTaskCacheKey::GetAicpuTaskCacheTag(const OpParam& param, uint64_
 
     // 拼接commId (最后一段, 不加delimiter后缀; 最多128个字符)
     size_t commLen = std::strlen(commId);
-    // commId最大长度为COMM_INDENTIFIER_MAX_LENGTH, 不会失败
-    (void)memcpy_s(ptr, COMM_INDENTIFIER_MAX_LENGTH, commId, commLen);
+    CHK_SAFETY_FUNC_RET(memcpy_s(ptr, COMM_INDENTIFIER_MAX_LENGTH, commId, commLen));
     ptr += commLen;
 
     // 重新更新cacheTag长度

@@ -130,9 +130,9 @@ CcuTempReduceScatterMesh2Die::PartitionChannels(HcclComm comm, const std::vector
     CHK_PRT_RET(
         minChannels + 1 != maxChannels,
         HCCL_ERROR(
-            "[CcuTempReduceScatterMesh2Die][CalcRes] Rank[%d], Unexpected channels size, "
-            "die0 channels[%u], die1 channels[%u].",
-            mySubCommRank_, channels_[0], channels_[1]),
+            "[CcuTempReduceScatterMesh2Die][CalcRes] Rank[%u], Unexpected channels size, "
+            "die0 channels[%zu], die1 channels[%zu].",
+            mySubCommRank_, channels_[0].size(), channels_[1].size()),
         HcclResult::HCCL_E_PARA);
     return HcclResult::HCCL_SUCCESS;
 }
@@ -199,7 +199,7 @@ HcclResult CcuTempReduceScatterMesh2Die::KernelRun(
     DataSlice dstSlice(
         buffInfo_.outputPtr, buffInfo_.outBuffBaseOff, sliceSize,
         sliceSize / DATATYPE_SIZE_TABLE[param.DataDes.dataType]);
-    LocalReduce(templateResource.threads[0], srcSlice, dstSlice, param.DataDes.dataType, param.reduceType);
+    CHK_RET(LocalReduce(templateResource.threads[0], srcSlice, dstSlice, param.DataDes.dataType, param.reduceType));
 
     HCCL_INFO("[CcuTempReduceScatterMesh2Die] Template Run for all steps Ends.");
     return HcclResult::HCCL_SUCCESS;

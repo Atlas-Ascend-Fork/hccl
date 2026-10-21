@@ -100,6 +100,9 @@ HcclResult TopoMatchNLevel::TopoForLayerGeneric(
     AlgHierarchyInfoForAllLevel& algHierarchyInfo, uint32_t targetLayerIdx) const
 {
 #ifndef AICPU_COMPILE
+    CHK_PRT_RET(
+        baseModSize == 0, HCCL_ERROR("[TopoMatchNLevel] layer[%u] baseModSize is 0, Invalid topo.", targetLayerIdx),
+        HCCL_E_INTERNAL);
     uint32_t* topoInsts;
     uint32_t topoInstNum = 0;
     CHK_RET(HcclRankGraphGetTopoInstsByLayer(comm, netLayer, &topoInsts, &topoInstNum));

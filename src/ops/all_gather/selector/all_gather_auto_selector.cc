@@ -109,8 +109,6 @@ SelectorStatus AllGatherAutoSelector::SelectMeshAlgo(
             topoInfo->level0Topo);
         return SelectorStatus::NOT_MATCH;
     }
-    HCCL_DEBUG("[AllGatherAutoSelector][%s] Algo match [%s]", __func__, selectAlgName.c_str());
-    return SelectorStatus::MATCH;
 }
 
 SelectorStatus AllGatherAutoSelector::SelectCcuScheduleUBXAlgo(

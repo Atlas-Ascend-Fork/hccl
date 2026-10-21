@@ -124,9 +124,9 @@ HcclResult CcuTempAllToAllMesh2Die::PartitionChannels(HcclComm comm, const std::
     CHK_PRT_RET(
         minChannels + 1 != maxChannels,
         HCCL_ERROR(
-            "[CcuTempAlltoAllMesh2Die][CalcRes] Rank[%d], Unexpected channels size, "
-            "die0 channels[%u], die1 channels[%u].",
-            myRank_, channels_[0], channels_[1]),
+            "[CcuTempAlltoAllMesh2Die][CalcRes] Rank[%u], Unexpected channels size, "
+            "die0 channels[%zu], die1 channels[%zu].",
+            myRank_, channels_[0].size(), channels_[1].size()),
         HcclResult::HCCL_E_PARA);
     return HcclResult::HCCL_SUCCESS;
 }

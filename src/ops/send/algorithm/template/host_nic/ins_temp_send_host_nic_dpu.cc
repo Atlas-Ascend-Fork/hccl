@@ -133,7 +133,8 @@ HcclResult InsTempSendHostNicDpu::DPUKernelRun(
     uint64_t timeOutSize = 120000;
     std::vector<u32> rankIds = subCommRanks[0];
     for (u32 rankIdx = 0; rankIdx < rankIds.size(); rankIdx++) {
-        if (rankIdx == myRank) {
+        u32 rankId = rankIds[rankIdx]; // 组内rankId未必从0连续起始, 需用真实rankId做比较与查表
+        if (rankId == myRank) {
             continue;
         }
         uint8_t* cclInput = static_cast<uint8_t*>(tempAlgParam.buffInfo.hcclBuff.addr);
@@ -144,9 +145,9 @@ HcclResult InsTempSendHostNicDpu::DPUKernelRun(
 
         for (u64 sizeResidue = inputSize; sizeResidue > 0; sizeResidue -= sizePerRound) {
             // 前同步
-            CHK_RET(static_cast<HcclResult>(HcommChannelNotifyRecordOnThread(0, channels.at(rankIdx)[0].handle, 0)));
+            CHK_RET(static_cast<HcclResult>(HcommChannelNotifyRecordOnThread(0, channels.at(rankId)[0].handle, 0)));
             CHK_RET(static_cast<HcclResult>(
-                HcommChannelNotifyWaitOnThread(0, channels.at(rankIdx)[0].handle, 0, timeOutSize)));
+                HcommChannelNotifyWaitOnThread(0, channels.at(rankId)[0].handle, 0, timeOutSize)));
 
             // 写数据
             offset += sizePerRound;
@@ -155,20 +156,20 @@ HcclResult InsTempSendHostNicDpu::DPUKernelRun(
             if (aclrtMemcpy(cclInput, sizePerRound, input + offset, sizePerRound, ACL_MEMCPY_DEVICE_TO_DEVICE)
                 != ACL_SUCCESS) {
                 HCCL_ERROR(
-                    "[InsTempSendHostNicDpu] aclrtMemcpy failed, rankIdx[%u] offset[%llu] sizePerRound[%llu].", rankIdx,
+                    "[InsTempSendHostNicDpu] aclrtMemcpy failed, rankId[%u] offset[%llu] sizePerRound[%llu].", rankId,
                     offset, sizePerRound);
                 return HCCL_E_INTERNAL;
             }
             void* src = cclInput;
-            void* dst = static_cast<void*>(static_cast<s8*>(channels.at(rankIdx)[0].remoteCclMem.addr) + offset);
+            void* dst = static_cast<void*>(static_cast<s8*>(channels.at(rankId)[0].remoteCclMem.addr) + offset);
             HCCL_DEBUG("tx async inputmem's offset[%llu], size[%llu]", offset, sizePerRound);
             CHK_RET(static_cast<HcclResult>(
-                HcommWriteWithNotifyNbiOnThread(0, channels.at(rankIdx)[0].handle, dst, src, sizePerRound, 1)));
+                HcommWriteWithNotifyNbiOnThread(0, channels.at(rankId)[0].handle, dst, src, sizePerRound, 1)));
 
             // 后同步
             CHK_RET(static_cast<HcclResult>(
-                HcommChannelNotifyWaitOnThread(0, channels.at(rankIdx)[0].handle, 2, timeOutSize)));
-            CHK_RET(HcommChannelDrainOnThreadWithCompat(0, channels.at(rankIdx)[0].handle));
+                HcommChannelNotifyWaitOnThread(0, channels.at(rankId)[0].handle, 2, timeOutSize)));
+            CHK_RET(HcommChannelDrainOnThreadWithCompat(0, channels.at(rankId)[0].handle));
         }
     }
 #endif
