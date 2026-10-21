@@ -171,9 +171,7 @@ HcclResult InsV2BroadcastSoleExecutor<AlgTopoMatch, InsAlgTemplate>::Orchestrate
     tempAlgParams.buffInfo.inBuffType = BufferType::INPUT;
     tempAlgParams.buffInfo.outBuffType = BufferType::INPUT;
     tempAlgParams.buffInfo.hcclBuffType = BufferType::HCCL_BUFFER;
-    if (std::string(param.algName) != "AicpuBroadcastSoleNHR") {
-        tempAlgParams.enableRemoteMemAccess = param.opMode == OpMode::OFFLOAD;
-    }
+    tempAlgParams.enableRemoteMemAccess = param.opMode == OpMode::OFFLOAD;
     CHK_PTR_NULL(tempAlgParams.buffInfo.inputPtr);
     CHK_PTR_NULL(tempAlgParams.buffInfo.outputPtr);
     CHK_PTR_NULL(tempAlgParams.buffInfo.hcclBuff.addr);

@@ -325,8 +325,23 @@ HcclResult InsTempBroadcastNHR::RunAllGather(
         std::vector<DataSlice> rxSrcSlices;
         std::vector<DataSlice> rxDstSlices;
         void* localBuff = (!enableRemoteMemAccess_) ? buffInfo_.hcclBuff.addr : buffInfo_.outputPtr;
-        void* remoteSendAddr = (!enableRemoteMemAccess_) ? linkSend.remoteCclMem.addr : buffInfo_.outputPtr;
-        void* remoteRecvAddr = (!enableRemoteMemAccess_) ? linkRecv.remoteCclMem.addr : buffInfo_.outputPtr;
+        void* remoteSendAddr
+            = (!enableRemoteMemAccess_) ? linkSend.remoteCclMem.addr : linkSend.remoteOutputGraphMode.addr;
+        void* remoteRecvAddr
+            = (!enableRemoteMemAccess_) ? linkRecv.remoteCclMem.addr : linkRecv.remoteOutputGraphMode.addr;
+        if (enableRemoteMemAccess_ && (remoteSendAddr == nullptr || remoteRecvAddr == nullptr)) {
+            HCCL_WARNING(
+                "[InsTempBroadcastNHR] remote graph-mode addr is null (send[%p] recv[%p]), rank[%u] ch[%u] step[%u]",
+                remoteSendAddr, remoteRecvAddr, myRank_, channelIdx, step);
+        }
+        HCCL_DEBUG(
+            "[BrNHRAddr] rank[%u] ch[%u] step[%u] localOut[%p] gmSend[%p] gmRecv[%p] sameSend[%d] sameRecv[%d] "
+            "gmNotNull[%d] remoteCclSend[%p] remoteCclRecv[%p]",
+            myRank_, channelIdx, step, buffInfo_.outputPtr, linkSend.remoteOutputGraphMode.addr,
+            linkRecv.remoteOutputGraphMode.addr, buffInfo_.outputPtr == linkSend.remoteOutputGraphMode.addr,
+            buffInfo_.outputPtr == linkRecv.remoteOutputGraphMode.addr,
+            static_cast<int>(linkSend.remoteOutputGraphMode.addr != nullptr), linkSend.remoteCclMem.addr,
+            linkRecv.remoteCclMem.addr);
         for (u32 i = 0; i < stepInfo.nSlices; i++) {
             u32 txIdx = stepInfo.txSliceIdxs[i];
             u32 rxIdx = stepInfo.rxSliceIdxs[i];
@@ -582,6 +597,11 @@ HcclResult InsTempBroadcastNHR::KernelRun(
     isDmaRead_ = isPcieProtocol;                                     // 是否使用Read模式
     HCCL_DEBUG("[InsTempBroadcastNHR] Use Dma Read[%d]", isDmaRead_);
     HCCL_INFO("[InsTempBroadcastNHR] BroadcastNHR entry.");
+    HCCL_DEBUG(
+        "[BrNHRFlag] rank[%u] root[%u] opMode[%d] symMem[%d] remoteAccess[%d] dmaRead[%d] chPerRank[%u] inplace[%d]",
+        myRank_, root_, static_cast<int>(param.opMode), static_cast<int>(param.supportSymmetricMemory),
+        static_cast<int>(enableRemoteMemAccess_), static_cast<int>(isDmaRead_), channelsPerRank_,
+        static_cast<int>(buffInfo_.inputPtr == buffInfo_.outputPtr));
 
     for (int i = 0; i < subCommRanks_[0].size(); i++) {
         tempVirtRankMap_.insert(std::make_pair(subCommRanks_[0][i], i));
