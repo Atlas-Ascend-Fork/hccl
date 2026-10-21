@@ -30,7 +30,13 @@ std::vector<CostModelParam> InsTempAllGatherNHRDPU::CalcCostCoeff(CalcCostCoeffP
 
     CostModelManager::Global()->CalcNHRParams(param.dataRatio, param.netType, param.portNum[0], param.rankSize, A);
     if (param.inputBuffer != param.scratchBuffer) {
-        CostModelManager::Global()->CalcLocalCopyParams(param.rankSize + 1, EngineType::CPU, B);
+        if (param.outputBuffer == BufferType::HCCL_BUFFER) {
+            // 输出即 scratch（三级 AG 的 L2）：NHR 环直接跨步落位、PostLocalCopy 跳过，仅剩 pre-copy 1 份
+            CostModelManager::Global()->CalcLocalCopyParams(1, EngineType::CPU, B);
+        } else {
+            // 顶层路径（二级 Sequence 框间级）：pre-copy 1 份 + PostLocalCopy rankSize 份
+            CostModelManager::Global()->CalcLocalCopyParams(param.rankSize + 1, EngineType::CPU, B);
+        }
     } else {
         B = 0.0f;
     }
@@ -56,6 +62,16 @@ HcclResult InsTempAllGatherNHRDPU::CalcRes(
     HCCL_INFO(
         "[InsTempAllGatherNHRDPU][CalcRes]slaveThreadNum[%u] notifyNumOnMainThread[%u] level1Channels[%zu].",
         resourceRequest.slaveThreadNum, resourceRequest.notifyNumOnMainThread, level1Channels.size());
+    return HCCL_SUCCESS;
+}
+
+HcclResult InsTempAllGatherNHRDPU::GetRes(AlgResourceRequest& resourceRequest) const
+{
+    // 与 CalcRes 的线程/notify 需求保持一致: 仅主线程, 无从线程与 notify 需求。
+    // PrepareResForTemplate 通过本接口获取各层线程数做线程分配, 缺省实现会打 ERROR 并返回错误码。
+    resourceRequest.slaveThreadNum = 0;
+    resourceRequest.notifyNumPerThread = {};
+    resourceRequest.notifyNumOnMainThread = 0;
     return HCCL_SUCCESS;
 }
 
@@ -192,14 +208,24 @@ InsTempAllGatherNHRDPU::LocalDataCopy(const TemplateDataParams& tempAlgParams, c
 {
     uint32_t algRankIdx = 0;
     CHK_RET(GetAlgRank(myRank_, subCommRanks_[0], algRankIdx));
+    // 输出即 CCL scratch（如三级 AG 的 L2）时，own slice 直接落最终跨步槽位，与 NHR 环
+    // allRankDispls（=outputSliceStride 跨步）寻址一致，对齐设备侧 InsTempAllGatherNHR 的
+    // isOutputCclBuff_ 分支；否则维持紧凑落位，供 PostLocalCopy 跨 buffer 重排（二级顶层路径）。
+    const bool isOutputCclBuff = tempAlgParams.buffInfo.outBuffType == BufferType::HCCL_BUFFER;
 
     for (uint64_t rpt = 0; rpt < tempAlgParams.repeatNum; ++rpt) {
         const u64 inBaseOff = tempAlgParams.buffInfo.inBuffBaseOff + rpt * tempAlgParams.inputRepeatStride;
-        const u64 scratchRepeatStride = tempAlgParams.sliceSize * templateRankSize_;
-        const u64 scratchBaseoff = tempAlgParams.buffInfo.hcclBuffBaseOff + rpt * scratchRepeatStride;
+        u64 scOff;
+        if (isOutputCclBuff) {
+            scOff = tempAlgParams.outputSliceStride * algRankIdx + tempAlgParams.buffInfo.hcclBuffBaseOff
+                    + rpt * tempAlgParams.outputRepeatStride;
+        } else {
+            const u64 scratchRepeatStride = tempAlgParams.sliceSize * templateRankSize_;
+            const u64 scratchBaseoff = tempAlgParams.buffInfo.hcclBuffBaseOff + rpt * scratchRepeatStride;
+            scOff = tempAlgParams.sliceSize * algRankIdx + scratchBaseoff;
+        }
 
         const u64 inOff = tempAlgParams.inputSliceStride * algRankIdx + inBaseOff;
-        const u64 scOff = tempAlgParams.sliceSize * algRankIdx + scratchBaseoff;
 
         DataSlice srcSlices(tempAlgParams.buffInfo.inputPtr, inOff, tempAlgParams.sliceSize, tempAlgParams.count);
         DataSlice dstSlice(tempAlgParams.buffInfo.hcclBuff.addr, scOff, tempAlgParams.sliceSize, tempAlgParams.count);
@@ -239,6 +265,13 @@ HcclResult InsTempAllGatherNHRDPU::RunNHR(
 HcclResult
 InsTempAllGatherNHRDPU::PostLocalCopy(const TemplateDataParams& tempAlgParams, const TemplateResource& templateResource)
 {
+    // 输出即 CCL scratch：NHR 环已按 allRankDispls（outputSliceStride 跨步）直接落位，无需重排，
+    // 对齐设备侧 InsTempAllGatherNHR 在 outBuffType==HCCL_BUFFER 时的跳过逻辑；
+    // 同时消除原地重叠拷贝缺陷（d1>=2 且 d2>=d1+1 时升序重排互相覆盖）。
+    if (tempAlgParams.buffInfo.outBuffType == BufferType::HCCL_BUFFER) {
+        HCCL_INFO("[InsTempAllGatherNHRDPU] PostLocalCopy skip because output is scratch");
+        return HcclResult::HCCL_SUCCESS;
+    }
     for (u32 rpt = 0; rpt < tempAlgParams.repeatNum; ++rpt) {
         const u64 outBaseOff = tempAlgParams.buffInfo.outBuffBaseOff + rpt * tempAlgParams.outputRepeatStride;
         const u64 scratchRepeatStride = tempAlgParams.sliceSize * templateRankSize_;

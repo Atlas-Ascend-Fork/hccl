@@ -11,13 +11,13 @@
 #ifndef HCCLV2_INS_V2_ALL_GATHER_SEQUENCE_3_LEVEL_EXECUTOR_H
 #define HCCLV2_INS_V2_ALL_GATHER_SEQUENCE_3_LEVEL_EXECUTOR_H
 
-#include "executor_common_ops.h"
+#include "ins_v2_all_gather_sequence_3level_utils.h"
 #include "topo_match_three_level.h"
+
 namespace ops_hccl {
-constexpr u32 SEQUENCE_EXECUTOR_3_LEVEL_NUM = 3;
 
 template <typename AlgTopoMatch, typename InsAlgTemplate0, typename InsAlgTemplate1, typename InsAlgTemplate2>
-class InsV2AllGatherSequenceExecutor3Level : public InsCollAlgBase {
+class InsV2AllGatherSequenceExecutor3Level : public InsV2AllGatherSequence3LevelBase {
 public:
     explicit InsV2AllGatherSequenceExecutor3Level();
     HcclResult Orchestrate(const OpParam& param, const AlgResourceCtxSerializable& resCtx) override;
@@ -37,47 +37,14 @@ public:
         const TopoInfoWithNetLayerDetails* topoInfo, const OpParam& param, const char* algName) const override;
 
 protected:
-    HcclResult CalcLocalRankSize();
-    HcclResult InitExecutorInfo(const OpParam& param);
-    HcclResult GenTempResource(int idx, TemplateResource& res) const;
     HcclResult OrchestrateLoop(
         const OpParam& param, const AlgResourceCtxSerializable& resCtx, InsAlgTemplate0& tempAlgLevel0,
         InsAlgTemplate1& tempAlgLevel1, InsAlgTemplate2& tempAlgLevel2);
     void GenTemplateAlgParamsLevel2(
         const OpParam& param, const AlgResourceCtxSerializable& resCtx, const u64 curCount, const u64 dataOffset,
         TemplateDataParams& tempAlgParamsLevel2) const;
-    void GenTemplateAlgParamsLevel1(
-        const OpParam& param, const AlgResourceCtxSerializable& resCtx, const u64 curCount, const u64 dataOffset,
-        TemplateDataParams& tempAlgParamsLevel1) const;
-    void GenTemplateAlgParamsLevel0(
-        const OpParam& param, const AlgResourceCtxSerializable& resCtx, const u64 curCount, const u64 dataOffset,
-        TemplateDataParams& tempAlgParamsLevel0) const;
-    HcclResult PrepareResForTemplate(
-        InsAlgTemplate0& tempAlgLevel0, InsAlgTemplate1& tempAlgLevel1, InsAlgTemplate2& tempAlgLevel2);
-    static uint64_t GetRankSize(const std::vector<std::vector<u32>>& vTopo);
-
-    uint64_t rankIdxLevel0_{0};
-    uint64_t rankIdxLevel1_{0};
-    bool skipLevel1_{false};
-
-    std::vector<ThreadHandle> threads_;
-    std::vector<std::map<u32, std::vector<ChannelInfo>>> remoteRankToChannelInfo_;
-
-    struct LevelInfo {
-        std::remove_reference_t<decltype(remoteRankToChannelInfo_[0])> channels;
-        std::vector<std::vector<u32>> hierarchyInfo;
-        uint64_t rankSize;
-        std::vector<ThreadHandle> threads;
-        LevelInfo(decltype(remoteRankToChannelInfo_[0]) channels_, std::vector<std::vector<u32>> hierarchyInfo_)
-            : channels(channels_),
-              hierarchyInfo(hierarchyInfo_),
-              rankSize(GetRankSize(hierarchyInfo)),
-              threads()
-        {}
-    };
-
-    std::vector<LevelInfo> levels_;
 };
+
 } // namespace ops_hccl
 
 #endif

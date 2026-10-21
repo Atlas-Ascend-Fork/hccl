@@ -343,6 +343,16 @@ void TopoModel::GetEndpointDesc(
 {
     char* dpnEnv = getenv("ENABLE_HOSTDPU_FOR_LLT");
     if (dpnEnv != nullptr && std::string(dpnEnv) == "1") {
+        // 默认全层报 HOST(既有行为, 兼容存量 DPU 用例)。ENABLE_HOSTDPU_L2_ONLY=1 时仅最外层(L2)报
+        // HOST, 内层(L0/L1)恢复 DEVICE —— 对齐真实 hostDPU 形态(框间为 UB CLOS 落设备侧, 仅跨超节点
+        // RoCE 落 HOST), 供依赖内层 locType 做准入的算法(如 DpuAllGatherSequenceMeshConcurNHRNHR 准入③)
+        // 构造可用拓扑; 存量用例不打开该开关, 行为不变。
+        char* l2OnlyEnv = getenv("ENABLE_HOSTDPU_L2_ONLY");
+        if (l2OnlyEnv != nullptr && std::string(l2OnlyEnv) == "1" && layer != NetLayerL2) {
+            *descNum = 1;
+            endpointDesc[0] = rankId2Endpoint_[curRank];
+            return;
+        }
         *descNum = static_cast<uint32_t>(dpuDesc_.size());
         for (size_t i = 0; i < dpuDesc_.size(); i++) {
             endpointDesc[i] = dpuDesc_[i];

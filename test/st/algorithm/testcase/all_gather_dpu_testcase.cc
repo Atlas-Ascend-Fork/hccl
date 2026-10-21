@@ -272,3 +272,146 @@ TEST_F(ST_ALL_GATHER_DPU_TEST, omnipipe_dpu_3level_4x4x2_int32_16m)
     HcclDataType dataType = HcclDataType::HCCL_DATA_TYPE_INT32;
     RunAllGatherDPUA5(topoMeta, sendCount, dataType);
 }
+
+// ========== DPU 三级 Sequence (DpuAllGatherSequenceMeshConcurNHRNHR) ==========
+// 与 OmniPipe 组的差异:
+//   1. HCCL_ALGO 强制选路 —— "allgather:sequence{meshconcur,nhr,nhr}" 对引擎候选展开命中
+//      Aicpu/Dpu 两个三级 Sequence, hostDPU 拓扑下 AICPU 版被 attrs 双向互斥过滤
+//      (isHostDpuOnly=false 且 topo hostDpuOnly=true), preferred 层收敛后唯一命中 DPU 三级;
+//   2. ENABLE_HOSTDPU_L2_ONLY=1 —— 仿真模型默认全层报 HOST, 会让三级 Sequence 的准入③
+//      (中间层 locType 须为 DEVICE)拦截; 开关打开后仅 L2 报 HOST、L0/L1 报 DEVICE,
+//      对齐真实 228 形态(框间 UB CLOS 落设备侧), 准入①②③全部通过。
+class ST_ALL_GATHER_DPU_3LEVEL_SEQ_TEST : public ::testing::Test {
+protected:
+    void SetUp() override
+    {
+        ResetAlgEnvConfigInitState();
+        setenv("HCCL_ALGO", "allgather:sequence{meshconcur,nhr,nhr}", 1);
+        setenv("ENABLE_HOSTDPU_L2_ONLY", "1", 1);
+    }
+    void TearDown() override
+    {
+        unsetenv("HCCL_ALGO");
+        unsetenv("ENABLE_HOSTDPU_L2_ONLY");
+        unsetenv("HCCL_ENABLE_OPEN_AICPU");
+        unsetenv("ENABLE_HOSTDPU_FOR_LLT");
+        unsetenv("HCCL_INDEPENDENT_OP");
+        unsetenv("HCCL_OP_EXPANSION_MODE");
+    }
+    static void SetUpTestCase() {}
+    static void TearDownTestCase() {}
+};
+
+// 对称3级正向: x=4, y=4, z=2
+TEST_F(ST_ALL_GATHER_DPU_3LEVEL_SEQ_TEST, sequence_dpu_3level_2x4x4_int8)
+{
+    TopoMeta topoMeta;
+    GenTopoMeta(topoMeta, 2, 4, 4);
+    u64 sendCount = 512;
+    HcclDataType dataType = HcclDataType::HCCL_DATA_TYPE_INT8;
+    RunAllGatherDPUA5(topoMeta, sendCount, dataType);
+}
+
+// 对称3级最小拓扑: 2x2x2 = 8 卡
+// d1=1 退化拓扑 2x1x8: 中间层单实例使 levels_[1].rankSize==1, 触发 skipLevel1_,
+// OrchestrateLoop 跳过 L1 NHR 仅执行 L2->L0, 验证中间层退化下三级数据面正确
+TEST_F(ST_ALL_GATHER_DPU_3LEVEL_SEQ_TEST, sequence_dpu_3level_2x1x8_bfp16)
+{
+    TopoMeta topoMeta;
+    GenTopoMeta(topoMeta, 2, 1, 8);
+    u64 sendCount = 256;
+    HcclDataType dataType = HcclDataType::HCCL_DATA_TYPE_BFP16;
+    RunAllGatherDPUA5(topoMeta, sendCount, dataType);
+}
+
+// 对称3级: 8卡/server 形态, 2x4x8 = 64 卡
+TEST_F(ST_ALL_GATHER_DPU_3LEVEL_SEQ_TEST, sequence_dpu_3level_2x4x8_int32)
+{
+    TopoMeta topoMeta;
+    GenTopoMeta(topoMeta, 2, 4, 8);
+    u64 sendCount = 2048;
+    HcclDataType dataType = HcclDataType::HCCL_DATA_TYPE_INT32;
+    RunAllGatherDPUA5(topoMeta, sendCount, dataType);
+}
+
+// 最小数据量: sendCount=1
+TEST_F(ST_ALL_GATHER_DPU_3LEVEL_SEQ_TEST, sequence_dpu_3level_2x2x2_fp32_send1)
+{
+    TopoMeta topoMeta;
+    GenTopoMeta(topoMeta, 2, 2, 2);
+    u64 sendCount = 1;
+    HcclDataType dataType = HcclDataType::HCCL_DATA_TYPE_FP32;
+    RunAllGatherDPUA5(topoMeta, sendCount, dataType);
+}
+
+// 非整除尾块: sendCount=243 (不整除 sliceSize)
+TEST_F(ST_ALL_GATHER_DPU_3LEVEL_SEQ_TEST, sequence_dpu_3level_2x3x4_fp32_send243)
+{
+    TopoMeta topoMeta;
+    GenTopoMeta(topoMeta, 2, 3, 4);
+    u64 sendCount = 243;
+    HcclDataType dataType = HcclDataType::HCCL_DATA_TYPE_FP32;
+    RunAllGatherDPUA5(topoMeta, sendCount, dataType);
+}
+
+// L1 非对称拓扑: pod0=2srv×8rank(16卡) + pod1=1srv×8rank(8卡), L1 层实例大小{16,8}。
+// topo_match 按最小实例对齐(GCD 虚拟化), 验证非对称形态下三级匹配/准入行为与数据面正确
+TEST_F(ST_ALL_GATHER_DPU_3LEVEL_SEQ_TEST, sequence_dpu_3level_l1_asym_16_8_fp32)
+{
+    TopoMeta topoMeta;
+    SuperPodMeta pod0 = {ServerMeta{0, 1, 2, 3, 4, 5, 6, 7}, ServerMeta{0, 1, 2, 3, 4, 5, 6, 7}};
+    SuperPodMeta pod1 = {ServerMeta{0, 1, 2, 3, 4, 5, 6, 7}};
+    topoMeta.push_back(pod0);
+    topoMeta.push_back(pod1);
+    u64 sendCount = 512;
+    HcclDataType dataType = HcclDataType::HCCL_DATA_TYPE_FP32;
+    RunAllGatherDPUA5(topoMeta, sendCount, dataType);
+}
+
+// 大数据量: 16M (多 loop)
+TEST_F(ST_ALL_GATHER_DPU_3LEVEL_SEQ_TEST, sequence_dpu_3level_2x4x4_int32_16m)
+{
+    TopoMeta topoMeta;
+    GenTopoMeta(topoMeta, 2, 4, 4);
+    u64 sendCount = 16 * 1024 * 1024;
+    HcclDataType dataType = HcclDataType::HCCL_DATA_TYPE_INT32;
+    RunAllGatherDPUA5(topoMeta, sendCount, dataType);
+}
+
+// 准入③回退: 不开 ENABLE_HOSTDPU_L2_ONLY 时全层 locType=HOST, 准入③拦截三级,
+// preferred 算法被过滤后 WARNING 回退自动选路(选中二级), 数据面仍须正确
+TEST_F(ST_ALL_GATHER_DPU_3LEVEL_SEQ_TEST, sequence_dpu_3level_l1_host_fallback_2x4x4_fp32)
+{
+    unsetenv("ENABLE_HOSTDPU_L2_ONLY");
+    TopoMeta topoMeta;
+    GenTopoMeta(topoMeta, 2, 4, 4);
+    u64 sendCount = 512;
+    HcclDataType dataType = HcclDataType::HCCL_DATA_TYPE_FP32;
+    RunAllGatherDPUA5(topoMeta, sendCount, dataType);
+}
+
+// 两层拓扑回退: 单超节点(z=1)下三级 topo 不匹配, 回退二级, 数据面仍须正确。
+// 不开 ENABLE_HOSTDPU_L2_ONLY: 两层拓扑时 CheckHostDPUOnly 检查 L1 层, 开关会使 L1 报 DEVICE
+// 导致 hostDPUOnly=false 而回退 AICPU 算法池(其框间通道在此仿真拓扑下不可建链);
+// 关闭开关保持全层 HOST, hostDpuOnly=true, 回退 DPU 二级 Sequence(与 omnipipe 4x4x1 先例同路径)。
+TEST_F(ST_ALL_GATHER_DPU_3LEVEL_SEQ_TEST, sequence_dpu_3level_1x4x4_fp32_fallback)
+{
+    unsetenv("ENABLE_HOSTDPU_L2_ONLY");
+    TopoMeta topoMeta;
+    GenTopoMeta(topoMeta, 1, 4, 4);
+    u64 sendCount = 512;
+    HcclDataType dataType = HcclDataType::HCCL_DATA_TYPE_FP32;
+    RunAllGatherDPUA5(topoMeta, sendCount, dataType);
+}
+
+// 踩踏拓扑回归: 4 超节点 x 2 框(d1=2, d2=4, 满足 d2>=d1+1)。修复前 PostLocalCopy 的
+// 紧凑->跨步原地升序重排中, 条目1的目标槽位(i*d1*S=1*2*S)会覆盖条目2(=d1)尚未搬运的源数据,
+// 导致 AllGather 结果错误; 修复后 NHR 环按 outputSliceStride 直落最终槽位, 无重排拷贝。
+TEST_F(ST_ALL_GATHER_DPU_3LEVEL_SEQ_TEST, sequence_dpu_3level_4x2x2_int32_stomp)
+{
+    TopoMeta topoMeta;
+    GenTopoMeta(topoMeta, 4, 2, 2);
+    u64 sendCount = 512;
+    HcclDataType dataType = HcclDataType::HCCL_DATA_TYPE_INT32;
+    RunAllGatherDPUA5(topoMeta, sendCount, dataType);
+}

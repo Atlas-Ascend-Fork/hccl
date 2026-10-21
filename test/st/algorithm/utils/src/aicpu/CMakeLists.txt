@@ -239,6 +239,7 @@ add_library(hccl_aicpu_kernel SHARED
     ${HCCL_DEV_BASE}/src/ops/all_gather/algorithm/template/aicpu/ins_temp_all_gather_nhr.cc
     ${HCCL_DEV_BASE}/src/ops/all_gather/algorithm/template/aicpu/ins_temp_all_gather_mesh_1D_Z_axis_detour.cc
     ${HCCL_DEV_BASE}/src/ops/all_gather/algorithm/executor/ins_v2_all_gather_sequence_executor.cc
+    ${HCCL_DEV_BASE}/src/ops/all_gather/algorithm/executor/ins_v2_all_gather_sequence_executor_3level_dpu.cc
     ${HCCL_DEV_BASE}/src/ops/all_gather/algorithm/template/aicpu/ins_temp_all_gather_nhr_dpu.cc
     ${HCCL_DEV_BASE}/src/ops/all_gather/algorithm/executor/ins_v2_all_gather_omnipipe_executor.cc
     ${HCCL_DEV_BASE}/src/ops/all_gather/algorithm/template/aicpu/ins_temp_all_gather_omnipipe_mesh_1D.cc

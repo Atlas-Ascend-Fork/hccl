@@ -17,7 +17,6 @@
 #include "alg_attrs_registry.h"
 
 namespace ops_hccl {
-constexpr u32 OMNIPIPE_LEVEL2_IDX = 2;
 
 template <typename AlgTopoMatch, typename InsAlgTemplate0, typename InsAlgTemplate1, typename InsAlgTemplate2>
 InsV2AllGatherSequenceExecutor3Level<
@@ -62,6 +61,15 @@ InsV2AllGatherSequenceExecutor3Level<AlgTopoMatch, InsAlgTemplate0, InsAlgTempla
     std::vector<std::vector<CommTopo>> phyLevelNetTypes(phyIdxForAlgoLevels.size());
     std::vector<std::vector<std::vector<u32>>> phyLevelPortNums(phyIdxForAlgoLevels.size());
     AppendPhysicalLevelInfo(topoInfo, phyIdxForAlgoLevels, phyLevelNetTypes, phyLevelPortNums);
+    // 先校验各层物理信息非空再取首元素, 避免 topo match 异常产出空层时下方 [0] 访问越界
+    for (u32 lvl = 0; lvl < TOPO_LEVEL_NUM_3; lvl++) {
+        if (phyLevelNetTypes[lvl].empty() || phyLevelPortNums[lvl].empty()) {
+            HCCL_WARNING(
+                "[InsV2AllGatherSequenceExecutor3Level][CalcCostCoeff] phyLevel[%u] netTypes or portNums is empty.",
+                lvl);
+            return {};
+        }
+    }
     CommTopo netTypeLevel0 = phyLevelNetTypes[0][0];
     CommTopo netTypeLevel1 = phyLevelNetTypes[1][0];
     CommTopo netTypeLevel2 = phyLevelNetTypes[2][0];
@@ -74,10 +82,11 @@ InsV2AllGatherSequenceExecutor3Level<AlgTopoMatch, InsAlgTemplate0, InsAlgTempla
     }
     HCCL_INFO(
         "[InsV2AllGatherSequenceExecutor3Level][CalcCostCoeff] rankSize=%d, rankSizeLevel0=%d, rankSizeLevel1=%d, "
-        "rankSizeLevel2=%d, "
-        "portNumLevel0=%d, portNumLevel1=%d, portNumLevel2=%d, netTypeLevel0=%d, netTypeLevel1=%d, netTypeLevel2=%d",
-        rankSize, rankSizeLevel0, rankSizeLevel1, rankSizeLevel2, portNumLevel0, portNumLevel1, portNumLevel2,
-        static_cast<int>(netTypeLevel0), static_cast<int>(netTypeLevel1), static_cast<int>(netTypeLevel2));
+        "rankSizeLevel2=%d, portNumLevel0=%zu, portNumLevel1=%zu, portNumLevel2=%zu, netTypeLevel0=%d, "
+        "netTypeLevel1=%d, netTypeLevel2=%d",
+        rankSize, rankSizeLevel0, rankSizeLevel1, rankSizeLevel2, portNumLevel0.size(), portNumLevel1.size(),
+        portNumLevel2.size(), static_cast<int>(netTypeLevel0), static_cast<int>(netTypeLevel1),
+        static_cast<int>(netTypeLevel2));
     std::vector<CostModelParam> params
         = [rankSizeLevel0, rankSizeLevel1, rankSizeLevel2, portNumLevel0, portNumLevel1, portNumLevel2, netTypeLevel0,
            netTypeLevel1, netTypeLevel2, isPod, phyIdxForAlgoLevels, phyLevelNetTypes, phyLevelPortNums] {
@@ -107,37 +116,8 @@ AlgNetMeta
 InsV2AllGatherSequenceExecutor3Level<AlgTopoMatch, InsAlgTemplate0, InsAlgTemplate1, InsAlgTemplate2>::GetAlgNetMeta(
     const TopoInfoWithNetLayerDetails* topoInfo, const OpParam& param, const char* algName) const
 {
-    (void)param;
-    AlgHierarchyInfoForAllLevel algHierarchyInfo;
-    if (!MatchTopoForProbe<AlgTopoMatch>(
-            topoInfo, algHierarchyInfo, algName, "[InsV2AllGatherSequenceExecutor3Level][GetAlgNetMeta]",
-            TopoProbeScene::PROBE_GET_ALG_NET_META)) {
-        return {};
-    }
-    u32 rankSizeLevel0 = algHierarchyInfo.infos[0][0].size();
-    u32 rankSizeLevel1 = (algHierarchyInfo.infos.size() > 1) ? algHierarchyInfo.infos[1][0].size() : 1;
-    u32 rankSizeLevel2 = (algHierarchyInfo.infos.size() > 2) ? algHierarchyInfo.infos[2][0].size() : 1;
-    CHK_PRT_RET(
-        algHierarchyInfo.physicalIdxForAlgoLevels.size() != TOPO_LEVEL_NUM_3,
-        HCCL_WARNING(
-            "[InsV2AllGatherSequenceExecutor3Level][GetAlgNetMeta] physicalIdxForAlgoLevels size[%zu] != 3.",
-            algHierarchyInfo.physicalIdxForAlgoLevels.size()),
-        {});
-    CommTopo netTypeLevel0
-        = GetPhysicalLevelTopoType(topoInfo, static_cast<u32>(algHierarchyInfo.physicalIdxForAlgoLevels[0][0]));
-    CommTopo netTypeLevel1
-        = GetPhysicalLevelTopoType(topoInfo, static_cast<u32>(algHierarchyInfo.physicalIdxForAlgoLevels[1][0]));
-    CommTopo netTypeLevel2
-        = GetPhysicalLevelTopoType(topoInfo, static_cast<u32>(algHierarchyInfo.physicalIdxForAlgoLevels[2][0]));
-    AlgNetMeta meta;
-    meta.netTypes.push_back(netTypeLevel0);
-    meta.netTypes.push_back(netTypeLevel1);
-    meta.netTypes.push_back(netTypeLevel2);
-    meta.intraGroupMode = CostAggMode::SUM;
-    meta.groupSizes = {1, 1, 1};
-    meta.dataRatios = {1.0f * rankSizeLevel2 * rankSizeLevel1, 1.0f * rankSizeLevel2, 1.0f};
-    meta.rankSizes = {rankSizeLevel0, rankSizeLevel1, rankSizeLevel2};
-    return meta;
+    return this->template AgSeq3LevelGetAlgNetMeta<AlgTopoMatch>(
+        topoInfo, param, algName, "InsV2AllGatherSequenceExecutor3Level");
 }
 
 template <typename AlgTopoMatch, typename InsAlgTemplate0, typename InsAlgTemplate1, typename InsAlgTemplate2>
@@ -146,56 +126,8 @@ InsV2AllGatherSequenceExecutor3Level<AlgTopoMatch, InsAlgTemplate0, InsAlgTempla
     HcclComm comm, const OpParam& param, const TopoInfoWithNetLayerDetails* topoInfo,
     const AlgHierarchyInfoForAllLevel& algHierarchyInfo, AlgResourceRequest& resourceRequest)
 {
-    if (algHierarchyInfo.infos.size() != SEQUENCE_EXECUTOR_3_LEVEL_NUM) {
-        HCCL_ERROR(
-            "[InsV2AllGatherSequenceExecutor3Level] algHierarchyInfo size %zu should be %u",
-            algHierarchyInfo.infos.size(), SEQUENCE_EXECUTOR_3_LEVEL_NUM);
-        return HCCL_E_INTERNAL;
-    }
-    // 构建template
-    InsAlgTemplate0 Level0TempAlg(param, topoInfo->userRank, algHierarchyInfo.infos[0]);
-    InsAlgTemplate1 Level1TempAlg(param, topoInfo->userRank, algHierarchyInfo.infos[1]);
-    InsAlgTemplate2 Level2TempAlg(param, topoInfo->userRank, algHierarchyInfo.infos[2]);
-
-    // 调用计算资源的函数
-    AlgResourceRequest Level0TempRequest, Level1TempRequest, Level2TempRequest;
-    CHK_RET(Level0TempAlg.CalcRes(comm, param, topoInfo, Level0TempRequest));
-    CHK_RET(Level1TempAlg.CalcRes(comm, param, topoInfo, Level1TempRequest));
-    CHK_RET(Level2TempAlg.CalcRes(comm, param, topoInfo, Level2TempRequest));
-
-    resourceRequest.notifyNumOnMainThread = std::max(
-        {Level0TempRequest.notifyNumOnMainThread, Level1TempRequest.notifyNumOnMainThread,
-         Level2TempRequest.notifyNumOnMainThread});
-    resourceRequest.slaveThreadNum = std::max(
-        {Level0TempRequest.slaveThreadNum, Level1TempRequest.slaveThreadNum, Level2TempRequest.slaveThreadNum});
-    resourceRequest.notifyNumPerThread.insert(
-        resourceRequest.notifyNumPerThread.end(), Level0TempRequest.notifyNumPerThread.begin(),
-        Level0TempRequest.notifyNumPerThread.end());
-    resourceRequest.notifyNumPerThread.insert(
-        resourceRequest.notifyNumPerThread.end(), Level1TempRequest.notifyNumPerThread.begin(),
-        Level1TempRequest.notifyNumPerThread.end());
-    resourceRequest.notifyNumPerThread.insert(
-        resourceRequest.notifyNumPerThread.end(), Level2TempRequest.notifyNumPerThread.begin(),
-        Level2TempRequest.notifyNumPerThread.end());
-    CHK_PRT_RET(
-        Level0TempRequest.channels.empty() || Level1TempRequest.channels.empty() || Level2TempRequest.channels.empty(),
-        HCCL_ERROR("[InsV2AllGatherSequenceExecutor3Level][CalcRes] Level0Template, Level1Template or "
-                   "Level2TempRequest has empty channels."),
-        HcclResult::HCCL_E_INTERNAL);
-    resourceRequest.channels.emplace_back(Level0TempRequest.channels[0]);
-    resourceRequest.channels.emplace_back(Level1TempRequest.channels[0]);
-    resourceRequest.channels.emplace_back(Level2TempRequest.channels[0]);
-    HCCL_DEBUG(
-        "[InsV2AllGatherSequenceExecutor3Level][CalcRes] notifyNumOnMainThread[%u], slaveThreadNum[%u], "
-        "channels[%zu]",
-        resourceRequest.notifyNumOnMainThread, resourceRequest.slaveThreadNum, resourceRequest.channels.size());
-    for (auto i = 0; i < resourceRequest.notifyNumPerThread.size(); i++) {
-        HCCL_DEBUG(
-            "[InsV2AllGatherSequenceExecutor3Level][CalcRes] myRank[%u], notifyNumPerThread[%u]=[%u]", i,
-            resourceRequest.notifyNumPerThread[i]);
-    }
-
-    return HCCL_SUCCESS;
+    return AgSeq3LevelCalcRes<InsAlgTemplate0, InsAlgTemplate1, InsAlgTemplate2>(
+        comm, param, topoInfo, algHierarchyInfo, resourceRequest, "InsV2AllGatherSequenceExecutor3Level");
 }
 
 template <typename AlgTopoMatch, typename InsAlgTemplate0, typename InsAlgTemplate1, typename InsAlgTemplate2>
@@ -204,31 +136,8 @@ InsV2AllGatherSequenceExecutor3Level<AlgTopoMatch, InsAlgTemplate0, InsAlgTempla
     const OpParam& param, const AlgResourceCtxSerializable& resCtx)
 {
     HCCL_INFO("[InsV2AllGatherSequenceExecutor3Level][Orchestrate] Orchestrate Start");
-    maxTmpMemSize_ = resCtx.cclMem.size; // maxTmpMemSize_设定为cclIn的大小，op中将申请的HcclBuff全给了cclIn
-    myRank_ = resCtx.topoInfo.userRank;
-    // 给channels_和threads_赋值
-    threads_ = resCtx.threads;
-    supportSymmetricMemory_ = param.supportSymmetricMemory;
-    if (supportSymmetricMemory_) {
-        inputOffset_ = param.inputOffset;
-        outputOffset_ = param.outputOffset;
-        inputSymWindow_ = param.inputSymWindow;
-        outputSymWindow_ = param.outputSymWindow;
-    }
-    CHK_RET(RestoreChannelMap(resCtx, remoteRankToChannelInfo_));
+    CHK_RET(InitOrchestrateState(param, resCtx, "InsV2AllGatherSequenceExecutor3Level"));
 
-    dataCount_ = param.DataDes.count;
-    dataType_ = param.DataDes.dataType;
-    dataTypeSize_ = DATATYPE_SIZE_TABLE[param.DataDes.dataType];
-    dataSize_ = dataCount_ * dataTypeSize_;
-    if (resCtx.algHierarchyInfo.infos.size() < TOPO_LEVEL_NUM_3) {
-        HCCL_ERROR("[%s] algHierarchyInfo.infos size[%zu] < 3.", __func__, resCtx.algHierarchyInfo.infos.size());
-        return HCCL_E_PARA;
-    }
-    levels_.emplace_back(remoteRankToChannelInfo_[0], resCtx.algHierarchyInfo.infos[0]);
-    levels_.emplace_back(remoteRankToChannelInfo_[1], resCtx.algHierarchyInfo.infos[1]);
-    levels_.emplace_back(remoteRankToChannelInfo_[2], resCtx.algHierarchyInfo.infos[2]);
-    // 实例化算法模板类
     // 构建template
     InsAlgTemplate0 Level0TempAlg(param, resCtx.topoInfo.userRank, levels_[0].hierarchyInfo);
     InsAlgTemplate1 Level1TempAlg(param, resCtx.topoInfo.userRank, levels_[1].hierarchyInfo);
@@ -247,7 +156,8 @@ InsV2AllGatherSequenceExecutor3Level<AlgTopoMatch, InsAlgTemplate0, InsAlgTempla
     }
     CHK_RET(Level2TempAlg.SetchannelsPerRank(levels_[2].channels));
     // 将计算资源分配个每个算法
-    CHK_RET(PrepareResForTemplate(Level0TempAlg, Level1TempAlg, Level2TempAlg));
+    CHK_RET(AgSeq3LevelPrepareResForTemplate(levels_, threads_, Level0TempAlg, Level1TempAlg, Level2TempAlg));
+
     // 算法展开
     HcclResult ret = OrchestrateLoop(param, resCtx, Level0TempAlg, Level1TempAlg, Level2TempAlg);
     CHK_PRT_RET(
@@ -260,54 +170,17 @@ InsV2AllGatherSequenceExecutor3Level<AlgTopoMatch, InsAlgTemplate0, InsAlgTempla
 }
 
 template <typename AlgTopoMatch, typename InsAlgTemplate0, typename InsAlgTemplate1, typename InsAlgTemplate2>
-uint64_t
-InsV2AllGatherSequenceExecutor3Level<AlgTopoMatch, InsAlgTemplate0, InsAlgTemplate1, InsAlgTemplate2>::GetRankSize(
-    const std::vector<std::vector<u32>>& vTopo)
-{
-    uint64_t count = 1;
-    for (const auto& i : vTopo) {
-        count *= i.size();
-    }
-    return count;
-}
-
-template <typename AlgTopoMatch, typename InsAlgTemplate0, typename InsAlgTemplate1, typename InsAlgTemplate2>
-HcclResult
-InsV2AllGatherSequenceExecutor3Level<AlgTopoMatch, InsAlgTemplate0, InsAlgTemplate1, InsAlgTemplate2>::GenTempResource(
-    int idx, TemplateResource& res) const
-{
-    res.channels = levels_[idx].channels;
-    res.threads = levels_[idx].threads;
-    return HCCL_SUCCESS;
-}
-
-template <typename AlgTopoMatch, typename InsAlgTemplate0, typename InsAlgTemplate1, typename InsAlgTemplate2>
-HcclResult InsV2AllGatherSequenceExecutor3Level<AlgTopoMatch, InsAlgTemplate0, InsAlgTemplate1, InsAlgTemplate2>::
-    PrepareResForTemplate(
-        InsAlgTemplate0& tempAlgLevel0, InsAlgTemplate1& tempAlgLevel1, InsAlgTemplate2& tempAlgLevel2)
-{
-    AlgResourceRequest Level0TempRequest;
-    AlgResourceRequest Level1TempRequest;
-    AlgResourceRequest Level2TempRequest;
-    tempAlgLevel0.GetRes(Level0TempRequest);
-    tempAlgLevel1.GetRes(Level1TempRequest);
-    tempAlgLevel2.GetRes(Level2TempRequest);
-
-    levels_[0].threads.assign(threads_.begin(), threads_.begin() + Level0TempRequest.slaveThreadNum + 1);
-    levels_[1].threads.assign(threads_.begin(), threads_.begin() + Level1TempRequest.slaveThreadNum + 1);
-    levels_[2].threads.assign(threads_.begin(), threads_.begin() + Level2TempRequest.slaveThreadNum + 1);
-    return HCCL_SUCCESS;
-}
-
-template <typename AlgTopoMatch, typename InsAlgTemplate0, typename InsAlgTemplate1, typename InsAlgTemplate2>
 HcclResult
 InsV2AllGatherSequenceExecutor3Level<AlgTopoMatch, InsAlgTemplate0, InsAlgTemplate1, InsAlgTemplate2>::OrchestrateLoop(
     const OpParam& param, const AlgResourceCtxSerializable& resCtx, InsAlgTemplate0& tempAlgLevel0,
     InsAlgTemplate1& tempAlgLevel1, InsAlgTemplate2& tempAlgLevel2)
 {
-    HCCL_INFO("[InsV2AllGatherParallelExecutor] AlgTemplate Level0 server is [%s]", tempAlgLevel0.Describe().c_str());
-    HCCL_INFO("[InsV2AllGatherParallelExecutor] AlgTemplate Level1 server is [%s]", tempAlgLevel1.Describe().c_str());
-    HCCL_INFO("[InsV2AllGatherParallelExecutor] AlgTemplate Level2 server is [%s]", tempAlgLevel2.Describe().c_str());
+    HCCL_INFO(
+        "[InsV2AllGatherSequenceExecutor3Level] AlgTemplate Level0 server is [%s]", tempAlgLevel0.Describe().c_str());
+    HCCL_INFO(
+        "[InsV2AllGatherSequenceExecutor3Level] AlgTemplate Level1 server is [%s]", tempAlgLevel1.Describe().c_str());
+    HCCL_INFO(
+        "[InsV2AllGatherSequenceExecutor3Level] AlgTemplate Level2 server is [%s]", tempAlgLevel2.Describe().c_str());
 
     u32 templateScratchMultiplierLevel1
         = tempAlgLevel1.CalcScratchMultiple(BufferType::HCCL_BUFFER, BufferType::HCCL_BUFFER);
@@ -331,18 +204,20 @@ InsV2AllGatherSequenceExecutor3Level<AlgTopoMatch, InsAlgTemplate0, InsAlgTempla
 
     if (maxCountPerLoop == 0) {
         HCCL_ERROR(
-            "[InsV2AllGatherParallelExecutor] myRank[%u] maxCountPerLoop is 0, "
+            "[InsV2AllGatherSequenceExecutor3Level] myRank[%u] maxCountPerLoop is 0, "
             "scratchMultiplier[%u] too large for cclBuffSize[%llu]",
-            totalScratchMultiple, scratchMemBlockSize);
+            myRank_, totalScratchMultiple, scratchMemBlockSize);
         return HCCL_E_INTERNAL;
     }
     u32 loopTimes = dataCount_ / maxCountPerLoop + ((dataCount_ % maxCountPerLoop == 0) ? 0 : 1);
 
+    const AgSeq3LevelCtx ctx = MakeCtx();
+
     TemplateResource Level2TempAlgRes, Level1TempAlgRes, Level0TempAlgRes;
     TemplateDataParams tempAlgParamsLevel2, tempAlgParamsLevel1, tempAlgParamsLevel0;
-    CHK_RET(GenTempResource(OMNIPIPE_LEVEL2_IDX, Level2TempAlgRes));
-    CHK_RET(GenTempResource(1, Level1TempAlgRes));
-    CHK_RET(GenTempResource(0, Level0TempAlgRes));
+    CHK_RET(AgSeq3LevelGenTempResource(levels_, 2, resCtx, Level2TempAlgRes));
+    CHK_RET(AgSeq3LevelGenTempResource(levels_, 1, resCtx, Level1TempAlgRes));
+    CHK_RET(AgSeq3LevelGenTempResource(levels_, 0, resCtx, Level0TempAlgRes));
 
     for (u32 loopIndex = 0; loopIndex < loopTimes; loopIndex++) {
         u64 currCount = (loopIndex == loopTimes - 1) ? (dataCount_ - loopIndex * maxCountPerLoop) : maxCountPerLoop;
@@ -353,18 +228,20 @@ InsV2AllGatherSequenceExecutor3Level<AlgTopoMatch, InsAlgTemplate0, InsAlgTempla
 
         // 数据1的server间的nhr算法
         if (!skipLevel1_) {
-            GenTemplateAlgParamsLevel1(param, resCtx, currCount, dataOffset, tempAlgParamsLevel1);
+            AgSeq3LevelGenLevel1Params(
+                ctx, param, resCtx, currCount, dataOffset, tempAlgParamsLevel1, "InsV2AllGatherSequenceExecutor3Level");
             CHK_RET(tempAlgLevel1.KernelRun(param, tempAlgParamsLevel1, Level1TempAlgRes));
         }
 
-        GenTemplateAlgParamsLevel0(param, resCtx, currCount, dataOffset, tempAlgParamsLevel0);
+        AgSeq3LevelGenLevel0Params(
+            ctx, param, resCtx, currCount, dataOffset, tempAlgParamsLevel0, "InsV2AllGatherSequenceExecutor3Level");
         CHK_RET(tempAlgLevel0.KernelRun(param, tempAlgParamsLevel0, Level0TempAlgRes));
         // 尾同步
     }
 
-    HCCL_INFO("[InsV2AllGatherParallelExecutor][OrchestrateLoop] End.");
+    HCCL_INFO("[InsV2AllGatherSequenceExecutor3Level][OrchestrateLoop] End.");
     return HcclResult::HCCL_SUCCESS;
-};
+}
 
 template <typename AlgTopoMatch, typename InsAlgTemplate0, typename InsAlgTemplate1, typename InsAlgTemplate2>
 void InsV2AllGatherSequenceExecutor3Level<AlgTopoMatch, InsAlgTemplate0, InsAlgTemplate1, InsAlgTemplate2>::
@@ -379,7 +256,6 @@ void InsV2AllGatherSequenceExecutor3Level<AlgTopoMatch, InsAlgTemplate0, InsAlgT
         tempAlgParamsLevel2.buffInfo.outBuffType = BufferType::OUTPUT;
         tempAlgParamsLevel2.buffInfo.outBuffBaseOff = rankIdxLevel1_ * dataSize_;
         tempAlgParamsLevel2.outputSliceStride = levels_[0].rankSize * levels_[1].rankSize * dataSize_;
-        ;
     } else {
         tempAlgParamsLevel2.buffInfo.outputPtr = resCtx.cclMem.addr;
         tempAlgParamsLevel2.buffInfo.outBuffType = BufferType::HCCL_BUFFER;
@@ -408,107 +284,6 @@ void InsV2AllGatherSequenceExecutor3Level<AlgTopoMatch, InsAlgTemplate0, InsAlgT
         myRank_, tempAlgParamsLevel2.buffInfo.inBuffBaseOff, tempAlgParamsLevel2.buffInfo.outBuffBaseOff,
         tempAlgParamsLevel2.buffInfo.hcclBuffBaseOff, tempAlgParamsLevel2.sliceSize,
         tempAlgParamsLevel2.outputSliceStride);
-    return;
-}
-
-template <typename AlgTopoMatch, typename InsAlgTemplate0, typename InsAlgTemplate1, typename InsAlgTemplate2>
-void InsV2AllGatherSequenceExecutor3Level<AlgTopoMatch, InsAlgTemplate0, InsAlgTemplate1, InsAlgTemplate2>::
-    GenTemplateAlgParamsLevel1(
-        const OpParam& param, const AlgResourceCtxSerializable& resCtx, const u64 curCount, const u64 dataOffset,
-        TemplateDataParams& tempAlgParamsLevel1) const
-{
-    tempAlgParamsLevel1.enableRemoteMemAccess = param.supportSymmetricMemory;
-    if (tempAlgParamsLevel1.enableRemoteMemAccess) {
-        tempAlgParamsLevel1.buffInfo.inputPtr = param.outputPtr;
-        tempAlgParamsLevel1.buffInfo.outputPtr = param.outputPtr;
-        tempAlgParamsLevel1.buffInfo.inBuffType = BufferType::OUTPUT;
-        tempAlgParamsLevel1.buffInfo.outBuffType = BufferType::OUTPUT;
-        tempAlgParamsLevel1.buffInfo.inBuffBaseOff = rankIdxLevel0_ * dataSize_;
-        tempAlgParamsLevel1.buffInfo.outBuffBaseOff = rankIdxLevel0_ * dataSize_;
-        tempAlgParamsLevel1.inputSliceStride = levels_[0].rankSize * dataSize_;
-        tempAlgParamsLevel1.outputSliceStride = levels_[0].rankSize * dataSize_;
-        tempAlgParamsLevel1.inputRepeatStride = levels_[0].rankSize * levels_[1].rankSize * dataSize_;
-        tempAlgParamsLevel1.outputRepeatStride = levels_[0].rankSize * levels_[1].rankSize * dataSize_;
-    } else {
-        tempAlgParamsLevel1.buffInfo.inputPtr = resCtx.cclMem.addr;
-        tempAlgParamsLevel1.buffInfo.outputPtr = resCtx.cclMem.addr;
-        tempAlgParamsLevel1.buffInfo.inBuffType = BufferType::HCCL_BUFFER;
-        tempAlgParamsLevel1.buffInfo.outBuffType = BufferType::HCCL_BUFFER;
-        tempAlgParamsLevel1.buffInfo.inBuffBaseOff = 0;
-        tempAlgParamsLevel1.buffInfo.outBuffBaseOff = 0;
-        tempAlgParamsLevel1.inputSliceStride = curCount * dataTypeSize_;
-        tempAlgParamsLevel1.outputSliceStride = curCount * dataTypeSize_;
-        tempAlgParamsLevel1.inputRepeatStride = curCount * dataTypeSize_ * levels_[1].rankSize;
-        tempAlgParamsLevel1.outputRepeatStride = curCount * dataTypeSize_ * levels_[1].rankSize;
-    }
-    tempAlgParamsLevel1.buffInfo.hcclBuff = resCtx.cclMem;
-    tempAlgParamsLevel1.buffInfo.hcclBuffType = BufferType::HCCL_BUFFER;
-    tempAlgParamsLevel1.buffInfo.inputSize = param.inputSize;
-    tempAlgParamsLevel1.buffInfo.outputSize = param.outputSize;
-    tempAlgParamsLevel1.buffInfo.hcclBuffBaseOff = 0;
-    tempAlgParamsLevel1.count = curCount;
-    tempAlgParamsLevel1.sliceSize = curCount * dataTypeSize_;
-    tempAlgParamsLevel1.tailSize = tempAlgParamsLevel1.sliceSize;
-    tempAlgParamsLevel1.repeatNum = levels_[2].rankSize;
-
-    HCCL_DEBUG(
-        "[InsV2AllGatherSequenceExecutor3Level][GenTemplateAlgParamsLevel10] rank[%u] inBuffBaseOff[%llu] "
-        "outBuffBaseOff[%llu] scratchBuffBaseOff[%llu] sliceSize[%llu] outputSliceStride[%llu] "
-        "outputRepeatStride[%llu]",
-        myRank_, tempAlgParamsLevel1.buffInfo.inBuffBaseOff, tempAlgParamsLevel1.buffInfo.outBuffBaseOff,
-        tempAlgParamsLevel1.buffInfo.hcclBuffBaseOff, tempAlgParamsLevel1.sliceSize,
-        tempAlgParamsLevel1.outputSliceStride, tempAlgParamsLevel1.outputRepeatStride);
-    return;
-}
-
-template <typename AlgTopoMatch, typename InsAlgTemplate0, typename InsAlgTemplate1, typename InsAlgTemplate2>
-void InsV2AllGatherSequenceExecutor3Level<AlgTopoMatch, InsAlgTemplate0, InsAlgTemplate1, InsAlgTemplate2>::
-    GenTemplateAlgParamsLevel0(
-        const OpParam& param, const AlgResourceCtxSerializable& resCtx, const u64 curCount, const u64 dataOffset,
-        TemplateDataParams& tempAlgParamsLevel0) const
-{
-    tempAlgParamsLevel0.enableRemoteMemAccess = param.supportSymmetricMemory;
-    if (tempAlgParamsLevel0.enableRemoteMemAccess) {
-        tempAlgParamsLevel0.buffInfo.inputPtr = param.outputPtr;
-        tempAlgParamsLevel0.buffInfo.inBuffType = BufferType::OUTPUT;
-        tempAlgParamsLevel0.buffInfo.inBuffBaseOff = dataOffset;
-    } else {
-        tempAlgParamsLevel0.buffInfo.inputPtr = resCtx.cclMem.addr;
-        tempAlgParamsLevel0.buffInfo.inBuffType = BufferType::HCCL_BUFFER;
-        tempAlgParamsLevel0.buffInfo.inBuffBaseOff = 0;
-    }
-    tempAlgParamsLevel0.buffInfo.outputPtr = param.outputPtr;
-    tempAlgParamsLevel0.buffInfo.hcclBuff = resCtx.cclMem;
-    tempAlgParamsLevel0.buffInfo.outBuffType = BufferType::OUTPUT;
-    tempAlgParamsLevel0.buffInfo.hcclBuffType = BufferType::HCCL_BUFFER;
-    tempAlgParamsLevel0.buffInfo.inputSize = param.inputSize;
-    tempAlgParamsLevel0.buffInfo.outputSize = param.outputSize;
-
-    tempAlgParamsLevel0.buffInfo.outBuffBaseOff = dataOffset;
-    tempAlgParamsLevel0.buffInfo.hcclBuffBaseOff = 0;
-    tempAlgParamsLevel0.count = curCount;
-    tempAlgParamsLevel0.sliceSize = curCount * dataTypeSize_;
-    tempAlgParamsLevel0.tailSize = tempAlgParamsLevel0.sliceSize;
-
-    tempAlgParamsLevel0.inputSliceStride = 0;
-    tempAlgParamsLevel0.outputSliceStride = dataSize_;
-    tempAlgParamsLevel0.repeatNum = levels_[1].rankSize * levels_[2].rankSize;
-    tempAlgParamsLevel0.inputRepeatStride = curCount * dataTypeSize_;
-    tempAlgParamsLevel0.outputRepeatStride = levels_[0].rankSize * dataSize_;
-    if (tempAlgParamsLevel0.enableRemoteMemAccess) {
-        tempAlgParamsLevel0.inputSliceStride = dataSize_;
-        tempAlgParamsLevel0.inputRepeatStride = levels_[0].rankSize * dataSize_;
-    }
-
-    HCCL_DEBUG(
-        "[InsV2AllGatherSequenceExecutor3Level][GenTemplateAlgParamsLevel0] rank[%d] inBuffBaseOff[%llu] "
-        "outBuffBaseOff[%llu] scratchBuffBaseOff[%llu] sliceSize[%llu] outputSliceStride[%llu] levels_[0].rankSize[%u] "
-        "levels_[1].rankSize[%u] rankIdxLevel0[%u] rankIdxLevel1[%u]",
-        myRank_, tempAlgParamsLevel0.buffInfo.inBuffBaseOff, tempAlgParamsLevel0.buffInfo.outBuffBaseOff,
-        tempAlgParamsLevel0.buffInfo.hcclBuffBaseOff, tempAlgParamsLevel0.sliceSize,
-        tempAlgParamsLevel0.outputSliceStride, levels_[0].rankSize, levels_[1].rankSize, rankIdxLevel0_,
-        rankIdxLevel1_);
-    return;
 }
 
 REGISTER_EXEC_V2_MULTI(
