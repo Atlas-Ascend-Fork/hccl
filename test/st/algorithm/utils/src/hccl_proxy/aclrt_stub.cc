@@ -14,6 +14,9 @@
 #include <iostream>
 #include <mutex>
 #include <set>
+#include <cstring>
+#include <memory>
+#include "securec.h"
 #include "acl/acl_rt.h"
 #include "acl/acl_base.h"
 #include "hccl/hccl_types.h"
@@ -34,6 +37,7 @@ namespace {
 // (ST 各 rank 在独立 std::thread 中并发调用, 需加锁)
 std::mutex g_stubMallocMutex;
 std::set<void*> g_stubMallocPtrs;
+char g_aicpuKernelHandle;
 
 // SimWorld无真实context对象，句柄直接按deviceId编码（+1避开device 0编码为nullptr），使context桩
 // 对齐真实ACL语义：context携带device绑定，跨线程传递句柄即传递device归属。CommWorker将发起线程
@@ -250,8 +254,10 @@ aclError aclrtBinaryUnLoad(aclrtBinHandle binHandle)
 
 aclError aclrtBinaryGetFunction(const aclrtBinHandle binHandle, const char* kernelName, aclrtFuncHandle* funcHandle)
 {
-    // AICPU模式直掉kernel函数, 不使用funcHandle, 桩函数直接返回成功
-    HCCL_WARNING("[%s] not support.", __func__);
+    if (kernelName == nullptr || funcHandle == nullptr) {
+        return ACL_ERROR_INVALID_PARAM;
+    }
+    *funcHandle = std::strcmp(kernelName, "HcclLaunchAicpuKernel") == 0 ? &g_aicpuKernelHandle : nullptr;
     return ACL_SUCCESS;
 }
 
@@ -378,7 +384,27 @@ aclError aclrtLaunchKernelWithHostArgs(
     aclrtFuncHandle funcHandle, uint32_t blockDim, aclrtStream stream, aclrtLaunchKernelCfg* cfg, void* hostArgs,
     size_t argsSize, aclrtPlaceHolderInfo* placeHolderArray, size_t placeHolderNum)
 {
-    HCCL_WARNING("[%s] not support.", __func__);
+    if (funcHandle != &g_aicpuKernelHandle) {
+        HCCL_WARNING("[%s] not support.", __func__);
+        return ACL_SUCCESS;
+    }
+    if (hostArgs == nullptr || stream == nullptr || argsSize < sizeof(OpParam)) {
+        return ACL_ERROR_INVALID_PARAM;
+    }
+    const auto* param = static_cast<const OpParam*>(hostArgs);
+    if (param->varMemSize > argsSize - sizeof(OpParam)) {
+        return ACL_ERROR_INVALID_PARAM;
+    }
+
+    // Match Runtime's argument copy: the kernel may restore pointers in its own OpParam copy.
+    std::unique_ptr<void, decltype(&free)> argsCopy(malloc(argsSize), &free);
+    if (argsCopy == nullptr) {
+        return ACL_ERROR_INTERNAL_ERROR;
+    }
+    if (memcpy_s(argsCopy.get(), argsSize, hostArgs, argsSize) != EOK) {
+        return ACL_ERROR_INTERNAL_ERROR;
+    }
+    HcclLaunchAicpuKernel(static_cast<OpParam*>(argsCopy.get()));
     return ACL_SUCCESS;
 }
 

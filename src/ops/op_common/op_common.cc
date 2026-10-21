@@ -1171,7 +1171,6 @@ HcclResult AicpuKernelLaunch(HcclComm comm, OpParam& param, ThreadHandle unfoldT
     param.opConfig.enableEntryLog = GetExternalInputHcclEnableEntryLog() || (GetDebugConfig() & HCCL_ALG) != 0;
     std::string kernelName = "HcclLaunchAicpuKernel";
     aclrtFuncHandle funcHandle;
-    aclrtArgsHandle argsHandle;
     // 注意，目前开源HCCL加载AICPU kernel使用的是从json文件加载
     // 详见load_kernel.cc中的LoadAICPUKernel函数，且只实现了scatter的，先共用scatter的
     aclError ret
@@ -1183,33 +1182,6 @@ HcclResult AicpuKernelLaunch(HcclComm comm, OpParam& param, ThreadHandle unfoldT
             "kernelName:%s",
             ret, kernelName.c_str()),
         HCCL_E_RUNTIME);
-    ret = aclrtKernelArgsInit(funcHandle, &argsHandle);
-    CHK_PRT_RET(
-        ret != ACL_SUCCESS,
-        HCCL_ERROR(
-            "[aclrtKernelArgsInit]errNo[0x%016llx] args init failed, "
-            "kernelName:%s",
-            ret, kernelName.c_str()),
-        HCCL_E_RUNTIME);
-    aclrtParamHandle paraHandle;
-    size_t paramSize = sizeof(OpParam) + param.varMemSize;
-    ret = aclrtKernelArgsAppend(argsHandle, &param, paramSize, &paraHandle);
-    CHK_PRT_RET(
-        ret != ACL_SUCCESS,
-        HCCL_ERROR(
-            "[aclrtKernelArgsAppend]errNo[0x%016llx] args append failed, append "
-            "size %u, kernelName:%s",
-            ret, paramSize, kernelName.c_str()),
-        HCCL_E_RUNTIME);
-    ret = aclrtKernelArgsFinalize(argsHandle);
-    CHK_PRT_RET(
-        ret != ACL_SUCCESS,
-        HCCL_ERROR(
-            "[aclrtKernelArgsFinalize]errNo[0x%016llx] args finalize failed, "
-            "kernelName:%s",
-            ret, kernelName.c_str()),
-        HCCL_E_RUNTIME);
-
     AicpuTimeout timeout = DeriveAicpuTimeout(param.opConfig.execTimeout);
     u16 kernelLaunchTimeout
         = IsHcommDefaultTimeoutSupported() ?
@@ -1225,13 +1197,15 @@ HcclResult AicpuKernelLaunch(HcclComm comm, OpParam& param, ThreadHandle unfoldT
     HCCL_INFO("[AicpuKernelLaunch] unfoldThread [%lu]", unfoldThread);
     aclrtStream unfoldStream;
     CHK_RET(GetUnfoldStream(comm, param, unfoldThread, unfoldStream));
-    ret = aclrtLaunchKernelWithConfig(funcHandle, numBlocks, unfoldStream, &cfg, argsHandle, nullptr);
+    // Runtime copies the host arguments before returning, including OpParam's trailing variable data.
+    const size_t paramSize = sizeof(OpParam) + param.varMemSize;
+    ret = aclrtLaunchKernelWithHostArgs(funcHandle, numBlocks, unfoldStream, &cfg, &param, paramSize, nullptr, 0);
     CHK_PRT_RET(
         ret != ACL_SUCCESS,
         HCCL_ERROR(
-            "[LoadCustomKernel][aclrtLaunchKernelWithConfig]"
-            "errNo[0x%016llx] launch kernel failed",
-            ret),
+            "[LoadCustomKernel][aclrtLaunchKernelWithHostArgs]"
+            "errNo[0x%016llx] launch kernel failed, argsSize[%zu]",
+            ret, paramSize),
         HCCL_E_OPEN_FILE_FAILURE);
     return HCCL_SUCCESS;
 }
