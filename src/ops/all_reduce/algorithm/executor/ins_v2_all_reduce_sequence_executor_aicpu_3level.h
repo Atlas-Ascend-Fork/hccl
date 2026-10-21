@@ -25,6 +25,7 @@
 #include "topo_match_base_v2.h"
 #include "topo_match_two_level.h"
 #include "topo_match_three_level.h"
+#include "ins_v2_all_reduce_sequence_3level_utils.h"
 #include <type_traits>
 
 namespace ops_hccl {
@@ -32,7 +33,7 @@ namespace ops_hccl {
 template <
     typename AlgTopoMatch, typename InsAlgTemplate0, typename InsAlgTemplate1, typename InsAlgTemplate2,
     typename InsAlgTemplate3, typename InsAlgTemplate4, typename InsAlgTemplate5>
-class InsV2AllReduceSequenceExecutorAicpu3Level : public InsCollAlgBase {
+class InsV2AllReduceSequenceExecutorAicpu3Level : public InsV2AllReduceSequence3LevelBase {
 public:
     explicit InsV2AllReduceSequenceExecutorAicpu3Level();
     ~InsV2AllReduceSequenceExecutorAicpu3Level() override = default;
@@ -56,56 +57,16 @@ public:
 protected:
     /* *************** 算法编排 *************** */
     HcclResult OrchestrateLoop(const OpParam& param, const AlgResourceCtxSerializable& resCtx);
-    HcclResult InitCommInfo(
-        const OpParam& param, const TopoInfoWithNetLayerDetails* topoInfo,
-        const AlgHierarchyInfoForAllLevel& algHierarchyInfo);
-    void GenBaseTempAlgParams(
-        const OpParam& param, const AlgResourceCtxSerializable& resCtx, TemplateDataParams& tempAlgParamsRSL0,
-        TemplateDataParams& tempAlgParamsRSL1, TemplateDataParams& tempAlgParamsRSL2,
-        TemplateDataParams& tempAlgParamsAGL2, TemplateDataParams& tempAlgParamsAGL1,
-        TemplateDataParams& tempAlgParamsAGL0) const;
-    void GenTempAlgParamsRSL0(
-        const u64 loop, const u64 currDataCount, const u64 processedDataCount,
-        TemplateDataParams& tempAlgParamsRSL0) const;
-    void GenTempAlgParamsRSL1(
-        const u64 loop, const u64 currDataCount, const u64 sliceSizeRSL0, const u64 tailSizeRSL0,
-        const u64 processedDataCount, TemplateDataParams& tempAlgParamsRSL1) const;
     void GenTempAlgParamsRSL2(
         const u64 loop, const u64 currDataCount, const u64 sliceSizeRSL1, const u64 tailSizeRSL1,
         const u64 symMemBaseOffRSL1, TemplateDataParams& tempAlgParamsRSL2) const;
     void GenTempAlgParamsAGL2(
         const u64 loop, const u64 currDataCount, const u64 sliceSizeRSL2, const u64 tailSizeRSL2,
         const u64 sliceSizeRSL1, const u64 symMemBaseOffRSL1, TemplateDataParams& tempAlgParamsAGL2) const;
-    void GenTempAlgParamsAGL1(
-        const u64 loop, const u64 currDataCount, const u64 sliceSize, const u64 tailSize, const u64 symMemBaseOff,
-        TemplateDataParams& tempAlgParamsAGL1) const;
-    void GenTempAlgParamsAGL0(
-        const u64 loop, const u64 currDataCount, const u64 processedDataCount, const u64 sliceSize, const u64 tailSize,
-        const u64 symMemBaseOff, TemplateDataParams& tempAlgParamsAGL0) const;
     template <typename InsAlgTemplate>
     HcclResult GenTempResource(
         const AlgResourceCtxSerializable& resCtx, const u32 channelLevelIdx,
         const std::shared_ptr<InsAlgTemplate>& algTemplate, TemplateResource& tempResource) const;
-
-    uint64_t rankSizeLevel0_{0};
-    uint64_t rankSizeLevel1_{0};
-    uint64_t rankSizeLevel2_{0};
-
-    uint64_t rankIdxLevel0_{0};
-    uint64_t rankIdxLevel1_{0};
-    uint64_t rankIdxLevel2_{0};
-
-    bool skipLevel1_{false};
-
-    uint64_t cclBuffSliceSize_{0};   // CCL buffer每份slice大小（切分为scratchMultiplier+1份）
-    uint64_t rsResultBuffSize_{0};   // ReduceScatter归约结果存储区大小（第1份）
-    uint64_t meshCommBuffSize_{0};   // Mesh1D通信交换区大小（后scratchMultiplier份）
-    uint64_t rsResultBuffOffset_{0}; // RS归约结果存储区起始offset
-    uint64_t meshCommBuffOffset_{0}; // Mesh1D通信交换区起始offset
-
-    AlgHierarchyInfoForAllLevel algHierarchyInfo_;
-    std::vector<std::map<u32, std::vector<ChannelInfo>>> remoteRankToChannelInfo_;
-    std::vector<ThreadHandle> threads_;
 };
 } // namespace ops_hccl
 

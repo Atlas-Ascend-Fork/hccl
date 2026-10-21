@@ -55,7 +55,12 @@ std::vector<CostModelParam> InsV2AllReduceSequenceExecutorAicpu3Level<
         {});
     std::vector<std::vector<CommTopo>> phyLevelNetTypes(physIdx.size());
     std::vector<std::vector<std::vector<u32>>> phyLevelPortNums(physIdx.size());
-    AppendPhysicalLevelInfo(topoInfo, physIdx, phyLevelNetTypes, phyLevelPortNums);
+    for (u32 lvl = 0; lvl < physIdx.size(); lvl++) {
+        for (PhysicalLevelIndex phyIdx : physIdx[lvl]) {
+            phyLevelNetTypes[lvl].push_back(GetPhysicalLevelTopoType(topoInfo, static_cast<u32>(phyIdx)));
+            phyLevelPortNums[lvl].push_back(GetPhysicalLevelPortNums(topoInfo, static_cast<u32>(phyIdx)));
+        }
+    }
     CommTopo netTypeLevel0 = phyLevelNetTypes[0][0];
     CommTopo netTypeLevel1 = phyLevelNetTypes[1][0];
     CommTopo netTypeLevel2 = phyLevelNetTypes[2][0];
@@ -170,25 +175,6 @@ template <
 HcclResult InsV2AllReduceSequenceExecutorAicpu3Level<
     AlgTopoMatch, InsAlgTemplate0, InsAlgTemplate1, InsAlgTemplate2, InsAlgTemplate3, InsAlgTemplate4,
     InsAlgTemplate5>::
-    InitCommInfo(
-        const OpParam& param, const TopoInfoWithNetLayerDetails* topoInfo,
-        const AlgHierarchyInfoForAllLevel& algHierarchyInfo)
-{
-    InitRankAndDataInfo(param, topoInfo);
-
-    algHierarchyInfo_ = algHierarchyInfo;
-    HCCL_INFO(
-        "[InsV2AllReduceSequenceExecutorAicpu3Level][InitCommInfo] myRank [%u], rankSize [%u], redOp [%u], "
-        "dataType [%u] dataTypeSize [%u]",
-        myRank_, rankSize_, reduceOp_, dataType_, dataTypeSize_);
-    return HCCL_SUCCESS;
-}
-template <
-    typename AlgTopoMatch, typename InsAlgTemplate0, typename InsAlgTemplate1, typename InsAlgTemplate2,
-    typename InsAlgTemplate3, typename InsAlgTemplate4, typename InsAlgTemplate5>
-HcclResult InsV2AllReduceSequenceExecutorAicpu3Level<
-    AlgTopoMatch, InsAlgTemplate0, InsAlgTemplate1, InsAlgTemplate2, InsAlgTemplate3, InsAlgTemplate4,
-    InsAlgTemplate5>::
     CalcAlgHierarchyInfoV2(
         TopoInfoWithNetLayerDetails* topoInfo, AlgHierarchyInfoForAllLevel& algHierarchyInfo, const AlgAttrs& algAttrs)
 {
@@ -207,7 +193,7 @@ HcclResult InsV2AllReduceSequenceExecutorAicpu3Level<
         HcclComm comm, const OpParam& param, const TopoInfoWithNetLayerDetails* topoInfo,
         const AlgHierarchyInfoForAllLevel& algHierarchyInfo, AlgResourceRequest& resourceRequest)
 {
-    InitCommInfo(param, topoInfo, algHierarchyInfo);
+    SequenceInitCommInfo(param, topoInfo, algHierarchyInfo, "InsV2AllReduceSequenceExecutorAicpu3Level");
     if (algHierarchyInfo.infos.size() != SEQUENCE_EXECUTOR_LEVEL_NUM) {
         HCCL_ERROR(
             "[InsV2AllReduceSequenceExecutorAicpu3Level] algHierarchyInfo size should be %u",
@@ -364,123 +350,6 @@ template <
 void InsV2AllReduceSequenceExecutorAicpu3Level<
     AlgTopoMatch, InsAlgTemplate0, InsAlgTemplate1, InsAlgTemplate2, InsAlgTemplate3, InsAlgTemplate4,
     InsAlgTemplate5>::
-    GenBaseTempAlgParams(
-        const OpParam& param, const AlgResourceCtxSerializable& resCtx, TemplateDataParams& tempAlgParamsRSL0,
-        TemplateDataParams& tempAlgParamsRSL1, TemplateDataParams& tempAlgParamsRSL2,
-        TemplateDataParams& tempAlgParamsAGL2, TemplateDataParams& tempAlgParamsAGL1,
-        TemplateDataParams& tempAlgParamsAGL0) const
-{
-    SetTemplateBuffInfo(
-        tempAlgParamsRSL0, BufferType::INPUT, BufferType::HCCL_BUFFER, param.inputPtr, resCtx.cclMem.addr,
-        resCtx.cclMem);
-
-    SetTemplateBuffInfo(
-        tempAlgParamsRSL1, BufferType::HCCL_BUFFER, BufferType::HCCL_BUFFER, resCtx.cclMem.addr, resCtx.cclMem.addr,
-        resCtx.cclMem);
-
-    SetTemplateBuffInfo(
-        tempAlgParamsRSL2, BufferType::HCCL_BUFFER, BufferType::HCCL_BUFFER, resCtx.cclMem.addr, resCtx.cclMem.addr,
-        resCtx.cclMem);
-
-    SetTemplateBuffInfo(
-        tempAlgParamsAGL2, BufferType::HCCL_BUFFER, BufferType::HCCL_BUFFER, resCtx.cclMem.addr, resCtx.cclMem.addr,
-        resCtx.cclMem);
-
-    SetTemplateBuffInfo(
-        tempAlgParamsAGL1, BufferType::HCCL_BUFFER, BufferType::HCCL_BUFFER, resCtx.cclMem.addr, resCtx.cclMem.addr,
-        resCtx.cclMem);
-
-    SetTemplateBuffInfo(
-        tempAlgParamsAGL0, BufferType::HCCL_BUFFER, BufferType::OUTPUT, resCtx.cclMem.addr, param.outputPtr,
-        resCtx.cclMem);
-    return;
-}
-
-template <
-    typename AlgTopoMatch, typename InsAlgTemplate0, typename InsAlgTemplate1, typename InsAlgTemplate2,
-    typename InsAlgTemplate3, typename InsAlgTemplate4, typename InsAlgTemplate5>
-void InsV2AllReduceSequenceExecutorAicpu3Level<
-    AlgTopoMatch, InsAlgTemplate0, InsAlgTemplate1, InsAlgTemplate2, InsAlgTemplate3, InsAlgTemplate4,
-    InsAlgTemplate5>::
-    GenTempAlgParamsRSL0(
-        const u64 loop, const u64 currDataCount, const u64 processedDataCount,
-        TemplateDataParams& tempAlgParamsRSL0) const
-{
-    tempAlgParamsRSL0.count = currDataCount;
-    tempAlgParamsRSL0.buffInfo.inBuffBaseOff = processedDataCount * dataTypeSize_;
-    tempAlgParamsRSL0.buffInfo.outBuffBaseOff
-        = supportSymmetricMemory_ ? processedDataCount * dataTypeSize_ : rsResultBuffOffset_;
-    tempAlgParamsRSL0.buffInfo.hcclBuffBaseOff = meshCommBuffOffset_;
-
-    tempAlgParamsRSL0.sliceSize = currDataCount / rankSizeLevel0_ * dataTypeSize_;
-    tempAlgParamsRSL0.tailSize = (currDataCount / rankSizeLevel0_ + currDataCount % rankSizeLevel0_) * dataTypeSize_;
-
-    tempAlgParamsRSL0.inputSliceStride = tempAlgParamsRSL0.sliceSize;
-    tempAlgParamsRSL0.outputSliceStride = supportSymmetricMemory_ ? tempAlgParamsRSL0.sliceSize : 0;
-
-    HCCL_INFO(
-        "[InsV2AllReduceSequenceExecutorAicpu3Level] loop [%u] RSL0.inputSliceStride [%u], "
-        "RSL0.outputSliceStride [%u], RSL0.sliceSize [%u], RSL0.tailSize [%u], "
-        "RSL0.inBuffBaseOff [%u], RSL0.outBuffBaseOff [%u]",
-        loop, tempAlgParamsRSL0.inputSliceStride, tempAlgParamsRSL0.outputSliceStride, tempAlgParamsRSL0.sliceSize,
-        tempAlgParamsRSL0.tailSize, tempAlgParamsRSL0.buffInfo.inBuffBaseOff,
-        tempAlgParamsRSL0.buffInfo.outBuffBaseOff);
-
-    tempAlgParamsRSL0.repeatNum = 1;
-    tempAlgParamsRSL0.inputRepeatStride = 0;
-    tempAlgParamsRSL0.outputRepeatStride = 0;
-    return;
-}
-
-template <
-    typename AlgTopoMatch, typename InsAlgTemplate0, typename InsAlgTemplate1, typename InsAlgTemplate2,
-    typename InsAlgTemplate3, typename InsAlgTemplate4, typename InsAlgTemplate5>
-void InsV2AllReduceSequenceExecutorAicpu3Level<
-    AlgTopoMatch, InsAlgTemplate0, InsAlgTemplate1, InsAlgTemplate2, InsAlgTemplate3, InsAlgTemplate4,
-    InsAlgTemplate5>::
-    GenTempAlgParamsRSL1(
-        const u64 loop, const u64 currDataCount, const u64 sliceSizeRSL0, const u64 tailSizeRSL0,
-        const u64 processedDataCount, TemplateDataParams& tempAlgParamsRSL1) const
-{
-    tempAlgParamsRSL1.count = currDataCount;
-    if (rankIdxLevel0_ == rankSizeLevel0_ - 1) {
-        u64 tailCountRSL0 = tailSizeRSL0 / dataTypeSize_;
-        tempAlgParamsRSL1.sliceSize = tailCountRSL0 / rankSizeLevel1_ * dataTypeSize_;
-        tempAlgParamsRSL1.tailSize = tempAlgParamsRSL1.sliceSize + tailCountRSL0 % rankSizeLevel1_ * dataTypeSize_;
-    } else {
-        u64 sliceCountRSL0 = sliceSizeRSL0 / dataTypeSize_;
-        tempAlgParamsRSL1.sliceSize = sliceCountRSL0 / rankSizeLevel1_ * dataTypeSize_;
-        tempAlgParamsRSL1.tailSize = tempAlgParamsRSL1.sliceSize + sliceCountRSL0 % rankSizeLevel1_ * dataTypeSize_;
-    }
-    u64 symMemBaseOff
-        = supportSymmetricMemory_ ? processedDataCount * dataTypeSize_ + rankIdxLevel0_ * sliceSizeRSL0 : 0;
-    tempAlgParamsRSL1.buffInfo.inBuffBaseOff = symMemBaseOff;
-    tempAlgParamsRSL1.buffInfo.outBuffBaseOff = symMemBaseOff;
-    tempAlgParamsRSL1.buffInfo.hcclBuffBaseOff = 0;
-
-    tempAlgParamsRSL1.inputSliceStride = tempAlgParamsRSL1.sliceSize;
-    tempAlgParamsRSL1.outputSliceStride = tempAlgParamsRSL1.sliceSize;
-
-    HCCL_INFO(
-        "[InsV2AllReduceSequenceExecutorAicpu3Level] loop [%u] RSL1.inputSliceStride [%u], "
-        "RSL1.outputSliceStride [%u], RSL1.sliceSize [%u], RSL1.tailSize [%u], "
-        "RSL1.inBuffBaseOff [%u], RSL1.outBuffBaseOff [%u]",
-        loop, tempAlgParamsRSL1.inputSliceStride, tempAlgParamsRSL1.outputSliceStride, tempAlgParamsRSL1.sliceSize,
-        tempAlgParamsRSL1.tailSize, tempAlgParamsRSL1.buffInfo.inBuffBaseOff,
-        tempAlgParamsRSL1.buffInfo.outBuffBaseOff);
-
-    tempAlgParamsRSL1.repeatNum = 1;
-    tempAlgParamsRSL1.inputRepeatStride = 0;
-    tempAlgParamsRSL1.outputRepeatStride = 0;
-    return;
-}
-
-template <
-    typename AlgTopoMatch, typename InsAlgTemplate0, typename InsAlgTemplate1, typename InsAlgTemplate2,
-    typename InsAlgTemplate3, typename InsAlgTemplate4, typename InsAlgTemplate5>
-void InsV2AllReduceSequenceExecutorAicpu3Level<
-    AlgTopoMatch, InsAlgTemplate0, InsAlgTemplate1, InsAlgTemplate2, InsAlgTemplate3, InsAlgTemplate4,
-    InsAlgTemplate5>::
     GenTempAlgParamsRSL2(
         const u64 loop, const u64 currDataCount, const u64 sliceSizeRSL1, const u64 tailSizeRSL1,
         const u64 symMemBaseOffRSL1, TemplateDataParams& tempAlgParamsRSL2) const
@@ -559,77 +428,6 @@ void InsV2AllReduceSequenceExecutorAicpu3Level<
 template <
     typename AlgTopoMatch, typename InsAlgTemplate0, typename InsAlgTemplate1, typename InsAlgTemplate2,
     typename InsAlgTemplate3, typename InsAlgTemplate4, typename InsAlgTemplate5>
-void InsV2AllReduceSequenceExecutorAicpu3Level<
-    AlgTopoMatch, InsAlgTemplate0, InsAlgTemplate1, InsAlgTemplate2, InsAlgTemplate3, InsAlgTemplate4,
-    InsAlgTemplate5>::
-    GenTempAlgParamsAGL1(
-        const u64 loop, const u64 currDataCount, const u64 sliceSize, const u64 tailSize, const u64 symMemBaseOff,
-        TemplateDataParams& tempAlgParamsAGL1) const
-{
-    tempAlgParamsAGL1.count = currDataCount;
-    u64 baseOff = supportSymmetricMemory_ ? symMemBaseOff : 0;
-    tempAlgParamsAGL1.buffInfo.inBuffBaseOff = baseOff;
-    tempAlgParamsAGL1.buffInfo.outBuffBaseOff = baseOff;
-    tempAlgParamsAGL1.buffInfo.hcclBuffBaseOff = 0;
-
-    tempAlgParamsAGL1.sliceSize = sliceSize;
-    tempAlgParamsAGL1.tailSize = tailSize;
-
-    tempAlgParamsAGL1.inputSliceStride = tempAlgParamsAGL1.sliceSize;
-    tempAlgParamsAGL1.outputSliceStride = tempAlgParamsAGL1.sliceSize;
-
-    HCCL_INFO(
-        "[InsV2AllReduceSequenceExecutorAicpu3Level] loop [%u] AGL1.inputSliceStride [%u], "
-        "AGL1.outputSliceStride [%u], AGL1.sliceSize [%u], AGL1.tailSize [%u], "
-        "AGL1.inBuffBaseOff [%u], AGL1.outBuffBaseOff [%u]",
-        loop, tempAlgParamsAGL1.inputSliceStride, tempAlgParamsAGL1.outputSliceStride, tempAlgParamsAGL1.sliceSize,
-        tempAlgParamsAGL1.tailSize, tempAlgParamsAGL1.buffInfo.inBuffBaseOff,
-        tempAlgParamsAGL1.buffInfo.outBuffBaseOff);
-
-    tempAlgParamsAGL1.repeatNum = 1;
-    tempAlgParamsAGL1.inputRepeatStride = 0;
-    tempAlgParamsAGL1.outputRepeatStride = 0;
-    return;
-}
-
-template <
-    typename AlgTopoMatch, typename InsAlgTemplate0, typename InsAlgTemplate1, typename InsAlgTemplate2,
-    typename InsAlgTemplate3, typename InsAlgTemplate4, typename InsAlgTemplate5>
-void InsV2AllReduceSequenceExecutorAicpu3Level<
-    AlgTopoMatch, InsAlgTemplate0, InsAlgTemplate1, InsAlgTemplate2, InsAlgTemplate3, InsAlgTemplate4,
-    InsAlgTemplate5>::
-    GenTempAlgParamsAGL0(
-        const u64 loop, const u64 currDataCount, const u64 processedDataCount, const u64 sliceSize, const u64 tailSize,
-        const u64 symMemBaseOff, TemplateDataParams& tempAlgParamsAGL0) const
-{
-    tempAlgParamsAGL0.count = currDataCount;
-    tempAlgParamsAGL0.buffInfo.inBuffBaseOff = supportSymmetricMemory_ ? symMemBaseOff : 0;
-    tempAlgParamsAGL0.buffInfo.outBuffBaseOff = processedDataCount * dataTypeSize_;
-    tempAlgParamsAGL0.buffInfo.hcclBuffBaseOff = 0;
-
-    tempAlgParamsAGL0.sliceSize = sliceSize;
-    tempAlgParamsAGL0.tailSize = tailSize;
-
-    tempAlgParamsAGL0.inputSliceStride = 0;
-    tempAlgParamsAGL0.outputSliceStride = tempAlgParamsAGL0.sliceSize;
-
-    HCCL_INFO(
-        "[InsV2AllReduceSequenceExecutorAicpu3Level] loop [%u] AGL0.inputSliceStride [%u], "
-        "AGL0.outputSliceStride [%u], AGL0.sliceSize [%u], AGL0.tailSize [%u], "
-        "AGL0.inBuffBaseOff [%u], AGL0.outBuffBaseOff [%u]",
-        loop, tempAlgParamsAGL0.inputSliceStride, tempAlgParamsAGL0.outputSliceStride, tempAlgParamsAGL0.sliceSize,
-        tempAlgParamsAGL0.tailSize, tempAlgParamsAGL0.buffInfo.inBuffBaseOff,
-        tempAlgParamsAGL0.buffInfo.outBuffBaseOff);
-
-    tempAlgParamsAGL0.repeatNum = 1;
-    tempAlgParamsAGL0.inputRepeatStride = 0;
-    tempAlgParamsAGL0.outputRepeatStride = 0;
-    return;
-}
-
-template <
-    typename AlgTopoMatch, typename InsAlgTemplate0, typename InsAlgTemplate1, typename InsAlgTemplate2,
-    typename InsAlgTemplate3, typename InsAlgTemplate4, typename InsAlgTemplate5>
 template <typename InsAlgTemplate>
 HcclResult InsV2AllReduceSequenceExecutorAicpu3Level<
     AlgTopoMatch, InsAlgTemplate0, InsAlgTemplate1, InsAlgTemplate2, InsAlgTemplate3, InsAlgTemplate4,
@@ -667,7 +465,7 @@ HcclResult InsV2AllReduceSequenceExecutorAicpu3Level<
     TemplateDataParams tempAlgParamsAGL2;
     TemplateDataParams tempAlgParamsAGL1;
     TemplateDataParams tempAlgParamsAGL0;
-    GenBaseTempAlgParams(
+    ArSeq3LevelGenBaseBuffInfo(
         param, resCtx, tempAlgParamsRSL0, tempAlgParamsRSL1, tempAlgParamsRSL2, tempAlgParamsAGL2, tempAlgParamsAGL1,
         tempAlgParamsAGL0);
 
@@ -789,7 +587,9 @@ HcclResult InsV2AllReduceSequenceExecutorAicpu3Level<
         }
 
         // ----------- RSL0: level0 ReduceScatter -----------
-        GenTempAlgParamsRSL0(loop, currDataCount, processedDataCount, tempAlgParamsRSL0);
+        ArSeq3LevelGenRSL0Params(
+            MakeArSeq3LevelCtx(), loop, currDataCount, processedDataCount, tempAlgParamsRSL0,
+            "InsV2AllReduceSequenceExecutorAicpu3Level");
         CHK_RET(algTemplateRSL0->KernelRun(param, tempAlgParamsRSL0, templateResourceRSL0));
 
         // ----------- RSL1: level1 ReduceScatter -----------
@@ -797,9 +597,9 @@ HcclResult InsV2AllReduceSequenceExecutorAicpu3Level<
         u64 tailSizeRSL1 = tempAlgParamsRSL0.tailSize;
         u64 symMemBaseOffRSL1 = 0;
         if (!skipLevel1_) {
-            GenTempAlgParamsRSL1(
-                loop, currDataCount, tempAlgParamsRSL0.sliceSize, tempAlgParamsRSL0.tailSize, processedDataCount,
-                tempAlgParamsRSL1);
+            ArSeq3LevelGenRSL1Params(
+                MakeArSeq3LevelCtx(), loop, currDataCount, tempAlgParamsRSL0.sliceSize, tempAlgParamsRSL0.tailSize,
+                processedDataCount, tempAlgParamsRSL1, "InsV2AllReduceSequenceExecutorAicpu3Level");
             CHK_RET(algTemplateRSL1->KernelRun(param, tempAlgParamsRSL1, templateResourceRSL1));
             sliceSizeRSL1 = tempAlgParamsRSL1.sliceSize;
             tailSizeRSL1 = tempAlgParamsRSL1.tailSize;
@@ -835,15 +635,17 @@ HcclResult InsV2AllReduceSequenceExecutorAicpu3Level<
 
         // ----------- AGL1: level1 AllGather -----------
         if (!skipLevel1_) {
-            GenTempAlgParamsAGL1(
-                loop, currDataCount, sliceSizeRSL1, tailSizeRSL1, symMemBaseOffRSL1, tempAlgParamsAGL1);
+            ArSeq3LevelGenAGL1Params(
+                MakeArSeq3LevelCtx(), loop, currDataCount, sliceSizeRSL1, tailSizeRSL1, symMemBaseOffRSL1,
+                tempAlgParamsAGL1, "InsV2AllReduceSequenceExecutorAicpu3Level");
             CHK_RET(algTemplateAGL1->KernelRun(param, tempAlgParamsAGL1, templateResourceAGL1));
         }
 
         // ----------- AGL0: level0 AllGather -----------
-        GenTempAlgParamsAGL0(
-            loop, currDataCount, processedDataCount, tempAlgParamsRSL0.sliceSize, tempAlgParamsRSL0.tailSize,
-            symMemBaseOffRSL1, tempAlgParamsAGL0);
+        ArSeq3LevelGenAGL0Params(
+            MakeArSeq3LevelCtx(), loop, currDataCount, processedDataCount, tempAlgParamsRSL0.sliceSize,
+            tempAlgParamsRSL0.tailSize, symMemBaseOffRSL1, tempAlgParamsAGL0,
+            "InsV2AllReduceSequenceExecutorAicpu3Level");
         CHK_RET(algTemplateAGL0->KernelRun(param, tempAlgParamsAGL0, templateResourceAGL0));
 
         processedDataCount += currDataCount;

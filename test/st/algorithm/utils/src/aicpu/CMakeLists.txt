@@ -284,6 +284,7 @@ add_library(hccl_aicpu_kernel SHARED
     ${HCCL_DEV_BASE}/src/ops/all_reduce/algorithm/executor/ins_v2_all_reduce_sequence_executor.cc
     ${HCCL_DEV_BASE}/src/ops/all_reduce/algorithm/executor/ins_v2_all_reduce_sequence_executor_aicpu.cc
     ${HCCL_DEV_BASE}/src/ops/all_reduce/algorithm/executor/ins_v2_all_reduce_sequence_executor_aicpu_3level.cc
+    ${HCCL_DEV_BASE}/src/ops/all_reduce/algorithm/executor/ins_v2_all_reduce_sequence_executor_dpu_3level.cc
 
     ${HCCL_DEV_BASE}/src/ops/all_reduce/algorithm/executor/ins_v2_all_reduce_two_shot_sole_executor.cc
     ${HCCL_DEV_BASE}/src/ops/all_reduce/algorithm/template/aicpu/ins_temp_all_reduce_mesh_1D_one_shot.cc

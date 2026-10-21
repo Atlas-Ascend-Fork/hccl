@@ -202,6 +202,7 @@ if(NOT HCCL_CANN_COMPAT_850)
         ${CMAKE_CURRENT_SOURCE_DIR}/ops/reduce/algorithm/template/aicpu/ins_temp_gather_dpu_inter.cc
         ${CMAKE_CURRENT_SOURCE_DIR}/ops/all_to_all_v/algorithm/template/aicpu/ins_temp_dpu_alltoall_mesh.cc
         ${CMAKE_CURRENT_SOURCE_DIR}/ops/all_reduce/algorithm/executor/ins_v2_all_reduce_sequence_executor.cc
+        ${CMAKE_CURRENT_SOURCE_DIR}/ops/all_reduce/algorithm/executor/ins_v2_all_reduce_sequence_executor_dpu_3level.cc
         ${CMAKE_CURRENT_SOURCE_DIR}/ops/all_reduce/algorithm/template/aicpu/ins_temp_reduce_scatter_mesh_1D_dpu_inter.cc
         ${CMAKE_CURRENT_SOURCE_DIR}/ops/all_reduce/algorithm/template/aicpu/ins_temp_all_gather_nhr_dpu_inter.cc
         ${CMAKE_CURRENT_SOURCE_DIR}/ops/send/algorithm/template/ins_temp_send_dpu.cc

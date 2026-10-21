@@ -22,6 +22,7 @@ protected:
         unsetenv("HCCL_OP_EXPANSION_MODE");
         unsetenv("HCCL_ENABLE_OPEN_AICPU");
         unsetenv("HCCL_INDEPENDENT_OP");
+        unsetenv("HCCL_ALGO");
     }
     static void SetUpTestCase() {}
     static void TearDownTestCase() {}
@@ -210,6 +211,59 @@ TEST_F(ST_ALL_REDUCE_DPU_TEST, omnipipe_dpu_3level_4x4x2_int32_16m)
     GenTopoMeta(topoMeta, 2, 4, 4);
     u64 dataCount = 25 * 1024 * 1024;
     HcclDataType dataType = HcclDataType::HCCL_DATA_TYPE_INT32;
+    HcclReduceOp reduceOp = HcclReduceOp::HCCL_REDUCE_SUM;
+    RunAllReduceOmniPipeDPU(topoMeta, dataCount, dataType, reduceOp);
+}
+
+// ========== 强制选中 3 级 DpuAllReduceSequenceMeshConcurNHRMesh ==========
+// 用 HCCL_ALGO=sequence{meshconcur,nhr,mesh} 触发 ConvergeHcclAlgoTier 硬收敛，
+// 排掉 priority=0 的 2 级 DpuAllReduceSequenceMeshNHR，使 3 级成为唯一候选。
+// 目标：逼出 R3/R1（缓冲区隔离）与 R10/R11（基址/数据路由）的正确性风险。
+
+// 最小数据量 fp32 count1 — 边界：d0=d1=d2=2, scratch 仅 1 槽
+TEST_F(ST_ALL_REDUCE_DPU_TEST, forced_3level_dpu_2x2x2_fp32_count1)
+{
+    setenv("HCCL_ALGO", "sequence{meshconcur,nhr,mesh}", 1);
+    TopoMeta topoMeta;
+    GenTopoMeta(topoMeta, 2, 2, 2);
+    u64 dataCount = 1;
+    HcclDataType dataType = HcclDataType::HCCL_DATA_TYPE_FP32;
+    HcclReduceOp reduceOp = HcclReduceOp::HCCL_REDUCE_SUM;
+    RunAllReduceOmniPipeDPU(topoMeta, dataCount, dataType, reduceOp);
+}
+
+// 小数据量 fp32 256 — 常规路径：scratch 有多槽
+TEST_F(ST_ALL_REDUCE_DPU_TEST, forced_3level_dpu_2x2x2_fp32_256)
+{
+    setenv("HCCL_ALGO", "sequence{meshconcur,nhr,mesh}", 1);
+    TopoMeta topoMeta;
+    GenTopoMeta(topoMeta, 2, 2, 2);
+    u64 dataCount = 256;
+    HcclDataType dataType = HcclDataType::HCCL_DATA_TYPE_FP32;
+    HcclReduceOp reduceOp = HcclReduceOp::HCCL_REDUCE_SUM;
+    RunAllReduceOmniPipeDPU(topoMeta, dataCount, dataType, reduceOp);
+}
+
+// int8 512 — 不同 dataType（R3 scratchMultiplier 随 dataType size 变化）
+TEST_F(ST_ALL_REDUCE_DPU_TEST, forced_3level_dpu_2x2x2_int8_512)
+{
+    setenv("HCCL_ALGO", "sequence{meshconcur,nhr,mesh}", 1);
+    TopoMeta topoMeta;
+    GenTopoMeta(topoMeta, 2, 2, 2);
+    u64 dataCount = 512;
+    HcclDataType dataType = HcclDataType::HCCL_DATA_TYPE_INT8;
+    HcclReduceOp reduceOp = HcclReduceOp::HCCL_REDUCE_SUM;
+    RunAllReduceOmniPipeDPU(topoMeta, dataCount, dataType, reduceOp);
+}
+
+// 4x4x2 拓扑 — 更大 rank（32 rank），测试 L2 级跨超节点路由
+TEST_F(ST_ALL_REDUCE_DPU_TEST, forced_3level_dpu_4x4x2_fp32_256)
+{
+    setenv("HCCL_ALGO", "sequence{meshconcur,nhr,mesh}", 1);
+    TopoMeta topoMeta;
+    GenTopoMeta(topoMeta, 2, 4, 4);
+    u64 dataCount = 256;
+    HcclDataType dataType = HcclDataType::HCCL_DATA_TYPE_FP32;
     HcclReduceOp reduceOp = HcclReduceOp::HCCL_REDUCE_SUM;
     RunAllReduceOmniPipeDPU(topoMeta, dataCount, dataType, reduceOp);
 }

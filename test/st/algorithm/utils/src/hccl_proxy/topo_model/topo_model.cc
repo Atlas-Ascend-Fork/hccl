@@ -356,6 +356,9 @@ void TopoModel::GetEndpointDesc(
         *descNum = static_cast<uint32_t>(dpuDesc_.size());
         for (size_t i = 0; i < dpuDesc_.size(); i++) {
             endpointDesc[i] = dpuDesc_[i];
+            if (!netLayerList_.empty() && layer < netLayerList_.back()) {
+                endpointDesc[i].loc.locType = EndpointLocType::ENDPOINT_LOC_TYPE_DEVICE;
+            }
         }
         return;
     }
