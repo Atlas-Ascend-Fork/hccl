@@ -14,7 +14,7 @@ Note: Each rank can have only one input.
 
 ## Sample Introduction
 
-You can click [Sample Link](https://gitcode.com/cann/hcomm/tree/master/examples/01_communicators/03_one_device_per_pthread) to obtain the complete sample code. This sample creates a communicator based on root node information and manages one AI server in a single process, where each NPU device is managed by one thread. The sample mainly includes the following functions:
+You can click [Sample Link](https://gitcode.com/cann/hcomm/tree/9.3.0-beta.1/examples/01_communicators/03_one_device_per_pthread) to obtain the complete sample code. This sample creates a communicator based on root node information and manages one AI server in a single process, where each NPU device is managed by one thread. The sample mainly includes the following functions:
 
 - Device detection: queries the number of available devices through the `aclrtGetDeviceCount()` API.
 - Uses rank0 as the root node and generates the rootInfo identification information of the root node through the `HcclGetRootInfo()` API.

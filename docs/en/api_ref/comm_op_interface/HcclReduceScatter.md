@@ -39,7 +39,7 @@ HcclResult HcclReduceScatter(void *sendBuf, void *recvBuf, uint64_t recvCount, H
 | sendBuf | Input | Address of the source data buffer. |
 | recvBuf | Output | Address of the destination data buffer. The collective communication result is output to this buffer. |
 | recvCount | Input | Data size of recvBuf participating in the ReduceScatter operation. The data size of sendBuf equals recvCount x rank size. |
-| dataType | Input | Data type of the ReduceScatter operation, of [HcclDataType](https://gitcode.com/cann/hcomm/blob/master/docs/en/api_ref/comm_mgr_c/data_type_definition/HcclDataType.md) type.<br>Different models support different data types. For details, see [dataType Description](#datatype-description).|
+| dataType | Input | Data type of the ReduceScatter operation, of [HcclDataType](https://gitcode.com/cann/hcomm/blob/9.3.0-beta.1/docs/en/api_ref/comm_mgr_c/data_type_definition/HcclDataType.md) type.<br>Different models support different data types. For details, see [dataType Description](#datatype-description).|
 | op | Input | Operation type of the Reduce operation.<br>Different models support different operation types. For details, see [op Description](#description).|
 | comm | Input | Communicator where the collective communication operation is performed. |
 | stream | Input | Stream used by this rank. |
@@ -79,7 +79,7 @@ HcclResult HcclReduceScatter(void *sendBuf, void *recvBuf, uint64_t recvCount, H
 
 ## Return Value
 
-[HcclResult](https://gitcode.com/cann/hcomm/blob/master/docs/en/api_ref/comm_mgr_c/data_type_definition/HcclResult.md)
+[HcclResult](https://gitcode.com/cann/hcomm/blob/9.3.0-beta.1/docs/en/api_ref/comm_mgr_c/data_type_definition/HcclResult.md)
 
 | Return Value | Description |
 | --- | --- |

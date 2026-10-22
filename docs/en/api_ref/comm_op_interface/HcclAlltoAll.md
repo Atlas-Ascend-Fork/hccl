@@ -40,10 +40,10 @@ HcclResult HcclAlltoAll(const void *sendBuf, uint64_t sendCount, HcclDataType se
 | --- | --- | --- |
 | sendBuf | Input | Address of the source data buffer. |
 | sendCount | Input | Amount of data sent to each rank. |
-| sendType | Input | Data type of the sent data, of [HcclDataType](https://gitcode.com/cann/hcomm/blob/master/docs/en/api_ref/comm_mgr_c/data_type_definition/HcclDataType.md) type.<br>Different models support different data types. For details, see [Supported Data Types](#supported-data-types).|
+| sendType | Input | Data type of the sent data, of [HcclDataType](https://gitcode.com/cann/hcomm/blob/9.3.0-beta.1/docs/en/api_ref/comm_mgr_c/data_type_definition/HcclDataType.md) type.<br>Different models support different data types. For details, see [Supported Data Types](#supported-data-types).|
 | recvBuf | Output | Address of the destination data buffer where the collective communication result is output.<br>recvBuf cannot have the same address as sendBuf, and their memory range cannot overlap. |
 | recvCount | Input | Amount of data received from each rank, which must be the same as sendCount. |
-| recvType | Input | Data type of the received data, of [HcclDataType](https://gitcode.com/cann/hcomm/blob/master/docs/en/api_ref/comm_mgr_c/data_type_definition/HcclDataType.md) type, which must be the same as sendType.|
+| recvType | Input | Data type of the received data, of [HcclDataType](https://gitcode.com/cann/hcomm/blob/9.3.0-beta.1/docs/en/api_ref/comm_mgr_c/data_type_definition/HcclDataType.md) type, which must be the same as sendType.|
 | comm | Input | Communicator where the collective communication operation is performed. |
 | stream | Input | Stream used by the current rank. |
 
@@ -67,7 +67,7 @@ HcclResult HcclAlltoAll(const void *sendBuf, uint64_t sendCount, HcclDataType se
 
 ## Return Value
 
-[HcclResult](https://gitcode.com/cann/hcomm/blob/master/docs/en/api_ref/comm_mgr_c/data_type_definition/HcclResult.md)
+[HcclResult](https://gitcode.com/cann/hcomm/blob/9.3.0-beta.1/docs/en/api_ref/comm_mgr_c/data_type_definition/HcclResult.md)
 
 | Return Value | Description |
 | --- | --- |

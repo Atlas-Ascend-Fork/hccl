@@ -39,7 +39,7 @@ HcclResult HcclAllReduce(void *sendBuf, void *recvBuf, uint64_t count, HcclDataT
 | sendBuf | Input | Pointer to the source data buffer. |
 | recvBuf | Output | Pointer to the destination data buffer. The collective communication result is output to this buffer. |
 | count | Input | Number of data units involved in the AllReduce operation. For example, `count` is `1` if only one int32 data unit is involved. |
-| dataType | Input | Data type of the AllReduce operation, of [HcclDataType](https://gitcode.com/cann/hcomm/blob/master/docs/en/api_ref/comm_mgr_c/data_type_definition/HcclDataType.md) type.<br>Different models support different data types. For details, see [dataType Description](#datatype-description).|
+| dataType | Input | Data type of the AllReduce operation, of [HcclDataType](https://gitcode.com/cann/hcomm/blob/9.3.0-beta.1/docs/en/api_ref/comm_mgr_c/data_type_definition/HcclDataType.md) type.<br>Different models support different data types. For details, see [dataType Description](#datatype-description).|
 | op | Input | Operation type of the Reduce operation.<br>Different models support different operation types. For details, see [op Description](#description).|
 | comm | Input | Communicator in which the collective communication operation is performed. |
 | stream | Input | Stream used by the current rank. |
@@ -82,7 +82,7 @@ HcclResult HcclAllReduce(void *sendBuf, void *recvBuf, uint64_t count, HcclDataT
 
 ## Return Value
 
-[HcclResult](https://gitcode.com/cann/hcomm/blob/master/docs/en/api_ref/comm_mgr_c/data_type_definition/HcclResult.md)
+[HcclResult](https://gitcode.com/cann/hcomm/blob/9.3.0-beta.1/docs/en/api_ref/comm_mgr_c/data_type_definition/HcclResult.md)
 
 | Return Value | Description |
 | --- | --- |

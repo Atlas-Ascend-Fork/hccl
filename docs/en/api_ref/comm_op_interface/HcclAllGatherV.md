@@ -46,7 +46,7 @@ HcclResult HcclAllGatherV(void *sendBuf, uint64_t sendCount, void *recvBuf, cons
 | recvBuf | Output | Address of the destination data buffer where the collective communication result is output.<br>The address configured for recvBuf cannot be the same as that for sendBuf. |
 | recvCounts | Input | Data size of each rank in recvBuf participating in the AllGatherV operation, as an array of the uint64 type.<br>The i-th element of the array indicates the amount of data to be received from rank i, which must be the same as the sendCount value of rank i. |
 | recvDispls | Input | Offset (in units of dataType) of the data of each rank in recvBuf participating in the AllGatherV operation, as an array of the uint64 type.<br>The i-th element of the array indicates the start offset in recvBuf where the data received from rank i is placed. |
-| dataType | Input | Data type of the AllGatherV operation, of [HcclDataType](https://gitcode.com/cann/hcomm/blob/master/docs/en/api_ref/comm_mgr_c/data_type_definition/HcclDataType.md) type.<br>Different models support different data types. For details, see [Supported Data Types](#supported-data-types).|
+| dataType | Input | Data type of the AllGatherV operation, of [HcclDataType](https://gitcode.com/cann/hcomm/blob/9.3.0-beta.1/docs/en/api_ref/comm_mgr_c/data_type_definition/HcclDataType.md) type.<br>Different models support different data types. For details, see [Supported Data Types](#supported-data-types).|
 | comm | Input | Communicator in which the collective communication operation is performed. |
 | stream | Input | Stream used by the current rank. |
 
@@ -67,7 +67,7 @@ HcclResult HcclAllGatherV(void *sendBuf, uint64_t sendCount, void *recvBuf, cons
 
 ## Return Value
 
-[HcclResult](https://gitcode.com/cann/hcomm/blob/master/docs/en/api_ref/comm_mgr_c/data_type_definition/HcclResult.md)
+[HcclResult](https://gitcode.com/cann/hcomm/blob/9.3.0-beta.1/docs/en/api_ref/comm_mgr_c/data_type_definition/HcclResult.md)
 
 | Return Value | Description |
 | --- | --- |

@@ -38,9 +38,9 @@ HcclResult HcclAlltoAllVC(const void *sendBuf, const void *sendCountMatrix, Hccl
 | --- | --- | --- |
 | sendBuf | Input | Address of the source data buffer. |
 | sendCountMatrix | Input | A two-dimensional uint64 array representing the sent data volume. The array shape is `[rankSize][rankSize]`, and `sendCountMatrix[i][j] = n` indicates that rank i sends n data units to rank j.<br>For example, if `sendType` is float32, `sendCountMatrix[i][j] = n` indicates that rank i sends n float32 data units to rank j. |
-| sendType | Input | Data type of the send data, of [HcclDataType](https://gitcode.com/cann/hcomm/blob/master/docs/en/api_ref/comm_mgr_c/data_type_definition/HcclDataType.md) type.<br>Different models support different data types. For details, see [Supported Data Types](#supported-data-types).|
+| sendType | Input | Data type of the send data, of [HcclDataType](https://gitcode.com/cann/hcomm/blob/9.3.0-beta.1/docs/en/api_ref/comm_mgr_c/data_type_definition/HcclDataType.md) type.<br>Different models support different data types. For details, see [Supported Data Types](#supported-data-types).|
 | recvBuf | Output | Address of the destination buffer. Collective communication results are output to this buffer.<br>The addresses configured for recvBuf and sendBuf cannot be the same, and their memory scope cannot overlap. |
-| recvType | Input | Data type of the received data, of [HcclDataType](https://gitcode.com/cann/hcomm/blob/master/docs/en/api_ref/comm_mgr_c/data_type_definition/HcclDataType.md) type.<br>Different models support different data types. For details, see [Supported Data Types](#supported-data-types). |
+| recvType | Input | Data type of the received data, of [HcclDataType](https://gitcode.com/cann/hcomm/blob/9.3.0-beta.1/docs/en/api_ref/comm_mgr_c/data_type_definition/HcclDataType.md) type.<br>Different models support different data types. For details, see [Supported Data Types](#supported-data-types). |
 | comm | Input | Communicator where the collective communication operation is performed. |
 | stream | Input | Stream used by the current rank. |
 
@@ -58,7 +58,7 @@ HcclResult HcclAlltoAllVC(const void *sendBuf, const void *sendCountMatrix, Hccl
 
 ## Return Value
 
-[HcclResult](https://gitcode.com/cann/hcomm/blob/master/docs/en/api_ref/comm_mgr_c/data_type_definition/HcclResult.md)
+[HcclResult](https://gitcode.com/cann/hcomm/blob/9.3.0-beta.1/docs/en/api_ref/comm_mgr_c/data_type_definition/HcclResult.md)
 
 | Return Value | Description |
 | --- | --- |

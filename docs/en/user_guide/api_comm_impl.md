@@ -51,7 +51,7 @@ Communicators can be created in the following ways, depending on the user scenar
 In multi-machine collective communication scenarios where a communicator is created based on a cluster information configuration file (rank table file), each card requires a separate process. Follow the procedure below to create the communicator:
 
 1. Construct a rank table file. (For rank table file configuration, see [Cluster Information Configuration](./cluster_info_config/README.md).)
-2. Each card calls the [HcclCommInitClusterInfo](https://gitcode.com/cann/hcomm/blob/master/docs/en/api_ref/comm_mgr_c/HcclCommInitClusterInfo.md) API to create a communicator, or calls the [HcclCommInitClusterInfoConfig](https://gitcode.com/cann/hcomm/blob/master/docs/en/api_ref/comm_mgr_c/HcclCommInitClusterInfoConfig.md) API to create a communicator with specific configurations.
+2. Each card calls the [HcclCommInitClusterInfo](https://gitcode.com/cann/hcomm/blob/9.3.0-beta.1/docs/en/api_ref/comm_mgr_c/HcclCommInitClusterInfo.md) API to create a communicator, or calls the [HcclCommInitClusterInfoConfig](https://gitcode.com/cann/hcomm/blob/9.3.0-beta.1/docs/en/api_ref/comm_mgr_c/HcclCommInitClusterInfoConfig.md) API to create a communicator with specific configurations.
 
 A simple code snippet is as follows:
 
@@ -126,9 +126,9 @@ In multi-machine collective communication scenarios, if a complete cluster infor
         physical NICs other than Docker and loopback (sorted by NIC name in ascending lexicographic order) > Docker NICs > loopback NICs
         ```
 
-    3. On the root node, call the [HcclGetRootInfo](https://gitcode.com/cann/hcomm/blob/master/docs/en/api_ref/comm_mgr_c/HcclGetRootInfo.md) API to generate the root node rank identification information "rootInfo", which includes the device IP address, device ID, and other details.
+    3. On the root node, call the [HcclGetRootInfo](https://gitcode.com/cann/hcomm/blob/9.3.0-beta.1/docs/en/api_ref/comm_mgr_c/HcclGetRootInfo.md) API to generate the root node rank identification information "rootInfo", which includes the device IP address, device ID, and other details.
     4. Broadcast the rank information of the root node to all ranks within the communicator.
-    5. On all nodes in the communicator, call the [HcclCommInitRootInfo](https://gitcode.com/cann/hcomm/blob/master/docs/en/api_ref/comm_mgr_c/HcclCommInitRootInfo.md) or [HcclCommInitRootInfoConfig](https://gitcode.com/cann/hcomm/blob/master/docs/en/api_ref/comm_mgr_c/HcclCommInitRootInfoConfig.md) API (which creates a communicator with specific configuration) to initialize the communicator based on the received "rootInfo" and the rank ID of the local rank.
+    5. On all nodes in the communicator, call the [HcclCommInitRootInfo](https://gitcode.com/cann/hcomm/blob/9.3.0-beta.1/docs/en/api_ref/comm_mgr_c/HcclCommInitRootInfo.md) or [HcclCommInitRootInfoConfig](https://gitcode.com/cann/hcomm/blob/9.3.0-beta.1/docs/en/api_ref/comm_mgr_c/HcclCommInitRootInfoConfig.md) API (which creates a communicator with specific configuration) to initialize the communicator based on the received "rootInfo" and the rank ID of the local rank.
 
 - Each AI Server corresponds to one business process, and each thread corresponds to one Device. In the scenario where multiple communicators are created through multi-threading, the implementation process is as follows:
        <!-- npu="950" id6 -->
@@ -139,7 +139,7 @@ In multi-machine collective communication scenarios, if a complete cluster infor
 
     2. Refer to [Step 2 of the "Each Device Corresponds to One Business Process" scenario](#set_host_nic) to specify the communication IP address or communication NIC used by the host node during HCCL initialization (optional).
     3. In the main process, loop through "specifying different Devices + calling the HcclGetRootInfo API" to obtain multiple "rootInfo" entries.
-    4. Each device is matched with a thread, and based on different "rootInfo" information, the [HcclCommInitRootInfo](https://gitcode.com/cann/hcomm/blob/master/docs/en/api_ref/comm_mgr_c/HcclCommInitRootInfo.md) or [HcclCommInitRootInfoConfig](https://gitcode.com/cann/hcomm/blob/master/docs/en/api_ref/comm_mgr_c/HcclCommInitRootInfoConfig.md) API is concurrently called to initialize the communicator.
+    4. Each device is matched with a thread, and based on different "rootInfo" information, the [HcclCommInitRootInfo](https://gitcode.com/cann/hcomm/blob/9.3.0-beta.1/docs/en/api_ref/comm_mgr_c/HcclCommInitRootInfo.md) or [HcclCommInitRootInfoConfig](https://gitcode.com/cann/hcomm/blob/9.3.0-beta.1/docs/en/api_ref/comm_mgr_c/HcclCommInitRootInfoConfig.md) API is concurrently called to initialize the communicator.
 
 **Note**:
 
@@ -166,7 +166,7 @@ If the service is a single-card multi-process scenario, it is recommended to con
 In a single-machine communication scenario, developers can create communicators for multiple cards through a single process, where each card corresponds to one thread. The creation process is as follows:
 
 1. Construct the Device list in the communicator, for example: \{0, 1, 2, 3, 4, 5, 6, 7\}, where the Device IDs in the list are logical IDs (which can be queried using the **npu-smi info -m** command). HCCL creates the communicator in the order specified in the list.
-2. Call the [HcclCommInitAll](https://gitcode.com/cann/hcomm/blob/master/docs/en/api_ref/comm_mgr_c/HcclCommInitAll.md) API in the process to create the communicator.
+2. Call the [HcclCommInitAll](https://gitcode.com/cann/hcomm/blob/9.3.0-beta.1/docs/en/api_ref/comm_mgr_c/HcclCommInitAll.md) API in the process to create the communicator.
 
 ```c
     uint32_t ndev = 8;
@@ -196,7 +196,7 @@ Note that when calling collective communication operation APIs (such as HcclAllR
 
 ### Splitting a Sub-Communicator From an Existing Communicator
 
-HCCL provides the [HcclCreateSubCommConfig](https://gitcode.com/cann/hcomm/blob/master/docs/en/api_ref/comm_mgr_c/HcclCreateSubCommConfig.md) API, which splits a sub-communicator with a specific configuration from an existing communicator. This method of creating a sub-communicator does not require socket connection establishment or rank information exchange, and can be used for rapid communicator creation in the event of a service fault.
+HCCL provides the [HcclCreateSubCommConfig](https://gitcode.com/cann/hcomm/blob/9.3.0-beta.1/docs/en/api_ref/comm_mgr_c/HcclCreateSubCommConfig.md) API, which splits a sub-communicator with a specific configuration from an existing communicator. This method of creating a sub-communicator does not require socket connection establishment or rank information exchange, and can be used for rapid communicator creation in the event of a service fault.
 
 ```c
 // Initialize the global communicator.
@@ -218,7 +218,7 @@ HcclCreateSubCommConfig(&globalHcclComm, 4, rankIds, 1, devId, &config, &hcclCom
 
 ### Destroying a Communicator
 
-After collective communication operations are complete, the [HcclCommDestroy](https://gitcode.com/cann/hcomm/blob/master/docs/en/api_ref/comm_mgr_c/HcclCommDestroy.md) interface must be called to destroy the specified communicator, and the runtime management interface must be called to release the memory, stream, and device resources used for communication.
+After collective communication operations are complete, the [HcclCommDestroy](https://gitcode.com/cann/hcomm/blob/9.3.0-beta.1/docs/en/api_ref/comm_mgr_c/HcclCommDestroy.md) interface must be called to destroy the specified communicator, and the runtime management interface must be called to release the memory, stream, and device resources used for communication.
 
 ## Collective Communication
 
@@ -436,14 +436,14 @@ HCCL provides sample code for implementing collective communication functions us
 
 ### Communicator Code Examples
 
-- [Managing One NPU Device per Process (Initializing Communicator Based on Root Node Information)](https://gitcode.com/cann/hcomm/tree/master/examples/01_communicators/01_one_device_per_process/)
-- [Managing One NPU Device per Process (Initializing Communicator Based on Rank Table)](https://gitcode.com/cann/hcomm/tree/master/examples/01_communicators/02_one_device_per_process_rank_table/)
-- [Managing One NPU Device per Thread](https://gitcode.com/cann/hcomm/tree/master/examples/01_communicators/03_one_device_per_pthread/)
+- [Managing One NPU Device per Process (Initializing Communicator Based on Root Node Information)](https://gitcode.com/cann/hcomm/tree/9.3.0-beta.1/examples/01_communicators/01_one_device_per_process/)
+- [Managing One NPU Device per Process (Initializing Communicator Based on Rank Table)](https://gitcode.com/cann/hcomm/tree/9.3.0-beta.1/examples/01_communicators/02_one_device_per_process_rank_table/)
+- [Managing One NPU Device per Thread](https://gitcode.com/cann/hcomm/tree/9.3.0-beta.1/examples/01_communicators/03_one_device_per_pthread/)
 
 ### Point-to-Point Communication Sample Code
 
-- [HcclSend/HcclRecv (Basic Send and Receive)](https://gitcode.com/cann/hccl/tree/master/examples/01_point_to_point/01_send_recv/)
-- [HcclBatchSendRecv (Implementing Ring Communication)](https://gitcode.com/cann/hccl/tree/master/examples/01_point_to_point/02_batch_send_recv_ring)
+- [HcclSend/HcclRecv (Basic Send and Receive)](https://gitcode.com/cann/hccl/tree/9.3.0-beta.1/examples/01_point_to_point/01_send_recv/)
+- [HcclBatchSendRecv (Implementing Ring Communication)](https://gitcode.com/cann/hccl/tree/9.3.0-beta.1/examples/01_point_to_point/02_batch_send_recv_ring)
 
 ### Collective Communication Sample Code
 

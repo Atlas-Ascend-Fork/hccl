@@ -272,7 +272,7 @@ HCCL的日志信息会记录在CANN日志中，CANN的相关日志说明请参�
 
 ### HCCL相关故障码
 
-本节表格用于快速检索，不作为完整故障码清单。完整故障码定义、现象、可能原因及解决方法请参见《[HCCL错误码参考](https://gitcode.com/cann/hcomm/blob/master/docs/zh/error_codes/README.md)》，场景化定位指导请参见[故障诊断](README.md)。
+本节表格用于快速检索，不作为完整故障码清单。完整故障码定义、现象、可能原因及解决方法请参见《[HCCL错误码参考](https://gitcode.com/cann/hcomm/blob/9.3.0-beta.1/docs/zh/error_codes/README.md)》，场景化定位指导请参见[故障诊断](README.md)。
 
 <!-- npu="950" id10 -->
 以下plog关键字表仅适用于Ascend 950PR&950DT系列产品，可用于快速定位该系列产品的常见故障。三级关键字用于进一步标识任务执行方式或异常类型，取值包括`HOST`、`AICPU`、`AIV`、`CCU`和`CQE ERROR`。若入参校验和环境变量校验未进入任务执行阶段，则没有三级关键字。

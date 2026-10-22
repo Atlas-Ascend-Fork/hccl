@@ -41,7 +41,7 @@ HcclResult HcclReduceScatterV(void *sendBuf, const void *sendCounts, const void 
 | sendDispls | Input | Offset of the data of each rank participating in the ReduceScatterV operation in sendBuf (in the unit of dataType), in an array of the uint64 type.<br>The i-th element of this array indicates the offset of the data sent to rank i in sendBuf. |
 | recvBuf | Output | Address of the destination data buffer. The collective communication result is output to this buffer.<br>recvBuf and sendBuf cannot be set to the same address. |
 | recvCount | Input | Size of the data in recvBuf corresponding to the rank participating in the ReduceScatterV operation.<br>Assume that the ID of the current rank is i. The value of recvCount must be the same as that of the element with subscript i in the sendCounts array. |
-| dataType | Input | Data type of the ReduceScatterV operation, of [HcclDataType](https://gitcode.com/cann/hcomm/blob/master/docs/en/api_ref/comm_mgr_c/data_type_definition/HcclDataType.md) type.<br>Different models support different data types. For details, see [dataType Description](#datatype-description).|
+| dataType | Input | Data type of the ReduceScatterV operation, of [HcclDataType](https://gitcode.com/cann/hcomm/blob/9.3.0-beta.1/docs/en/api_ref/comm_mgr_c/data_type_definition/HcclDataType.md) type.<br>Different models support different data types. For details, see [dataType Description](#datatype-description).|
 | op | Input | Type of the Reduce operation.<br>Different models support different operation types. For details, see [op Description](#description).|
 | comm | Input | Communicator where the collective communication operation is performed. |
 | stream | Input | Stream used by the current rank. |
@@ -78,7 +78,7 @@ HcclResult HcclReduceScatterV(void *sendBuf, const void *sendCounts, const void 
 
 ## Return Value
 
-[HcclResult](https://gitcode.com/cann/hcomm/blob/master/docs/en/api_ref/comm_mgr_c/data_type_definition/HcclResult.md)
+[HcclResult](https://gitcode.com/cann/hcomm/blob/9.3.0-beta.1/docs/en/api_ref/comm_mgr_c/data_type_definition/HcclResult.md)
 
 | Return Value | Description |
 | --- | --- |

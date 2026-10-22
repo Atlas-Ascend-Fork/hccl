@@ -36,7 +36,7 @@ HcclResult HcclSend(void* sendBuf, uint64_t count, HcclDataType dataType, uint32
 | --- | --- | --- |
 | sendBuf | Input | Address of the source data buffer. |
 | count | Input | Number of data units to send. |
-| dataType | Input | Data type of the sent data, of [HcclDataType](https://gitcode.com/cann/hcomm/blob/master/docs/en/api_ref/comm_mgr_c/data_type_definition/HcclDataType.md) type.<br>Different models support different data types. For details, see [Supported Data Types](#supported-data-types).|
+| dataType | Input | Data type of the sent data, of [HcclDataType](https://gitcode.com/cann/hcomm/blob/9.3.0-beta.1/docs/en/api_ref/comm_mgr_c/data_type_definition/HcclDataType.md) type.<br>Different models support different data types. For details, see [Supported Data Types](#supported-data-types).|
 | destRank | Input | Rank ID of the destination that receives the data in the communicator. |
 | comm | Input | Communicator where the collective communication operation is performed. |
 | stream | Input | Stream used by this rank. |
@@ -58,7 +58,7 @@ HcclResult HcclSend(void* sendBuf, uint64_t count, HcclDataType dataType, uint32
 
 ## Return Value
 
-[HcclResult](https://gitcode.com/cann/hcomm/blob/master/docs/en/api_ref/comm_mgr_c/data_type_definition/HcclResult.md)
+[HcclResult](https://gitcode.com/cann/hcomm/blob/9.3.0-beta.1/docs/en/api_ref/comm_mgr_c/data_type_definition/HcclResult.md)
 
 | Return Value | Description |
 | --- | --- |

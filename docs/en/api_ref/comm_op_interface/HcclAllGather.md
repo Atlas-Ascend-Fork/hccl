@@ -42,7 +42,7 @@ HcclResult HcclAllGather(void *sendBuf, void *recvBuf, uint64_t sendCount, HcclD
 | sendBuf | Input | Address of the source data buffer. |
 | recvBuf | Output | Address of the destination data buffer. The collective communication result is output to this buffer. |
 | sendCount | Input | Data size of sendBuf participating in the AllGather operation. The data size of recvBuf equals sendCount x rank size. |
-| dataType | Input | The data type of the AllGather operation, of type [HcclDataType](https://gitcode.com/cann/hcomm/blob/master/docs/en/api_ref/comm_mgr_c/data_type_definition/HcclDataType.md).<br>Different models support different data types. For details, see [Supported Data Types](#supported-data-types).|
+| dataType | Input | The data type of the AllGather operation, of type [HcclDataType](https://gitcode.com/cann/hcomm/blob/9.3.0-beta.1/docs/en/api_ref/comm_mgr_c/data_type_definition/HcclDataType.md).<br>Different models support different data types. For details, see [Supported Data Types](#supported-data-types).|
 | comm | Input | Communicator where the collective communication operation is performed. |
 | stream | Input | Stream used by the current rank. |
 
@@ -66,7 +66,7 @@ HcclResult HcclAllGather(void *sendBuf, void *recvBuf, uint64_t sendCount, HcclD
 
 ## Return Value
 
-[HcclResult](https://gitcode.com/cann/hcomm/blob/master/docs/en/api_ref/comm_mgr_c/data_type_definition/HcclResult.md)
+[HcclResult](https://gitcode.com/cann/hcomm/blob/9.3.0-beta.1/docs/en/api_ref/comm_mgr_c/data_type_definition/HcclResult.md)
 
 | Return Value | Description |
 | --- | --- |

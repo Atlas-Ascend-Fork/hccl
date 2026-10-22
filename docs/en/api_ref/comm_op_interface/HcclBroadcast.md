@@ -38,7 +38,7 @@ HcclResult HcclBroadcast(void *buf, uint64_t count, HcclDataType dataType, uint3
 | --- | --- | --- |
 | buf | Input/Output | Address of the data buffer. For the root node, it is the address of the source data buffer; for non-root nodes, it is the address of the buffer for receiving data. |
 | count | Input | Number of data units involved in the broadcast operation. For example, `count` is `1` if only one int32 data unit is involved. |
-| dataType | Input | Data type of the broadcast operation, of [HcclDataType](https://gitcode.com/cann/hcomm/blob/master/docs/en/api_ref/comm_mgr_c/data_type_definition/HcclDataType.md) type.<br>Different models support different data types. For details, see [Data Type Description](#supported-data-types). |
+| dataType | Input | Data type of the broadcast operation, of [HcclDataType](https://gitcode.com/cann/hcomm/blob/9.3.0-beta.1/docs/en/api_ref/comm_mgr_c/data_type_definition/HcclDataType.md) type.<br>Different models support different data types. For details, see [Data Type Description](#supported-data-types). |
 | root | Input | Rank ID of the broadcast root. |
 | comm | Input | Communicator in which the collective communication operation is performed. |
 | stream | Input | Stream used by the current rank. |
@@ -60,7 +60,7 @@ HcclResult HcclBroadcast(void *buf, uint64_t count, HcclDataType dataType, uint3
 
 ## Return Value
 
-[HcclResult](https://gitcode.com/cann/hcomm/blob/master/docs/en/api_ref/comm_mgr_c/data_type_definition/HcclResult.md)
+[HcclResult](https://gitcode.com/cann/hcomm/blob/9.3.0-beta.1/docs/en/api_ref/comm_mgr_c/data_type_definition/HcclResult.md)
 
 | Return Value | Description |
 | --- | --- |

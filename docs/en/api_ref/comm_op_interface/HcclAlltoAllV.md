@@ -39,11 +39,11 @@ HcclResult HcclAlltoAllV(const void *sendBuf, const void *sendCounts, const void
 | sendBuf | Input | Address of the source data buffer. |
 | sendCounts | Input | A uint64 array that indicates the send data volume. `sendCounts[i] = n` indicates that this rank sends n data units to rank i.<br>For example, if `sendType` is float32, `sendCounts[i] = n` indicates that this rank sends n float32 data units to rank i. |
 | sdispls | Input | A uint64 array that indicates the send offset. `sdispls[i] = n` indicates the offset of the data sent by this rank to rank i in sendBuf relative to the start of sendBuf, in units of sendType. |
-| sendType | Input | Data type of the sent data, of [HcclDataType](https://gitcode.com/cann/hcomm/blob/master/docs/en/api_ref/comm_mgr_c/data_type_definition/HcclDataType.md) type.<br>Different models support different data types. For details, see [Supported Data Types](#supported-data-types).|
+| sendType | Input | Data type of the sent data, of [HcclDataType](https://gitcode.com/cann/hcomm/blob/9.3.0-beta.1/docs/en/api_ref/comm_mgr_c/data_type_definition/HcclDataType.md) type.<br>Different models support different data types. For details, see [Supported Data Types](#supported-data-types).|
 | recvBuf | Output | Address of the destination data buffer. The collective communication result is output to this buffer.<br>The address of recvBuf must be different from that of sendBuf, and their memory scope must not overlap. |
 | recvCounts | Input | A uint64 array that indicates the received data volume. `recvCounts[i] = n` indicates that this rank receives n data units from rank i.<br>For example, if `recvType` is float32, `recvCounts[i] = n` indicates that this rank receives n float32 data units from rank i. |
 | rdispls | Input | A uint64 array that indicates the received data offset. `rdispls[i] = n` indicates the offset of the data received by this rank from rank i in recvBuf relative to the start of recvBuf, in units of recvType. |
-| recvType | Input | Data type of the received data, of [HcclDataType](https://gitcode.com/cann/hcomm/blob/master/docs/en/api_ref/comm_mgr_c/data_type_definition/HcclDataType.md) type.<br>Different models support different data types. For details, see [Supported Data Types](#supported-data-types).|
+| recvType | Input | Data type of the received data, of [HcclDataType](https://gitcode.com/cann/hcomm/blob/9.3.0-beta.1/docs/en/api_ref/comm_mgr_c/data_type_definition/HcclDataType.md) type.<br>Different models support different data types. For details, see [Supported Data Types](#supported-data-types).|
 | comm | Input | Communicator in which the collective communication operation is performed. |
 | stream | Input | Stream used by this rank. |
 
@@ -67,7 +67,7 @@ HcclResult HcclAlltoAllV(const void *sendBuf, const void *sendCounts, const void
 
 ## Return Value
 
-[HcclResult](https://gitcode.com/cann/hcomm/blob/master/docs/en/api_ref/comm_mgr_c/data_type_definition/HcclResult.md)
+[HcclResult](https://gitcode.com/cann/hcomm/blob/9.3.0-beta.1/docs/en/api_ref/comm_mgr_c/data_type_definition/HcclResult.md)
 
 | Return Value | Description |
 | --- | --- |

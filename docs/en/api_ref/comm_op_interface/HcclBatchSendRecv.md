@@ -34,7 +34,7 @@ HcclResult HcclBatchSendRecv(HcclSendRecvItem* sendRecvInfo, uint32_t itemNum, H
 
 | Parameter | Input/Output | Description |
 | --- | --- | --- |
-| sendRecvInfo | Input | Pointer to the list of Send/Recv tasks to be issued by this rank.<br>Type: HcclSendRecvItem. For details, see [HcclSendRecvItem](https://gitcode.com/cann/hcomm/blob/master/docs/en/api_ref/comm_mgr_c/data_type_definition/HcclSendRecvItem.md). |
+| sendRecvInfo | Input | Pointer to the list of Send/Recv tasks to be issued by this rank.<br>Type: HcclSendRecvItem. For details, see [HcclSendRecvItem](https://gitcode.com/cann/hcomm/blob/9.3.0-beta.1/docs/en/api_ref/comm_mgr_c/data_type_definition/HcclSendRecvItem.md). |
 | itemNum | Input | Number of Send/Recv tasks of this rank. |
 | comm | Input | Communicator where the collective communication operation is performed. |
 | stream | Input | Stream used by this rank. |
@@ -56,7 +56,7 @@ HcclResult HcclBatchSendRecv(HcclSendRecvItem* sendRecvInfo, uint32_t itemNum, H
 
 ## Return Value
 
-[HcclResult](https://gitcode.com/cann/hcomm/blob/master/docs/en/api_ref/comm_mgr_c/data_type_definition/HcclResult.md)
+[HcclResult](https://gitcode.com/cann/hcomm/blob/9.3.0-beta.1/docs/en/api_ref/comm_mgr_c/data_type_definition/HcclResult.md)
 
 | Return Value | Description |
 | --- | --- |

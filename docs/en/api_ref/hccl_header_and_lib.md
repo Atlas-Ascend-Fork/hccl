@@ -2,7 +2,7 @@
 
 <!-- md-trans-meta sourceCommit=unknown translatedAt=2026-09-12T08:36:28.619Z pushedAt=2026-09-18T08:03:58.150Z -->
 
-Based on Ascend AI Processors, Huawei Collective Communication Library (HCCL) provides high-performance collective communication and point-to-point communication capabilities in single-node and multi-node environments. It is one of the core components of CANN. HCCL is decoupled from the underlying communication library HCOMM through dlsym dynamic loading. HCCL and HCOMM are compiled independently and evolve with independent versions. For HCOMM external header files and library files, see [HCOMM External Header Files and Library Files](https://gitcode.com/cann/hcomm/blob/master/docs/en/api_ref/hcomm_header_and_lib.md).
+Based on Ascend AI Processors, Huawei Collective Communication Library (HCCL) provides high-performance collective communication and point-to-point communication capabilities in single-node and multi-node environments. It is one of the core components of CANN. HCCL is decoupled from the underlying communication library HCOMM through dlsym dynamic loading. HCCL and HCOMM are compiled independently and evolve with independent versions. For HCOMM external header files and library files, see [HCOMM External Header Files and Library Files](https://gitcode.com/cann/hcomm/blob/9.3.0-beta.1/docs/en/api_ref/hcomm_header_and_lib.md).
 
 This section describes the header files and library files of HCCL external APIs.
 

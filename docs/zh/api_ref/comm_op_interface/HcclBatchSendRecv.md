@@ -43,7 +43,7 @@ HcclResult HcclBatchSendRecv(HcclSendRecvItem* sendRecvInfo, uint32_t itemNum, H
 
 | 参数名 | 输入/输出 | 描述 |
 | --- | --- | --- |
-| sendRecvInfo | 输入 | 本rank需要下发的收发任务列表的首地址。<br>HcclSendRecvItem类型，详细可参见[HcclSendRecvItem](https://gitcode.com/cann/hcomm/blob/master/docs/zh/api_ref/comm_mgr_c/data_type_definition/HcclSendRecvItem.md)。|
+| sendRecvInfo | 输入 | 本rank需要下发的收发任务列表的首地址。<br>HcclSendRecvItem类型，详细可参见[HcclSendRecvItem](https://gitcode.com/cann/hcomm/blob/9.3.0-beta.1/docs/zh/api_ref/comm_mgr_c/data_type_definition/HcclSendRecvItem.md)。|
 | itemNum | 输入 | 本rank需要接收和发送的任务个数。 |
 | comm | 输入 | 集合通信操作所在的通信域。 |
 | stream | 输入 | 本rank所使用的stream。 |
@@ -68,7 +68,7 @@ HcclResult HcclBatchSendRecv(HcclSendRecvItem* sendRecvInfo, uint32_t itemNum, H
 
 ## 返回值
 
-[HcclResult](https://gitcode.com/cann/hcomm/blob/master/docs/zh/api_ref/comm_mgr_c/data_type_definition/HcclResult.md)
+[HcclResult](https://gitcode.com/cann/hcomm/blob/9.3.0-beta.1/docs/zh/api_ref/comm_mgr_c/data_type_definition/HcclResult.md)
 
 | 返回值 | 说明 |
 | --- | --- |

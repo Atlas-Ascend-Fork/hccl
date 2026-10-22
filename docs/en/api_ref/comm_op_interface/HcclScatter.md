@@ -37,7 +37,7 @@ HcclResult HcclScatter(void *sendBuf, void *recvBuf, uint64_t recvCount, HcclDat
 | sendBuf | Input | Address of the source data buffer. |
 | recvBuf | Output | Address of the destination data buffer. The collective communication result is output to this buffer. |
 | recvCount | Input | Number of data units in recvBuf that participate in the scatter operation. For example, `recvcount` is `1` if only one int32 element participates. |
-| dataType | Input | Data type for the scatter operation, of type [HcclDataType](https://gitcode.com/cann/hcomm/blob/master/docs/en/api_ref/comm_mgr_c/data_type_definition/HcclDataType.md).<br>Different models support different data types. For details, see [Supported Data Types](#supported-data-types).|
+| dataType | Input | Data type for the scatter operation, of type [HcclDataType](https://gitcode.com/cann/hcomm/blob/9.3.0-beta.1/docs/en/api_ref/comm_mgr_c/data_type_definition/HcclDataType.md).<br>Different models support different data types. For details, see [Supported Data Types](#supported-data-types).|
 | root | Input | Rank ID that serves as the scatter root. |
 | comm | Input | Communicator where the collective communication operation is performed. |
 | stream | Input | Stream used by this rank. |
@@ -59,7 +59,7 @@ HcclResult HcclScatter(void *sendBuf, void *recvBuf, uint64_t recvCount, HcclDat
 
 ## Return Value
 
-[HcclResult](https://gitcode.com/cann/hcomm/blob/master/docs/en/api_ref/comm_mgr_c/data_type_definition/HcclResult.md)
+[HcclResult](https://gitcode.com/cann/hcomm/blob/9.3.0-beta.1/docs/en/api_ref/comm_mgr_c/data_type_definition/HcclResult.md)
 
 | Return Value | Description |
 | --- | --- |
