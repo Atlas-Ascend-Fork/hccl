@@ -73,7 +73,11 @@ HcclResult SendRecvWrite(const SendRecvInfo& sendRecvInfo)
     }
     // 写完之后做后同步告诉对面写完了
     CHK_RET(static_cast<HcclResult>(HcommChannelNotifyRecordOnThread(0, sendChannel.handle, NOTIFY_IDX_FIN_ACK)));
+    // 分别对发送/接收Channel执行Drain操作，如果Handle相同则只执行一次，避免wqe累积
     CHK_RET(HcommChannelDrainOnThreadWithCompat(0, sendChannel.handle));
+    if (recvChannel.handle != sendChannel.handle) {
+        CHK_RET(HcommChannelDrainOnThreadWithCompat(0, recvChannel.handle));
+    }
     CHK_RET(static_cast<HcclResult>(HcommFenceOnThread(0)));
     for (int i = 0; i < repeatNum; i++) {
         CHK_RET(static_cast<HcclResult>(
