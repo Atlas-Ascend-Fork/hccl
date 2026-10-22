@@ -1779,14 +1779,19 @@ static HcclResult HcclGetThreadWithConfig(
     }
     CHK_RET(HcclThreadAcquireWithConfig(
         comm, COMM_ENGINE_AICPU, threadNum, THREAD_TYPE_TS, threadConfigs.data(), threads.data()));
-    // 申请展开流对应的Thread
+    // 申请展开流对应的Thread，展开流需要一个Notify用于 AICPU按序下发
     if (!unfoldReady) {
-        ThreadConfig unfoldThreadConfig;
-        CHK_RET(static_cast<HcclResult>(ThreadConfigInit(&unfoldThreadConfig, 1)));
-        // 展开流需要一个Notify用于 AICPU按序下发
-        unfoldThreadConfig.notifyNumPerThread = ORDER_UNFOLD_THREAD_NOTIFY_NUM;
-        CHK_RET(HcclThreadAcquireWithConfig(
-            comm, COMM_ENGINE_CPU, 1, THREAD_TYPE_TS, &unfoldThreadConfig, &resCtxHost->unfoldThread));
+        // hcomm>=9.2.0 且导出 HcclDedicatedThreadAcquire 时，展开线程改走专用线程接口（按useType在通信域内缓存复用）
+        if (GetHcommVersion() >= CANN_VERSION(9, 2, 0) && HcommIsSupportHcclDedicatedThreadAcquire()) {
+            CHK_RET(HcclDedicatedThreadAcquire(
+                comm, HCCL_DED_THREAD_TYPE_AICPU_LAUNCH, ORDER_UNFOLD_THREAD_NOTIFY_NUM, &resCtxHost->unfoldThread));
+        } else {
+            ThreadConfig unfoldThreadConfig;
+            CHK_RET(static_cast<HcclResult>(ThreadConfigInit(&unfoldThreadConfig, 1)));
+            unfoldThreadConfig.notifyNumPerThread = ORDER_UNFOLD_THREAD_NOTIFY_NUM;
+            CHK_RET(HcclThreadAcquireWithConfig(
+                comm, COMM_ENGINE_CPU, 1, THREAD_TYPE_TS, &unfoldThreadConfig, &resCtxHost->unfoldThread));
+        }
     }
     CHK_RET(SaveMainThreadInfo(comm, param, threads[0], resRequest.notifyNumOnMainThread + 1));
     return HCCL_SUCCESS;
@@ -1824,8 +1829,16 @@ static HcclResult HcclGetAicpuThread(
         CHK_RET(HcclThreadAcquire(comm, COMM_ENGINE_AICPU_TS, threadNum, maxNotifyNum + 1, threads.data()));
         if (!unfoldReady) {
             // 展开流需要一个Notify用于 AICPU按序下发
-            CHK_RET(
-                HcclThreadAcquire(comm, COMM_ENGINE_CPU, 1, ORDER_UNFOLD_THREAD_NOTIFY_NUM, &resCtxHost->unfoldThread));
+            // hcomm>=9.2.0 且导出 HcclDedicatedThreadAcquire
+            // 时，展开线程改走专用线程接口（按useType在通信域内缓存复用）
+            if (GetHcommVersion() >= CANN_VERSION(9, 2, 0) && HcommIsSupportHcclDedicatedThreadAcquire()) {
+                CHK_RET(HcclDedicatedThreadAcquire(
+                    comm, HCCL_DED_THREAD_TYPE_AICPU_LAUNCH, ORDER_UNFOLD_THREAD_NOTIFY_NUM,
+                    &resCtxHost->unfoldThread));
+            } else {
+                CHK_RET(HcclThreadAcquire(
+                    comm, COMM_ENGINE_CPU, 1, ORDER_UNFOLD_THREAD_NOTIFY_NUM, &resCtxHost->unfoldThread));
+            }
         }
         CHK_RET(SaveMainThreadInfo(comm, param, threads[0], maxNotifyNum + 1));
     }
