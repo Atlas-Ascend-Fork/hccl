@@ -148,7 +148,7 @@ HcclResult InsTempAllGatherNHRDPUInter::GetStepInfo(uint32_t step, uint32_t nSte
     uint32_t nSlices = (tempRankSize_ - 1 + (1 << (nSteps - 1 - step))) / (1 << (nSteps - step));
     uint32_t deltaSliceIndex = 1 << (nSteps - step);
     uint32_t txSliceIdx = rankIdx;
-    uint32_t rxSliceIdx = (rankIdx - (1 << (nSteps - 1 - step)) + tempRankSize_) % tempRankSize_;
+    uint32_t rxSliceIdx = (rankIdx + tempRankSize_ - deltaRank) % tempRankSize_;
 
     stepInfo.nSlices = nSlices;
     stepInfo.toRank = GetRankFromMap(sendTo);
