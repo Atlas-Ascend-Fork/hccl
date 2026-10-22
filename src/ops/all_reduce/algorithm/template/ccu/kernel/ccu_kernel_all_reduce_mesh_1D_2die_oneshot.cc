@@ -43,6 +43,7 @@ static CcuResult ParseKernelArg(AllreduceMesh1D2DieOneShotContext& ctx)
     ctx.rankId = arg->rankId;
     ctx.rankSize = arg->rankSize;
     ctx.rmtReduceWithMyRank = arg->rmtReduceWithMyRank;
+    ctx.localRankSlot = arg->localRankSlot;
     ctx.rmtReduceRankNum = arg->channelCount + (ctx.rmtReduceWithMyRank ? 1 : 0);
 
     ctx.rmtSyncMyBit = 1 << (ctx.rankId % ctx.rmtReduceRankNum);
@@ -339,9 +340,11 @@ static CcuResult DoRmtReduce(AllreduceMesh1D2DieOneShotContext& ctx)
     dst.addr = dst.addr + (ctx.rmtReduceWithMyRank ? ctx.scratchBaseOffset0 : ctx.scratchBaseOffset1);
 
     if (ctx.rmtReduceWithMyRank) {
+        // 槽位=rank：本卡输入落本卡在 die 组内升序 rank 中的位置槽，与对侧 die 的
+        // GroupReduceWithoutMyRank（远端升序落槽 0..m-1）产出同一部分和序列（结果一致性）
         CCU_CHK_RET(GroupReduce(
             ctx, arg->channels, arg->channelCount, dst, src, localSrc, ctx.rmtReduceGoSize, ctx.dataType,
-            ctx.outputDataType, ctx.reduceOp));
+            ctx.outputDataType, ctx.reduceOp, CcuVersion::CCU_V1, ctx.localRankSlot));
     } else {
         CCU_CHK_RET(GroupReduceWithoutMyRank(
             ctx, arg->channels, arg->channelCount, dst, src, ctx.rmtReduceGoSize, ctx.dataType, ctx.outputDataType,

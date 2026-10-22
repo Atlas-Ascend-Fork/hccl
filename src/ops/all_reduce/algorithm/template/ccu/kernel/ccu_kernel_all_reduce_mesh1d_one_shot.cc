@@ -138,9 +138,11 @@ static CcuResult DoGroupReduce(AllReduceMesh1DOneShotContext& ctx)
         srcIdx++;
     }
 
+    // 槽位=rank：remoteSrc 已按远端 rank 升序跳自身构造，本卡输入落自身 rank 槽，
+    // 各卡加法操作数序列一致（结果一致性）
     CCU_CHK_RET(GroupReduce(
         ctx, arg->channels, arg->channelCount, reduceDst, remoteSrc, localSrc, ctx.groupOpSize, ctx.dataType,
-        ctx.outputDataType, ctx.reduceOp, GetCcuVersion()));
+        ctx.outputDataType, ctx.reduceOp, GetCcuVersion(), static_cast<uint32_t>(arg->rankId)));
     return CCU_SUCCESS;
 }
 

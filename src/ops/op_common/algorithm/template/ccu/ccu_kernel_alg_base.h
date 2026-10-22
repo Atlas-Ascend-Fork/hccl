@@ -37,6 +37,10 @@ constexpr uint64_t CCU_LOOP_CKE_NUM_REDUCE_V2 = 3;
 constexpr uint64_t CCU_LOOP_CKE_NUM_COPY_V2 = 2;
 constexpr uint64_t CCU_LOOP_CKE_NUM_REDUCE_LOOP_V2 = 3;
 
+// GroupReduce 操作数槽位缺省值：保持旧行为（远端按序占槽 0..N-2、本卡输入垫底槽 N-1，加法序随本卡 rank 漂移）；
+// 指定有效槽位时按"槽位=rank"落位，全卡加法序一致（结果一致性改造）
+constexpr uint32_t CCU_REDUCE_SLOT_LOCAL_LAST = 0xFFFFFFFFu;
+
 // 逻辑Event：封装多个物理 ccu::Event，提供超过16位的信号空间。
 // 算法侧按逻辑 signalIdx (0..N-1) 进行 Record/Wait，内部自动处理 event 分组与 mask 计算。
 class CcuEventGroup {
@@ -241,11 +245,12 @@ CcuResult CreateMultiOpBroadcastWithoutMyRank(
 CcuResult GroupReduce(
     CcuKernelCtxBase& ctx, const size_t channels[], uint32_t channelCount, ccu::LocalAddr dst,
     std::vector<ccu::RemoteAddr> src, ccu::LocalAddr localSrc, GroupOpSizeVars goSize, HcclDataType dataType,
-    HcclDataType outputDataType, HcclReduceOp opType, CcuVersion ccuVersion = CcuVersion::CCU_V1);
+    HcclDataType outputDataType, HcclReduceOp opType, CcuVersion ccuVersion = CcuVersion::CCU_V1,
+    uint32_t localRankSlot = CCU_REDUCE_SLOT_LOCAL_LAST);
 
 CcuResult CreateMultiOpReduceV1(
     CcuKernelCtxBase& ctx, GroupReduceVar& var, const size_t channels[], uint32_t channelCount, HcclDataType dataType,
-    HcclDataType outputDataType, HcclReduceOp opType);
+    HcclDataType outputDataType, HcclReduceOp opType, uint32_t localRankSlot = CCU_REDUCE_SLOT_LOCAL_LAST);
 
 CcuResult
 CreateMultiOpBroadcastV1(CcuKernelCtxBase& ctx, GroupBroadcastVar& var, const size_t channels[], uint32_t channelCount);
@@ -261,7 +266,7 @@ CcuResult CreateMultiOpReduceWithoutMyRank(
 CcuResult GroupReduceV1(
     CcuKernelCtxBase& ctx, const size_t channels[], uint32_t channelCount, ccu::LocalAddr dst,
     std::vector<ccu::RemoteAddr> src, ccu::LocalAddr localSrc, GroupOpSizeVars goSize, HcclDataType dataType,
-    HcclDataType outputDataType, HcclReduceOp opType);
+    HcclDataType outputDataType, HcclReduceOp opType, uint32_t localRankSlot = CCU_REDUCE_SLOT_LOCAL_LAST);
 CcuResult GroupBroadcastV1(
     CcuKernelCtxBase& ctx, const size_t channels[], uint32_t channelCount, ccu::LocalAddr localDst,
     std::vector<ccu::RemoteAddr> dst, ccu::LocalAddr src, GroupOpSizeVars goSize);
@@ -269,7 +274,7 @@ CcuResult GroupCopyV1(CcuKernelCtxBase& ctx, ccu::LocalAddr dst, ccu::LocalAddr 
 CcuResult GroupReduceV2(
     CcuKernelCtxBase& ctx, const size_t channels[], uint32_t channelCount, ccu::LocalAddr dst,
     std::vector<ccu::RemoteAddr> src, ccu::LocalAddr localSrc, GroupOpSizeVars goSize, HcclDataType dataType,
-    HcclDataType outputDataType, HcclReduceOp opType);
+    HcclDataType outputDataType, HcclReduceOp opType, uint32_t localRankSlot = CCU_REDUCE_SLOT_LOCAL_LAST);
 CcuResult GroupBroadcastV2(
     CcuKernelCtxBase& ctx, const size_t channels[], uint32_t channelCount, ccu::LocalAddr localDst,
     std::vector<ccu::RemoteAddr> dst, ccu::LocalAddr src, GroupOpSizeVars goSize);

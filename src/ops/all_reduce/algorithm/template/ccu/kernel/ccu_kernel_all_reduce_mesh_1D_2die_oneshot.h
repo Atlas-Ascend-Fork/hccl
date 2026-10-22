@@ -25,6 +25,7 @@ struct CcuKernelArgAllreduceMesh1D2DieOneShot : CcuKernelArgBase {
     OpParam opParam;
     std::vector<std::vector<uint32_t>> subCommRanks;
     bool rmtReduceWithMyRank{false};
+    uint32_t localRankSlot{CCU_REDUCE_SLOT_LOCAL_LAST};
 };
 
 struct AllreduceMesh1D2DieOneShotContext : CcuKernelCtxBase {
@@ -33,6 +34,7 @@ struct AllreduceMesh1D2DieOneShotContext : CcuKernelCtxBase {
     bool rmtReduceWithMyRank{false};
     uint32_t rankId{0};
     uint32_t rankSize{0};
+    uint32_t localRankSlot{CCU_REDUCE_SLOT_LOCAL_LAST};
 
     uint32_t rmtReduceRankNum{0};
     uint32_t rmtSyncMyBit{0};

@@ -211,7 +211,7 @@ static void AdvanceReduceWmrAddrs(
 
 CcuResult CreateMultiOpReduceV1(
     CcuKernelCtxBase& ctx, GroupReduceVar& var, const size_t channels[], uint32_t channelCount, HcclDataType dataType,
-    HcclDataType outputDataType, HcclReduceOp opType)
+    HcclDataType outputDataType, HcclReduceOp opType, uint32_t localRankSlot)
 {
     AllocGoResource(ctx.moConfig, ctx.moRes, ctx.resourceAllocated);
 
@@ -227,6 +227,13 @@ CcuResult CreateMultiOpReduceV1(
     uint32_t usedBufNum = size > expansionNum ? size : expansionNum;
     uint32_t loopNum = 2;
 
+    if (localRankSlot != CCU_REDUCE_SLOT_LOCAL_LAST && localRankSlot >= size) {
+        HCCL_ERROR(
+            "[CreateMultiOpReduceV1] localRankSlot[%u] out of range [0, %u), channels[%u].", localRankSlot, size,
+            channelSize);
+        return CcuResult::CCU_E_PARA;
+    }
+
     for (int32_t index = 0; index < loopNum; index++) {
         var.loopRemoteSrc[index].resize(size - 1);
 
@@ -234,15 +241,20 @@ CcuResult CreateMultiOpReduceV1(
         ccu::Event loopEvt = ctx.moRes.completedEvent[index];
 
         loops.body[index].reset(new ccu::Func([&ctx, index, bufBase, loopEvt, channelSize, size, channels, dataType,
-                                               outputDataType, opType, &var]() {
+                                               outputDataType, opType, localRankSlot, &var]() {
+            // 槽位=rank 落位（结果一致性）：src 需按远端 rank 升序、且恰跳过 localRankSlot 对应的 rank 构造；
+            // 第 i 个远端落槽 (i < localRankSlot ? i : i + 1)，本卡输入落槽 localRankSlot，硬件按槽序归约，
+            // 全卡加法操作数序列一致。缺省 CCU_REDUCE_SLOT_LOCAL_LAST 保持旧行为（本卡输入垫底槽 N-1）。
+            uint32_t localSlot = (localRankSlot == CCU_REDUCE_SLOT_LOCAL_LAST) ? channelSize : localRankSlot;
             for (uint32_t i = 0; i < channelSize; i++) {
+                uint32_t remoteSlot = (localRankSlot == CCU_REDUCE_SLOT_LOCAL_LAST || i < localRankSlot) ? i : i + 1;
                 ccu::Read(
-                    channels[i], ctx.moRes.ccuBuf[bufBase + i], var.loopRemoteSrc[index][i], var.loopLen[index],
-                    loopEvt, 1 << i);
+                    channels[i], ctx.moRes.ccuBuf[bufBase + remoteSlot], var.loopRemoteSrc[index][i],
+                    var.loopLen[index], loopEvt, 1 << i);
             }
 
             ccu::LocalCopy(
-                ctx.moRes.ccuBuf[bufBase + channelSize], var.loopLocalSrc[index], var.loopLen[index], loopEvt,
+                ctx.moRes.ccuBuf[bufBase + localSlot], var.loopLocalSrc[index], var.loopLen[index], loopEvt,
                 1 << channelSize);
             ccu::EventWait(loopEvt, (1 << size) - 1);
 
@@ -264,7 +276,7 @@ CcuResult CreateMultiOpReduceV1(
 
 CcuResult CreateMultiOpReduceV2(
     CcuKernelCtxBase& ctx, GroupReduceVar& var, const size_t channels[], uint32_t channelCount, HcclDataType dataType,
-    HcclDataType outputDataType, HcclReduceOp opType)
+    HcclDataType outputDataType, HcclReduceOp opType, uint32_t localRankSlot)
 {
     AllocGoResource(
         ctx.moConfig, ctx.moRes, ctx.resourceAllocated, CCU_MS_DEFAULT_LOOP_COUNT, 1, CCU_LOOP_CKE_NUM_REDUCE_V2);
@@ -281,6 +293,13 @@ CcuResult CreateMultiOpReduceV2(
     uint32_t usedBufNum = size > expansionNum ? size : expansionNum;
     uint32_t loopNum = 2;
 
+    if (localRankSlot != CCU_REDUCE_SLOT_LOCAL_LAST && localRankSlot >= size) {
+        HCCL_ERROR(
+            "[CreateMultiOpReduceV2] localRankSlot[%u] out of range [0, %u), channels[%u].", localRankSlot, size,
+            channelSize);
+        return CcuResult::CCU_E_PARA;
+    }
+
     for (int32_t index = 0; index < loopNum; index++) {
         var.loopRemoteSrc[index].resize(size - 1);
 
@@ -290,15 +309,19 @@ CcuResult CreateMultiOpReduceV2(
         ccu::Event loopEvt2 = ctx.moRes.completedEvent[index * CCU_LOOP_CKE_NUM_REDUCE_V2 + 2];
 
         loops.body[index].reset(new ccu::Func([&ctx, index, bufBase, loopEvt0, loopEvt1, loopEvt2, channelSize, size,
-                                               channels, dataType, outputDataType, opType, &var]() {
+                                               channels, dataType, outputDataType, opType, localRankSlot, &var]() {
+            // 槽位=rank 落位语义与 V1 一致：src 按远端 rank 升序、恰跳过 localRankSlot 位构造，
+            // 本卡输入落槽 localRankSlot，缺省保持旧行为（本卡输入垫底槽 N-1）
+            uint32_t localSlot = (localRankSlot == CCU_REDUCE_SLOT_LOCAL_LAST) ? channelSize : localRankSlot;
             for (uint32_t i = 0; i < channelSize; i++) {
+                uint32_t remoteSlot = (localRankSlot == CCU_REDUCE_SLOT_LOCAL_LAST || i < localRankSlot) ? i : i + 1;
                 ccu::Read(
-                    channels[i], ctx.moRes.ccuBuf[bufBase + i], var.loopRemoteSrc[index][i], var.loopLen[index],
-                    loopEvt0, 1 << i);
+                    channels[i], ctx.moRes.ccuBuf[bufBase + remoteSlot], var.loopRemoteSrc[index][i],
+                    var.loopLen[index], loopEvt0, 1 << i);
             }
 
             ccu::LocalCopy(
-                ctx.moRes.ccuBuf[bufBase + channelSize], var.loopLocalSrc[index], var.loopLen[index], loopEvt0,
+                ctx.moRes.ccuBuf[bufBase + localSlot], var.loopLocalSrc[index], var.loopLen[index], loopEvt0,
                 1 << channelSize);
             ccu::EventWait(loopEvt0, (1 << size) - 1);
 
@@ -321,21 +344,23 @@ CcuResult CreateMultiOpReduceV2(
 CcuResult GroupReduce(
     CcuKernelCtxBase& ctx, const size_t channels[], uint32_t channelCount, ccu::LocalAddr dst,
     std::vector<ccu::RemoteAddr> src, ccu::LocalAddr localSrc, GroupOpSizeVars goSize, HcclDataType dataType,
-    HcclDataType outputDataType, HcclReduceOp opType, CcuVersion ccuVersion)
+    HcclDataType outputDataType, HcclReduceOp opType, CcuVersion ccuVersion, uint32_t localRankSlot)
 {
     if (ccuVersion == CcuVersion::CCU_V1) {
         HCCL_INFO("select GroupReduceV1");
-        return GroupReduceV1(ctx, channels, channelCount, dst, src, localSrc, goSize, dataType, outputDataType, opType);
+        return GroupReduceV1(
+            ctx, channels, channelCount, dst, src, localSrc, goSize, dataType, outputDataType, opType, localRankSlot);
     } else {
         HCCL_INFO("select GroupReduceV2");
-        return GroupReduceV2(ctx, channels, channelCount, dst, src, localSrc, goSize, dataType, outputDataType, opType);
+        return GroupReduceV2(
+            ctx, channels, channelCount, dst, src, localSrc, goSize, dataType, outputDataType, opType, localRankSlot);
     }
 }
 
 CcuResult GroupReduceV1(
     CcuKernelCtxBase& ctx, const size_t channels[], uint32_t channelCount, ccu::LocalAddr dst,
     std::vector<ccu::RemoteAddr> src, ccu::LocalAddr localSrc, GroupOpSizeVars goSize, HcclDataType dataType,
-    HcclDataType outputDataType, HcclReduceOp opType)
+    HcclDataType outputDataType, HcclReduceOp opType, uint32_t localRankSlot)
 {
     GroupReduceVar var;
     ccu::Variable tmp;
@@ -345,7 +370,8 @@ CcuResult GroupReduceV1(
     ccu::Variable offsetCfg;
     ccu::Variable loopCfg0;
     ccu::Variable loopCfg1;
-    CCU_CHK_RET(CreateMultiOpReduceV1(ctx, var, channels, channelCount, dataType, outputDataType, opType));
+    CCU_CHK_RET(
+        CreateMultiOpReduceV1(ctx, var, channels, channelCount, dataType, outputDataType, opType, localRankSlot));
     auto& loops = ctx.loopMap["reduce"];
 
     uint32_t size = channelCount + 1;
@@ -401,7 +427,7 @@ CcuResult GroupReduceV1(
 CcuResult GroupReduceV2(
     CcuKernelCtxBase& ctx, const size_t channels[], uint32_t channelCount, ccu::LocalAddr dst,
     std::vector<ccu::RemoteAddr> src, ccu::LocalAddr localSrc, GroupOpSizeVars goSize, HcclDataType dataType,
-    HcclDataType outputDataType, HcclReduceOp opType)
+    HcclDataType outputDataType, HcclReduceOp opType, uint32_t localRankSlot)
 {
     GroupReduceVar var;
     ccu::Variable tmp;
@@ -409,7 +435,8 @@ CcuResult GroupReduceV2(
     ccu::Variable paraCfg;
     ccu::Variable offsetCfg;
     ccu::Variable xnOffsetCfg;
-    CCU_CHK_RET(CreateMultiOpReduceV2(ctx, var, channels, channelCount, dataType, outputDataType, opType));
+    CCU_CHK_RET(
+        CreateMultiOpReduceV2(ctx, var, channels, channelCount, dataType, outputDataType, opType, localRankSlot));
     auto& loops = ctx.loopMap["reduce"];
 
     uint32_t size = channelCount + 1;

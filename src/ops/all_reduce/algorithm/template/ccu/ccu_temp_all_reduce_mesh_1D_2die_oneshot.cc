@@ -8,6 +8,8 @@
  * See LICENSE in the root of the software repository for the full text of the License.
  */
 
+#include <algorithm>
+
 #include "channel.h"
 #include "alg_data_trans_wrapper.h"
 #include "ccu_kernel_all_reduce_mesh_1D_2die_oneshot.h"
@@ -92,8 +94,16 @@ HcclResult CcuTempAllreduceMesh1D2DieOneShot::CalcRes(
         kernelInfo.kernelFunc = reinterpret_cast<void*>(CcuAllreduceMesh1D2DieOneShotKernel);
 
         bool rmtReduceWithMyRank = channelDescsDie[die].size() > channelDescsDie[1 - die].size() ? false : true;
+        uint32_t localRankSlot = CCU_REDUCE_SLOT_LOCAL_LAST;
         if (rmtReduceWithMyRank) {
             groupRanksforDie[die].push_back(mySubCommRank_);
+            // 本卡 rank 在 die 组内升序 rank 中的位置，作为 GroupReduce 操作数槽位（结果一致性）：
+            // 与对侧 die 的 GroupReduceWithoutMyRank（远端升序落槽）产出同一部分和序列
+            std::vector<u32> sortedGroupRanks = groupRanksforDie[die];
+            std::sort(sortedGroupRanks.begin(), sortedGroupRanks.end());
+            localRankSlot = static_cast<uint32_t>(
+                std::lower_bound(sortedGroupRanks.begin(), sortedGroupRanks.end(), mySubCommRank_)
+                - sortedGroupRanks.begin());
         }
 
         auto kernelArg = std::make_shared<CcuKernelArgAllreduceMesh1D2DieOneShot>();
@@ -102,6 +112,7 @@ HcclResult CcuTempAllreduceMesh1D2DieOneShot::CalcRes(
         kernelArg->opParam = param;
         kernelArg->subCommRanks = groupRanksforDie;
         kernelArg->rmtReduceWithMyRank = rmtReduceWithMyRank;
+        kernelArg->localRankSlot = localRankSlot;
 
         kernelInfo.setKernelArg(kernelArg);
         kernelInfo.channels = channelDescsDie[die];
