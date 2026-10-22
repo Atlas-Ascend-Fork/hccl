@@ -436,3 +436,73 @@ TEST_F(TopoMatchTwoLevelTest, P3SingleMeshAnchorCandidateLowGuards)
     ASSERT_EQ(info.infos[0][0], Range(8));
     ASSERT_EQ(info.infos[1][0], (std::vector<u32>{3, 11}));
 }
+
+// T25: 仅 PCIE 链路（无 UB）+ 非 HOSTCPU 引擎 → d0=1 不被允许 → NOT_SUPPORT
+// 回归防线：覆盖本次 coredump 场景，确保 d0=1 且引擎非 HOSTCPU 时直接拒绝
+TEST_F(TopoMatchTwoLevelTest, PcieOnlyNonHostcpuNotSupport)
+{
+    auto topo = MakeTopoInfo(
+        3, 16,
+        {
+            MakeLevel(
+                Range(8), PhysicalLevelView::GLOBAL, {8, 8}, true, COMM_TOPO_CLOS, ENDPOINT_LOC_TYPE_DEVICE,
+                {COMM_PROTOCOL_PCIE}),
+            MakeLevel(Range(16), PhysicalLevelView::GLOBAL, {16}),
+        });
+    AlgAttrs profile = MakeProfile({AlgoType::MESH, AlgoType::NHR}); // 默认 AICPU_TS
+    AlgHierarchyInfoForAllLevel info;
+    ASSERT_EQ(matcher_.MatchTopo(&topo, info, profile), HcclResult::HCCL_E_NOT_SUPPORT);
+}
+
+// T26: 仅 PCIE 链路（无 UB）+ HOSTCPU(DPU) → d0=1，group0={myRank}，d1=userRankSize
+TEST_F(TopoMatchTwoLevelTest, PcieOnlyHostcpuD0OneGroupIsSelfRank)
+{
+    auto topo = MakeTopoInfo(
+        3, 16,
+        {
+            MakeLevel(
+                Range(8), PhysicalLevelView::GLOBAL, {8, 8}, true, COMM_TOPO_CLOS, ENDPOINT_LOC_TYPE_DEVICE,
+                {COMM_PROTOCOL_PCIE}),
+            MakeLevel(Range(16), PhysicalLevelView::GLOBAL, {16}, true, COMM_TOPO_CLOS, ENDPOINT_LOC_TYPE_HOST),
+        });
+    AlgAttrs profile = MakeProfile({AlgoType::MESH, AlgoType::NHR}, OpExecuteConfig::HOSTCPU);
+    AlgHierarchyInfoForAllLevel info;
+    ASSERT_EQ(matcher_.MatchTopo(&topo, info, profile), HcclResult::HCCL_SUCCESS);
+    ASSERT_EQ(info.infos[0][0], (std::vector<u32>{3}));
+    ASSERT_EQ(info.infos[1][0].size(), 16u);
+    ASSERT_EQ(info.infos[1][0], Range(16));
+}
+
+// T27: UB+PCIE 混合链路 → IsPcieLevel=false → 正常对称路径，d0=localRanks.size()=8
+TEST_F(TopoMatchTwoLevelTest, UbPcieMixedBehavesAsNormal)
+{
+    auto topo = MakeTopoInfo(
+        3, 16,
+        {
+            MakeLevel(
+                Range(8), PhysicalLevelView::GLOBAL, {8, 8}, true, COMM_TOPO_CLOS, ENDPOINT_LOC_TYPE_DEVICE,
+                {COMM_PROTOCOL_UB_CTP, COMM_PROTOCOL_PCIE}),
+            MakeLevel(Range(16), PhysicalLevelView::GLOBAL, {16}),
+        });
+    AlgAttrs profile = MakeProfile({AlgoType::MESH, AlgoType::NHR});
+    AlgHierarchyInfoForAllLevel info;
+    ASSERT_EQ(matcher_.MatchTopo(&topo, info, profile), HcclResult::HCCL_SUCCESS);
+    ASSERT_EQ(info.infos[0][0], Range(8));
+    ASSERT_EQ(info.infos[1][0], (std::vector<u32>{3, 11}));
+}
+
+// T28: protocols 为空 → IsPcieLevel=false → 与改动前一致
+TEST_F(TopoMatchTwoLevelTest, EmptyProtocolsBehavesAsNormal)
+{
+    auto topo = MakeTopoInfo(
+        3, 16,
+        {
+            MakeLevel(Range(8), PhysicalLevelView::GLOBAL, {8, 8}, true, COMM_TOPO_CLOS, ENDPOINT_LOC_TYPE_DEVICE, {}),
+            MakeLevel(Range(16), PhysicalLevelView::GLOBAL, {16}),
+        });
+    AlgAttrs profile = MakeProfile({AlgoType::MESH, AlgoType::NHR});
+    AlgHierarchyInfoForAllLevel info;
+    ASSERT_EQ(matcher_.MatchTopo(&topo, info, profile), HcclResult::HCCL_SUCCESS);
+    ASSERT_EQ(info.infos[0][0], Range(8));
+    ASSERT_EQ(info.infos[1][0], (std::vector<u32>{3, 11}));
+}

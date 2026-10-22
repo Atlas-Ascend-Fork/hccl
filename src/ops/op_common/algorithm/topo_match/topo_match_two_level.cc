@@ -15,10 +15,31 @@
 namespace ops_hccl {
 
 namespace {
+    // 判断level是否包含Pcie链路但不包含UB_CTP和UB_MEM链路
+    bool IsPcieLevel(const PhysicalLevelInfo& level0)
+    {
+        bool hasUbProtocol = false;
+        bool hasPcieProtocol = false;
+        for (auto& protocol : level0.protocols) {
+            if (protocol == COMM_PROTOCOL_UB_CTP || protocol == COMM_PROTOCOL_UB_MEM) {
+                hasUbProtocol = true;
+            } else if (protocol == COMM_PROTOCOL_PCIE) {
+                hasPcieProtocol = true;
+            }
+        }
+        return !hasUbProtocol && hasPcieProtocol;
+    }
+
     // 计算内层维度 d0：LOCAL 取 localRanks.size()；GLOBAL 对称取 localRanks.size()，非对称 GCD 打平
     HcclResult CalcLevel0Dim(
         const PhysicalLevelInfo& level0, u32 myRank, u32& d0, bool& asymmetric, u32& gcd, const AlgAttrs& algAttrs)
     {
+        // level如果包含Pcie链路但不包含UB_CTP和UB_MEM链路，不使用PCIE链路进行Level0算法通信，d0配置为1
+        if (IsPcieLevel(level0)) {
+            HCCL_INFO("[TopoMatchTwoLevel] level0 is PCIe level, set d0 = 1, use higher level communication.");
+            d0 = 1;
+            return HcclResult::HCCL_SUCCESS;
+        }
         if (level0.view == PhysicalLevelView::LOCAL) {
             d0 = static_cast<u32>(level0.localRanks.size());
             return HcclResult::HCCL_SUCCESS;
@@ -44,9 +65,12 @@ namespace {
         return HcclResult::HCCL_SUCCESS;
     }
 
-    // 构造含 myRank 的内层组；非对称时按 gcd 从 localRanks 切子组
+    // 构造含 myRank 的内层组；非对称时按 gcd 从 localRanks 切子组；PCIE-only 时仅含自身 rank
     std::vector<u32> BuildLevel0Group(const PhysicalLevelInfo& level0, u32 myRank, bool asymmetric, u32 gcd)
     {
+        if (IsPcieLevel(level0)) {
+            return {myRank};
+        }
         if (!asymmetric) {
             return level0.localRanks;
         }
