@@ -1012,7 +1012,7 @@
 <td><p>×</p>
 </td>
 </tr>
-<tr><td rowspan="3"><p>AllGather</p>
+<tr><td rowspan="3"><p>AllGatherV</p>
 </td>
 <td><p>单算子模式</p>
 </td>
