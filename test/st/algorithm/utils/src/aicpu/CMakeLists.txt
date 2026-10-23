@@ -225,6 +225,7 @@ add_library(hccl_aicpu_kernel SHARED
     ${HCCL_DEV_BASE}/src/ops/reduce_scatter/algorithm/executor/ins_v2_reduce_scatter_sequence_executor.cc
     ${HCCL_DEV_BASE}/src/ops/reduce_scatter/algorithm/executor/ins_v2_reduce_scatter_sequence_executor_aicpu.cc
     ${HCCL_DEV_BASE}/src/ops/reduce_scatter/algorithm/executor/ins_v2_reduce_scatter_sequence_executor_3level.cc
+    ${HCCL_DEV_BASE}/src/ops/reduce_scatter/algorithm/executor/ins_v2_reduce_scatter_sequence_executor_3level_dpu.cc
     ${HCCL_DEV_BASE}/src/ops/reduce_scatter/algorithm/template/aicpu/ins_temp_reduce_scatter_mesh_1D.cc
     ${HCCL_DEV_BASE}/src/ops/reduce_scatter/algorithm/template/aicpu/ins_temp_reduce_scatter_nhr.cc
     ${HCCL_DEV_BASE}/src/ops/reduce_scatter/algorithm/template/aicpu/ins_temp_reduce_scatter_mesh_1D_meshchunk.cc

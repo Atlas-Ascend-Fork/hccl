@@ -72,7 +72,11 @@ void TopoModel::InitHostDpuInfo(uint32_t serverNum)
 
     isDpuEnable = true;
     dpuDesc_.clear();
-    EndpointDesc endpoint;
+    // 值初始化清零并显式设置协议: protocol 未赋值时携带栈上残留值, 会被框架按协议值消费
+    // (IsLevel0PcieMix/FetchLocAndProtocols 等); Host DPU 网卡端点取 ROCE, 与 DPU 模式
+    // L1/L2 链路协议一致
+    EndpointDesc endpoint{};
+    endpoint.protocol = CommProtocol::COMM_PROTOCOL_ROCE;
     endpoint.loc.locType = EndpointLocType::ENDPOINT_LOC_TYPE_HOST;
 
     dpuDesc_.push_back(endpoint);
@@ -164,11 +168,15 @@ TopoModel::CheckColPeerDevice(const std::vector<uint32_t>& phyIds, uint32_t rank
 void TopoModel::InitEndpointMap(
     uint32_t rankId, uint32_t phyId, uint32_t serverId, uint32_t superpodId, uint32_t& devIpStart)
 {
-    EndpointDesc endpoint;
-    CommAddr addr;
+    // 值初始化清零全部字段: protocol/commAddr.eid 等未显式赋值字段此前携带栈上残留值,
+    // 框架会按协议值消费(残留值恰为 PCIE(2) 时 IsLevel0PcieMix 误判 level0PcieMix=true,
+    // 使 omnipipe cost 跳过劣化分支, 选路按 rank 分裂, 见 reduce_scatter_dpu 三级用例 30/2 分裂)
+    EndpointDesc endpoint{};
+    CommAddr addr{};
     addr.type = CommAddrType::COMM_ADDR_TYPE_IP_V4;
     addr.id = htonl(devIpStart++);
     endpoint.commAddr = addr;
+    endpoint.protocol = CommProtocol::COMM_PROTOCOL_UB_CTP; // 与 910D L0 框内链路协议一致
     endpoint.loc.device.devPhyId = phyId;
     endpoint.loc.device.superPodIdx = superpodId;
     endpoint.loc.device.serverIdx = serverId;

@@ -12,6 +12,7 @@
 #define HCCLV2_INS_V2_REDUCE_SCATTER_SEQUENCE_EXECUTOR_3LEVEL_H
 
 #include "executor_common_ops.h"
+#include "ins_v2_reduce_scatter_sequence_3level_utils.h"
 #include "topo_match_base.h"
 #include "topo_match_multilevel.h"
 #include "topo_match_base_v2.h"
@@ -21,7 +22,7 @@
 
 namespace ops_hccl {
 template <typename AlgTopoMatch, typename InsAlgTemplate0, typename InsAlgTemplate1, typename InsAlgTemplate2>
-class InsV2ReduceScatterSequenceExecutor3Level : public InsCollAlgBase {
+class InsV2ReduceScatterSequenceExecutor3Level : public InsV2ReduceScatterSequence3LevelBase {
 public:
     explicit InsV2ReduceScatterSequenceExecutor3Level();
     ~InsV2ReduceScatterSequenceExecutor3Level() override = default;
@@ -43,35 +44,9 @@ public:
 
 protected:
     HcclResult OrchestrateLoop(const OpParam& param, const AlgResourceCtxSerializable& resCtx);
-    HcclResult InitCommInfo(
-        const OpParam& param, const TopoInfoWithNetLayerDetails* topoInfo,
-        const AlgHierarchyInfoForAllLevel& algHierarchyInfo);
-    void GenIntraTemplateParams(
-        TemplateDataParams& tempAlgParamsIntra, const u64 processedDataCount, const u64 currDataCount,
-        const u64 loop) const;
-    void GenInterTemplateParams1(
-        TemplateDataParams& tempAlgParamsInter, const u64 processedDataCount, const u64 currDataCount,
-        const u64 loop) const;
     void GenInterTemplateParams2(
         TemplateDataParams& tempAlgParamsInter, const u64 processedDataCount, const u64 currDataCount,
         const u64 loop) const;
-    template <typename InsAlgTemplate>
-    HcclResult GenTempResource(
-        const AlgResourceCtxSerializable& resCtx, const u32 channelLevelIdx,
-        const std::shared_ptr<InsAlgTemplate>& algTemplate, TemplateResource& tempResource) const;
-
-    uint32_t rankSizeLevel0_{0};
-    uint32_t rankSizeLevel1_{0};
-    uint32_t rankSizeLevel2_{0};
-    bool skipLevel1_{false};
-
-    uint32_t rankIdxLevel0_{0};
-    uint32_t rankIdxLevel1_{0};
-    uint32_t rankIdxLevel2_{0};
-
-    AlgHierarchyInfoForAllLevel algHierarchyInfo_;
-    std::vector<std::map<u32, std::vector<ChannelInfo>>> remoteRankToChannelInfo_;
-    std::vector<ThreadHandle> threads_;
 };
 } // namespace ops_hccl
 
