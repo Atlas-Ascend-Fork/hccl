@@ -511,6 +511,8 @@ function run_ut() {
   if [[ "X$ENABLE_UT" = "Xon" ]]; then
     local ut_dir="${BUILD_DIR}/test"
     echo "ut_dir = ${ut_dir}"
+    # Clang-Tidy 增量检查脚本单测（纯 python，无 CANN 依赖）
+    python3 "${CURRENT_DIR}/scripts/clang-tidy/clang_tidy_check_test.py"
     find "$ut_dir" -type f -executable | while read -r ut_exec; do
         filename=$(basename "$ut_exec")
         echo "Executing: $filename"
@@ -1020,6 +1022,8 @@ CUSTOM_OPTION="${CUSTOM_OPTION} -DCUSTOM_SIGN_SCRIPT=${CUSTOM_SIGN_SCRIPT}"
 CUSTOM_OPTION="${CUSTOM_OPTION} -DENABLE_SIGN=${ENABLE_SIGN}"
 CUSTOM_OPTION="${CUSTOM_OPTION} -DVERSION_INFO=${VERSION_INFO}"
 CUSTOM_OPTION="${CUSTOM_OPTION} -DPRODUCT=ascend"
+# 导出 compile_commands.json，供 clang-tidy 增量检查使用
+CUSTOM_OPTION="${CUSTOM_OPTION} -DCMAKE_EXPORT_COMPILE_COMMANDS=ON"
 
 set_env
 
@@ -1061,5 +1065,15 @@ else
 
         exit 1
 
+    fi
+    # Clang-Tidy incremental check: after build, compile_commands.json ready.
+    # Only blocks new-code complexity warnings. Fallback: skip (exit 0) if
+    # clang-tidy / compile_commands.json / base-ref unavailable.
+    if [ "${ENABLE_CLANG_TIDY_CHECK:-on}" == "on" ] && [ -f "${BUILD_DIR}/compile_commands.json" ]; then
+        log "Info: Running clang-tidy incremental check (ENABLE_CLANG_TIDY_CHECK=${ENABLE_CLANG_TIDY_CHECK:-on})"
+        if ! bash ${CURRENT_DIR}/scripts/clang-tidy/clang_tidy_check.sh --build-dir ${BUILD_DIR}; then
+            log "Error: clang-tidy incremental check failed (new code complexity violation)"
+            exit 1
+        fi
     fi
 fi
