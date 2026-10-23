@@ -21,6 +21,8 @@
 
 因此，在定位建链超时问题时，不应仅关注当前报错Rank，而应结合建链关系持续向前追踪，找到**最早发生建链失败的Rank对**，优先分析其失败原因。
 
+HCCL提供了建链失败根节点自动定位机制来辅助快速定位：自动探测故障根节点并打印探测结果，其中打印的(srcRank, dstRank)即定位到的**失败Rank对**（详见[建链失败根节点定位结果](#建链失败根节点定位结果)，机制参见[建链失败定位思路](./param_link_stage_troubleshooting.md#建链根节点定位机制)）。
+
 # 建链超时 （EI0006）
 
 当发生参数面建链超时时，CANN日志中通常会出现如下关键字：`wait socket establish timeout`。
@@ -29,6 +31,68 @@
 [ERROR] HCCL(17528,python3):2026-03-18-10:33:52.113.403 [hccl_socket_manager.cc:797] [18744][Wait][LinkEstablish]wait socket establish timeout, role[1] rank[1] timeout[120 s]
 [ERROR] HCCL(17528,python3):2026-03-18-10:33:52.113.454 [hccl_socket_manager.cc:861] [18744][Wait][LinksEstablishCompleted] is failed. ret[9].
 ```
+
+## 建链失败根节点定位结果
+
+建链失败后，HCCL会启动建链失败根节点定位（详细机制参见[建链失败定位思路](./param_link_stage_troubleshooting.md#建链根节点定位机制)）；探测完成后打印`CONNECT TIMEOUT DETECT RESULT`探测结果，其中打印的(srcRank, dstRank)即定位到的失败Rank对，探测结果同时作为EI0006的报错原因上报。探测结果的主要内容包括：
+
+```text
+This node (server 192.168.200.100, device ID 1) detects that srcRank (server 192.168.200.100, device ID 1) fails to connect to dstRank (server 192.168.200.100, device ID 0). Continue to analyze the fault based on the logs of srcRank and dstRank.
+```
+
+其中：
+
+- `This node`：本端节点。
+- `srcRank`：探测发起节点。
+- `dstRank`：探测不通的对端节点，即故障根节点，优先分析该对端。
+- `server`：机器标识。Atlas A3系列产品和Atlas A2系列产品为Server IP地址；Ascend 950PR&950DT系列产品为netInstId，即[rank table配置](../cluster_info_config/rank_table_config_a5.md)中net_layer为0的net_instance_id。
+- `device ID`：设备物理ID（`devicePhyId`）。
+- 探测结果末尾会给出排查建议：(srcRank, dstRank)两端均上报建链超时时检查网络连通性；dstRank存在其他报错时优先分析其报错；dstRank无报错时可能为业务进程挂起或提前退出。
+- 未探测到异常事件时，打印`This node detects no exception event`，说明各rank之间的探测链路均正常，建链超时可能是算子下发不一致，请参考下文[排查点1](#排查点1对端没有任何异常日志)从业务侧排查。
+
+此机制仅适用于如下产品：
+<!-- npu="950" id1 -->
+- Ascend 950PR&950DT系列产品
+<!-- end id1 -->
+<!-- npu="A3" id2 -->
+- Atlas A3系列产品
+<!-- end id2 -->
+<!-- npu="910b" id3 -->
+- Atlas A2系列产品
+<!-- end id3 -->
+
+<!-- npu="950" id4 -->
+说明
+> Ascend 950PR&950DT系列产品上，建链成功后的一致性校验数据交换发生超时时，同样会触发建链失败根节点定位。
+<!-- end id4 -->
+
+不同产品的探测结果日志示例如下：
+
+<!-- npu="A3,910b" id5 -->
+Atlas A3系列产品和Atlas A2系列产品：
+
+```text
+[ERROR] HCCL(17528,python3):2026-03-18-10:34:43.141.949 [detect_connect_anomalies.cc:169] [18744]-------------------CONNECT TIMEOUT DETECT RESULT-----------------------
+[ERROR] HCCL(17528,python3):2026-03-18-10:34:43.141.966 [detect_connect_anomalies.cc:172] [18744]This node (server 192.168.200.100, device ID 1) detects that srcRank (server 192.168.200.100, device ID 1) fails to connect to dstRank (server 192.168.200.100, device ID 0). Continue to analyze the fault based on the logs of srcRank and dstRank.
+[ERROR] HCCL(17528,python3):2026-03-18-10:34:43.141.970 [detect_connect_anomalies.cc:173] [18744]1. If the link setup timeout is reported on both ends, check the network connectivity between the two ends.
+2. If dstRank reports other exceptions, locate the cause based on the exception information of dstRank.
+3. If dstRank does not report any error, the possible cause is that the service process is suspended or exits in advance
+[ERROR] HCCL(17528,python3):2026-03-18-10:34:43.141.977 [detect_connect_anomalies.cc:184] [18744]----------------------------------------------------------------------
+```
+<!-- end id5 -->
+
+<!-- npu="950" id6 -->
+Ascend 950PR&950DT系列产品：
+
+```text
+[ERROR] HCCL(17528,python3):2026-03-18-10:34:43.141.949 [detect_connection_anomalies.cc:78] [18744]-------------------CONNECT TIMEOUT DETECT RESULT-----------------------
+[ERROR] HCCL(17528,python3):2026-03-18-10:34:43.141.966 [detect_connection_anomalies.cc:88] [18744]This node (server az0-rack0-pod0, device ID 1) detects that srcRank (server az0-rack0-pod0, device ID 1) fails to connect to dstRank (server az0-rack0-pod0, device ID [0]). Continue to analyze the fault based on the logs of srcRank and dstRank.
+[ERROR] HCCL(17528,python3):2026-03-18-10:34:43.141.970 [detect_connection_anomalies.cc:91] [18744]1. If the link setup timeout is reported on both ends, check the network connectivity between the two ends.
+2. If dstRank reports other exceptions, locate the cause based on the exception information of dstRank.
+3. If dstRank does not report any error, the possible cause is that the service process is suspended or exits in advance
+[ERROR] HCCL(17528,python3):2026-03-18-10:34:43.141.977 [detect_connection_anomalies.cc:100] [18744]----------------------------------------------------------------------
+```
+<!-- end id6 -->
 
 ## 问题定位流程
 

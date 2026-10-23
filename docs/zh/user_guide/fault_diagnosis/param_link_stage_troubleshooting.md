@@ -29,6 +29,22 @@ HCCL在参数面建链阶段提供了下文所述机制来辅助问题快速定�
 for i in *;do cd $i;pwd;grep -rnc "connection fail" | grep -v ":0" | wc -l; cd ..;done
 ```
 
+上述建链根节点定位机制仅适用于如下产品：
+<!-- npu="950" id4 -->
+- Ascend 950PR&950DT系列产品
+<!-- end id4 -->
+<!-- npu="A3" id5 -->
+- Atlas A3系列产品
+<!-- end id5 -->
+<!-- npu="910b" id6 -->
+- Atlas A2系列产品
+<!-- end id6 -->
+
+<!-- npu="950" id7 -->
+说明
+> Ascend 950PR&950DT系列产品上，建链成功后的一致性校验数据交换发生超时时，同样会触发建链失败根节点定位。
+<!-- end id7 -->
+
 ## 一致性校验机制
 
 HCCL在与对端成功创建socket链接后，会互相交换算子入参、CANN版本等信息并与本端的信息做校验，如果此时校验结果存在不一致的情况，则会在CANN日志及打屏日志中上报错误并返回错误码。详细问题定位流程可参考[参数一致性校验(EI0005)](./param_consistency_check_EI0005.md#参数一致性校验ei0005)。

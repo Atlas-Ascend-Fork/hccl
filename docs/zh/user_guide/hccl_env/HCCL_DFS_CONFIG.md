@@ -76,7 +76,7 @@ export HCCL_DFS_CONFIG="connection_fault_detection_time:30,cluster_heartbeat:on,
 
 ## 使用约束
 
-**当前版本Ascend 950PR&950DT系列产品仅支持配置以下四个字段：task_exception、cluster_heartbeat、inconsistent_check、task_monitor_interval。**
+**当前版本Ascend 950PR&950DT系列产品仅支持配置以下五个字段：task_exception、cluster_heartbeat、inconsistent_check、task_monitor_interval、connection_fault_detection_time。**
 
 ## 产品支持情况
 
