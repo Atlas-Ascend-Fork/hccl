@@ -2,6 +2,14 @@
 
 English | [简体中文](./README.md)
 
+> [!NOTE]Note
+> The documents in the following directories require professional translation and review. Due to time differences, the corresponding English documents may not be consistent with the Chinese documents.
+>
+> - `docs/zh/api_ref`
+> - `docs/zh/user_guide`
+
+## Documents
+
 - [Collective Communication Library User Guide](https://www.hiascend.com/document/detail/en/canncommercial/850/commlib/hcclug/hcclug_000001.html): Introduces basic HCCL concepts, how to use HCCL APIs for collective communication development, how to develop communication operators, and fault handling with common configurations.
 - [Communication Operator Development Guide (Chinese)](https://gitcode.com/cann/hcomm/blob/master/docs/zh/comm_op_dev_guide/README.md): Introduces how to develop communication operators based on the APIs provided by the HCOMM communication foundation library.
 

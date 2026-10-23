@@ -2,6 +2,14 @@
 
 简体中文 | [English](./README_en.md)
 
+> [!NOTE]说明
+> 以下目录中的文档需经专业翻译和审校，受时间差影响，对应英文文档可能无法与中文文档保持一致。
+>
+> - `docs/zh/api_ref`
+> - `docs/zh/user_guide`
+
+## 文档
+
 - [集合通信库用户指南](./zh/user_guide/README.md)：介绍HCCL基本概念、如何使用HCCL API进行集合通信功能的开发，如何开发通信算子，以及故障处理与常见配置。
 - [通信算子开发指南](https://gitcode.com/cann/hcomm/blob/master/docs/zh/comm_op_dev_guide/README.md)：介绍如何基于HCOMM通信基础库提供的相关接口进行通信算子的开发。
 
