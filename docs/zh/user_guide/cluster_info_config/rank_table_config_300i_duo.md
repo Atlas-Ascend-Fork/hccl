@@ -1,44 +1,38 @@
 # rank table配置资源信息（Atlas推理系列产品）
 
-针对Atlas推理系列产品，以包含两个AI Server，每个AI Server内2个Device为例，rank table文件配置示例如下：
+针对Atlas推理系列产品，仅支持单Server场景。以下以一个AI Server内4个NPU为例，rank table文件配置示例如下：
 
 > [!NOTE]说明
-> rank table文件为JSON格式，本节所示JSON文件示例中的注释仅为方便理解，实际使用时，请删除JSON文件中的注释。
+> rank table文件为JSON格式，本示例使用一个Server，并使Device ID和rank ID在该Server内连续编号。IP地址仅为示意，请按实际网卡配置替换；组网限制参见[系统约束与限制](../constraints.md#atlas推理系列产品)。
 
 ```json
 {
-    "status":"completed",   // rank table可用标识，completed为可用
-    "version":"1.0",        // rank table模板版本信息，配置为：1.0
-    "server_count":"2",     // 参与训练的AI Server数目，此例中，有两个AI Server
-    "server_list":
-    [
+    "status": "completed",
+    "version": "1.0",
+    "server_count": "1",
+    "server_list": [
         {
-            "server_id":"node_0",  //AI Server标识，String类型，请确保全局唯一
-            "device":[             // AI Server中的Device列表
+            "server_id": "node_0",
+            "device": [
                 {
-                    "device_id":"0",   // 处理器的物理ID
-                    "device_ip":"192.168.1.8",   // 处理器真实网卡IP
-                    "rank_id":"0"                // rank的标识，从0开始配置，请确保全局唯一
+                    "device_id": "0",
+                    "device_ip": "192.168.1.8",
+                    "rank_id": "0"
                 },
                 {
-                    "device_id":"1",
-                    "device_ip":"192.168.1.9",
-                    "rank_id":"1"
-                }
-            ]
-        },
-        {
-            "server_id":"node_1",
-            "device":[
-                {
-                    "device_id":"0",
-                    "device_ip":"192.168.2.8",
-                    "rank_id":"2"
+                    "device_id": "1",
+                    "device_ip": "192.168.1.9",
+                    "rank_id": "1"
                 },
                 {
-                    "device_id":"1",
-                    "device_ip":"192.168.2.9",
-                    "rank_id":"3"
+                    "device_id": "2",
+                    "device_ip": "192.168.1.10",
+                    "rank_id": "2"
+                },
+                {
+                    "device_id": "3",
+                    "device_ip": "192.168.1.11",
+                    "rank_id": "3"
                 }
             ]
         }
