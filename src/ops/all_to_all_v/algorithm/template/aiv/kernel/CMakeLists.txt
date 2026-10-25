@@ -421,7 +421,7 @@ install(FILES ${CMAKE_CURRENT_BINARY_DIR}/hccl_a2a_superkernel_mesh_1d_uint64_v2
     COMPONENT hccl
 )
 
-if(HCCL_ENABLE_960)
+if(CANN_CHIP_EXT STREQUAL "ascend960")
 add_custom_target(hccl_aiv_all_to_all_v_op_960 ALL
     DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/hccl_aiv_all_to_all_v_op_960.o)
 add_custom_command(OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/hccl_aiv_all_to_all_v_op_960.o

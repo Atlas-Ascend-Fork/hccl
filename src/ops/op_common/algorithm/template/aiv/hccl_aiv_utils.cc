@@ -62,7 +62,7 @@ DECL_AIV_EMBED(hccl_aiv_reduce_scatter_op_910_95);
 DECL_AIV_EMBED(hccl_aiv_scatter_op_910_95);
 DECL_AIV_EMBED(hccl_aiv_send_op_910_95);
 DECL_AIV_EMBED(hccl_aiv_recv_op_910_95);
-#ifdef HCCL_ENABLE_960
+#if defined(CANN_CHIP_EXT) && (CANN_CHIP_EXT == ascend960)
 DECL_AIV_EMBED(hccl_aiv_all_gather_op_960);
 DECL_AIV_EMBED(hccl_aiv_all_reduce_op_960);
 DECL_AIV_EMBED(hccl_aiv_all_to_all_op_960);
@@ -73,7 +73,7 @@ DECL_AIV_EMBED(hccl_aiv_reduce_scatter_op_960);
 DECL_AIV_EMBED(hccl_aiv_scatter_op_960);
 DECL_AIV_EMBED(hccl_aiv_send_op_960);
 DECL_AIV_EMBED(hccl_aiv_recv_op_960);
-#endif // HCCL_ENABLE_960
+#endif
 #undef DECL_AIV_EMBED
 }
 
@@ -96,7 +96,7 @@ static const AivEmbedSymbol kAivEmbedTable[] = {
     EMBED_ENTRY(hccl_aiv_scatter_op_910_95),
     EMBED_ENTRY(hccl_aiv_send_op_910_95),
     EMBED_ENTRY(hccl_aiv_recv_op_910_95),
-#ifdef HCCL_ENABLE_960
+#if defined(CANN_CHIP_EXT) && (CANN_CHIP_EXT == ascend960)
     EMBED_ENTRY(hccl_aiv_all_gather_op_960),
     EMBED_ENTRY(hccl_aiv_all_reduce_op_960),
     EMBED_ENTRY(hccl_aiv_all_to_all_op_960),
@@ -107,7 +107,7 @@ static const AivEmbedSymbol kAivEmbedTable[] = {
     EMBED_ENTRY(hccl_aiv_scatter_op_960),
     EMBED_ENTRY(hccl_aiv_send_op_960),
     EMBED_ENTRY(hccl_aiv_recv_op_960),
-#endif // HCCL_ENABLE_960
+#endif
 };
 #undef EMBED_ENTRY
 

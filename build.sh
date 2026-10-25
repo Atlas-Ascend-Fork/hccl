@@ -26,13 +26,7 @@ COV="false"
 CUSTOM_OPTION="-DCMAKE_INSTALL_PREFIX=${OUTPUT_DIR}"
 STATIC_MODE="false"  # 新增变量，用于控制是否静态编译
 ENABLE_BUILD_DEVICE="OFF"
-ENABLE_BUILD_AARCH="OFF" 
-# 960(960) AIV kernel 编译开关：ENABLE_960="ON"即编, ENABLE_960="OFF"即不编
-# 如需覆盖，请编辑同目录下的 build_config.sh，无需改动本文件
-ENABLE_960="OFF"
-if [ -f "${CURRENT_DIR}/build_config.sh" ]; then
-    . "${CURRENT_DIR}/build_config.sh"
-fi
+ENABLE_BUILD_AARCH="OFF"
 CANN_3RD_LIB_PATH="${CURRENT_DIR}/third_party"
 CUSTOM_SIGN_SCRIPT=""
 ENABLE_SIGN="false"
@@ -698,6 +692,25 @@ function build_hccl() {
     fi
 }
 
+# 解析 --extra-cmake-args 传入的 KEY=VALUE 参数(支持逗号分隔多个), 转换为 -DKEY=VALUE 追加到 CUSTOM_OPTION
+function parse_cmake_extra_args() {
+    local args_str="$1"
+    if [ -z "${args_str}" ]; then
+        log "Error: --extra-cmake-args requires a non-empty value, e.g. --extra-cmake-args=CANN_CHIP_EXT=ascend960"
+        exit 1
+    fi
+    local arg
+    local IFS=','
+    for arg in ${args_str}; do
+        if [[ ! "${arg}" =~ ^[A-Za-z_][A-Za-z0-9_]*= ]]; then
+            log "Error: invalid extra cmake arg: ${arg} (expect KEY=VALUE)"
+            exit 1
+        fi
+        CUSTOM_OPTION="${CUSTOM_OPTION} -D${arg}"
+    done
+    log "Info: extra cmake args appended, CUSTOM_OPTION=${CUSTOM_OPTION}"
+}
+
 # print usage message
 function usage() {
   echo "Usage:"
@@ -735,6 +748,9 @@ function usage() {
   echo "    --aiv_arch=<ARCH>"
   echo "                   Set AIV kernel ccec arch (220/dav-c220-vec for A2/A3,"
   echo "                   310/dav-c310-vec for 950PR/950DT)"
+  echo "    --extra-cmake-args=<ARGS>"
+  echo "                   Pass extra cmake args (KEY=VALUE, comma-separated) to cmake,"
+  echo "                   e.g. --extra-cmake-args=CANN_CHIP_EXT=ascend960"
   echo "    --experimental"
   echo "                   Enable experimental features"
   echo "    --static"
@@ -951,6 +967,25 @@ while [[ $# -gt 0 ]]; do
         esac
         shift
         ;;
+    --extra-cmake-args=*|--extra-cmake-args)
+    if [[ "$1" == *=* ]]; then
+        # 等号形式:
+        # --extra-cmake-args=CANN_CHIP_EXT=ascend960
+        parse_cmake_extra_args "${1#*=}"
+
+        shift
+    else
+        # 空格形式:
+        # --extra-cmake-args CANN_CHIP_EXT=ascend960
+        if [[ $# -lt 2 || -z "${2:-}" || "$2" == -* ]]; then
+            log "Error: $1 requires a non-empty value."
+            exit 1
+        fi
+
+        parse_cmake_extra_args "$2"
+        shift 2
+    fi
+    ;;
     *)
         log "Error: Undefined option: $1"
         usage
@@ -1017,7 +1052,6 @@ CUSTOM_OPTION="${CUSTOM_OPTION} -DCANN_3RD_LIB_PATH=${CANN_3RD_LIB_PATH}"
 CUSTOM_OPTION="${CUSTOM_OPTION} -DCMAKE_BUILD_TYPE=${BUILD_TYPE}"
 CUSTOM_OPTION="${CUSTOM_OPTION} -DENABLE_BUILD_DEVICE=${ENABLE_BUILD_DEVICE}"
 CUSTOM_OPTION="${CUSTOM_OPTION} -DENABLE_BUILD_AARCH=${ENABLE_BUILD_AARCH}"
-CUSTOM_OPTION="${CUSTOM_OPTION} -DHCCL_ENABLE_960=${ENABLE_960}"
 CUSTOM_OPTION="${CUSTOM_OPTION} -DCUSTOM_SIGN_SCRIPT=${CUSTOM_SIGN_SCRIPT}"
 CUSTOM_OPTION="${CUSTOM_OPTION} -DENABLE_SIGN=${ENABLE_SIGN}"
 CUSTOM_OPTION="${CUSTOM_OPTION} -DVERSION_INFO=${VERSION_INFO}"
