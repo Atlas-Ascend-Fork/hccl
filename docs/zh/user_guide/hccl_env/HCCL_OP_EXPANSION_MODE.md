@@ -26,7 +26,22 @@
 
   - **AICPU_CacheDisable**：关闭HCCL算子的AI CPU cache特性。
 
+    **警告**：`AICPU_CacheDisable`配置项在CANN 9.3.0版本标记为废弃，将在2028年3月30日之后发布的版本中删除。请改用`HCOMM_AICPU_TASK_CACHE_ENABLE=0`关闭cache。
+
     AI CPU cache是指当同一个通信算子第二次执行时，HCCL会复用该算子首次执行的结果，从而节省展开开销。开启AI CPU cache特性会有一定的显存开销，因此，在通信数据量频繁变化的服务场景中，建议配置关闭cache机制，以减小显存开销。
+
+    **`AICPU_CacheDisable`与`HCOMM_AICPU_TASK_CACHE_ENABLE`的差异及优先级**：`AICPU_CacheDisable`是本环境变量的配置项，用于选择AI CPU展开并关闭cache；独立环境变量[HCOMM_AICPU_TASK_CACHE_ENABLE](HCOMM_AICPU_TASK_CACHE_ENABLE.md)仅控制cache开关，不改变算子的展开模式。
+
+    显式配置`HCOMM_AICPU_TASK_CACHE_ENABLE`的有效值时，其值优先于本环境变量得出的cache开关结果；未配置时，沿用本环境变量的结果。下表中，`1`也可写为`true`，`0`也可写为`false`：
+
+    | `HCCL_OP_EXPANSION_MODE` | `HCOMM_AICPU_TASK_CACHE_ENABLE` | cache开关 |
+    | --- | --- | --- |
+    | `AICPU_TS` | 未配置 | 开启 |
+    | `AICPU_TS` | `1` | 开启 |
+    | `AICPU_TS` | `0` | 关闭 |
+    | `AICPU_CacheDisable` | 未配置 | 关闭 |
+    | `AICPU_CacheDisable` | `1` | 开启 |
+    | `AICPU_CacheDisable` | `0` | 关闭 |
 
   - **AIV**：代表通信算子在Vector Core展开，执行也在Vector Core。
     - 该配置项仅支持对称组网、推理特性。
@@ -75,6 +90,8 @@
     - 此模式下通信功能依赖开放AI CPU用户态下发调度任务，存在一定的安全风险，需要用户自行确保自定义算子的安全可靠，防止恶意攻击行为。
 
   - **AICPU_CacheDisable**：关闭HCCL算子的AI CPU cache特性。
+
+    **警告**：`AICPU_CacheDisable`配置项在CANN 9.3.0版本标记为废弃，将在2028年3月30日之后发布的版本中删除。
 
     AI CPU cache是指当同一个通信算子第二次执行时，HCCL会复用该算子首次执行的结果，从而节省展开开销。开启AI CPU cache特性会有一定的显存开销，因此，在通信数据量频繁变化的服务场景中，建议配置关闭cache机制，以减小显存开销。
 

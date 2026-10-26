@@ -24,6 +24,8 @@ private:
     static bool IsTopoSupported(const AlgResourceCtxSerializable& resCtx);
     static HcclResult IsInplaceForCache(const OpParam& param, const uint32_t rankSize, bool& isInplace);
     static bool IsOpTypeSupported(const OpParam& param);
+    static HcclResult
+    IsAlltoallvCacheSupported(const OpParam& param, const AlgResourceCtxSerializable& resCtx, bool& isSupported);
 };
 
 } // namespace ops_hccl

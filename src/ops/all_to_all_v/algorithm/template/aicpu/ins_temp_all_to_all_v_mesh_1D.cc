@@ -318,6 +318,10 @@ HcclResult InsTempAlltoAllVMesh1D::RunSendRecvByLoop(
         }
         const std::vector<ChannelInfo>& curChannels = it->second;
         u32 curValidChannelsSize = std::min(static_cast<u32>(curChannels.size()), channelsPerRank_);
+        HCCL_INFO(
+            "[InsTempAlltoAllVMesh1D][RunSendRecvByLoop] remoteRank[%u] availableChannels[%zu] "
+            "channelsPerRank[%u] usedChannels[%u]",
+            remoteRank, curChannels.size(), channelsPerRank_, curValidChannelsSize);
         // send数据按照channel分片
         CHK_RET(CalcDataSplitByPortGroupCommon(
             tempAlgParams.sendCounts[remoteRank], dataTypeSize_, curChannels, sendCountsSplit_, sendSizeSplit_,

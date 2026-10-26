@@ -12,6 +12,7 @@
 #include <sstream>
 #include <memory>
 #include <cstring>
+#include <vector>
 #include <sched.h>
 #include <hccl/hccl_comm.h>
 #include "alg_param.h"
@@ -732,12 +733,28 @@ extern "C" unsigned int HcclLaunchAicpuKernel(OpParam* param)
 
             // 准备地址信息 (当前rank的userIn和userOut)
             constexpr uint64_t ADDRS_COUNT = 2;
-            void* addrs[ADDRS_COUNT] = {param->inputPtr, param->outputPtr};
+            void* localAddrs[ADDRS_COUNT] = {param->inputPtr, param->outputPtr};
             uint64_t inputSize = 0;
             uint64_t outputSize = 0;
             CHK_RET(static_cast<HcclResult>(AicpuTaskCacheUtils::GetInputOutputInfoForCache(
                 *param, resCtxPtr->topoInfo.userRankSize, inputSize, outputSize)));
-            uint64_t sizes[ADDRS_COUNT] = {inputSize, outputSize};
+            uint64_t localSizes[ADDRS_COUNT] = {inputSize, outputSize};
+            void** addrs = localAddrs;
+            uint64_t* sizes = localSizes;
+            std::vector<void*> vAddrs;
+            std::vector<uint64_t> vSizes;
+            uint64_t cacheMemCount = ADDRS_COUNT;
+            if (AicpuTaskCacheUtils::IsAlltoallvType(param->opType)) {
+                vAddrs.assign(localAddrs, localAddrs + ADDRS_COUNT);
+                vSizes.assign(localSizes, localSizes + ADDRS_COUNT);
+                CHK_RET(AicpuTaskCacheUtils::AppendVOpInfoForCache(
+                    *param, resCtxPtr->topoInfo.userRankSize, vAddrs, vSizes));
+                addrs = vAddrs.data();
+                sizes = vSizes.data();
+                // count最高位区分V数组格式，低位为实际数组长度。
+                constexpr uint64_t V_FORMAT_FLAG = uint64_t{1} << 63;
+                cacheMemCount = V_FORMAT_FLAG | static_cast<uint64_t>(vAddrs.size());
+            }
 
             std::string cacheTag;
             bool isCacheHit = false;
@@ -756,7 +773,7 @@ extern "C" unsigned int HcclLaunchAicpuKernel(OpParam* param)
                     // 算子展开前, 通知aicpu task cache开始缓存task
                     if (HcommIsSupportHcommAicpuTsTaskCacheStart()) {
                         cacheRet = static_cast<HcclResult>(
-                            HcommAicpuTsTaskCacheStart(cacheTag.c_str(), addrs, sizes, ADDRS_COUNT));
+                            HcommAicpuTsTaskCacheStart(cacheTag.c_str(), addrs, sizes, cacheMemCount));
                         CHK_PRT_BREAK(
                             cacheRet != HCCL_SUCCESS,
                             HCCL_ERROR("[%s] HcommAicpuTsTaskCacheStart error, ret[%d]", __func__, cacheRet), (void)0);
@@ -800,7 +817,7 @@ extern "C" unsigned int HcclLaunchAicpuKernel(OpParam* param)
                 // 刷新并下发task
                 if (HcommIsSupportHcommAicpuTsTaskCacheExecute()) {
                     CHK_RET(static_cast<HcclResult>(
-                        HcommAicpuTsTaskCacheExecute(cacheTag.c_str(), addrs, sizes, ADDRS_COUNT)));
+                        HcommAicpuTsTaskCacheExecute(cacheTag.c_str(), addrs, sizes, cacheMemCount)));
                 }
             }
         } else { // 不使能aicpu task cache

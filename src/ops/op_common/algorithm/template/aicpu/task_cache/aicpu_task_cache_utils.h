@@ -13,12 +13,16 @@
 
 #include "hccl_types.h"
 #include "alg_param.h"
+#include <vector>
 
 namespace ops_hccl {
 
 class AicpuTaskCacheUtils {
 public:
     static bool IsNonVariableOpType(HcclCMDType opType);
+    static bool IsAlltoallvType(HcclCMDType opType);
+    static HcclResult AppendVOpInfoForCache(
+        const OpParam& param, uint32_t rankSize, std::vector<void*>& addrs, std::vector<uint64_t>& sizes);
     static HcclResult GetInputOutputInfoForCache(
         const OpParam& param, const uint32_t rankSize, uint64_t& inputSize, uint64_t& outputSize);
 };

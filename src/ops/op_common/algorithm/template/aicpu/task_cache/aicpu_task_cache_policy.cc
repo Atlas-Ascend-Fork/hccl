@@ -9,18 +9,30 @@
  */
 
 #include "aicpu_task_cache_policy.h"
+#include <algorithm>
+#include <cstring>
+#include <unordered_set>
+
 #include "alg_env_config.h"
+#include "hcomm_primitives_dl.h"
 #include "log.h"
 #include "aicpu_task_cache_utils.h"
 
 namespace ops_hccl {
+
+namespace {
+    constexpr uint32_t ALLTOALLV_CACHE_MAX_CONCURRENT_SIZE = 16;
+    constexpr uint64_t ALLTOALLV_CACHE_SLICE_ALIGN = 128;
+    constexpr char ALLTOALLV_CACHE_ALG_NAME[] = "AicpuAllToAllVSoleMesh";
+    constexpr char ALLTOALLVC_CACHE_ALG_NAME[] = "AicpuAllToAllVCSoleMesh";
+} // namespace
 
 HcclResult AicpuTaskCachePolicy::IsAicpuTaskCacheEnable(
     const OpParam& param, const AlgResourceCtxSerializable& resCtx, bool& isCacheEnable)
 {
     isCacheEnable = false;
     if (!param.aicpuCacheEnable) {
-        HCCL_INFO("[AicpuTaskCachePolicy][IsAicpuTaskCacheEnable] AICPU_CacheDisable is not supported");
+        HCCL_INFO("[AicpuTaskCachePolicy][IsAicpuTaskCacheEnable] AICPU task cache is disabled");
         return HCCL_SUCCESS;
     }
 
@@ -62,6 +74,18 @@ HcclResult AicpuTaskCachePolicy::IsAicpuTaskCacheEnable(
     // 校验算子类型
     if (!IsOpTypeSupported(param)) {
         return HCCL_SUCCESS;
+    }
+
+    if (AicpuTaskCacheUtils::IsAlltoallvType(param.opType)) {
+        if (!HcommIsSupportHcommAicpuTsTaskCacheSupportsVFormat()) {
+            HCCL_INFO("[AicpuTaskCachePolicy][IsAicpuTaskCacheEnable] HCOMM V cache format is not supported");
+            return HCCL_SUCCESS;
+        }
+        bool isAlltoallvCacheSupported = false;
+        CHK_RET(IsAlltoallvCacheSupported(param, resCtx, isAlltoallvCacheSupported));
+        if (!isAlltoallvCacheSupported) {
+            return HCCL_SUCCESS;
+        }
     }
 
     // 屏蔽inplace场景
@@ -181,11 +205,12 @@ bool AicpuTaskCachePolicy::IsTopoSupported(const AlgResourceCtxSerializable& res
 
 bool AicpuTaskCachePolicy::IsOpTypeSupported(const OpParam& param)
 {
-    // 目前V类算子、batch类型算子、以及send/recv不考虑动态缓存 (使用白名单而非黑名单管理, 避免非预期算子进入cache机制)
+    // batch类型算子以及send/recv不考虑动态缓存 (使用白名单而非黑名单管理, 避免非预期算子进入cache机制)
     // 注意: 当前hccl不支持HcclGather
     HcclCMDType opType = param.opType;
     if (opType == HcclCMDType::HCCL_CMD_BROADCAST || opType == HcclCMDType::HCCL_CMD_ALLGATHER
-        || opType == HcclCMDType::HCCL_CMD_ALLTOALL || opType == HcclCMDType::HCCL_CMD_SCATTER) { // 非V类算子
+        || opType == HcclCMDType::HCCL_CMD_ALLTOALL || opType == HcclCMDType::HCCL_CMD_SCATTER
+        || AicpuTaskCacheUtils::IsAlltoallvType(opType)) {
         HCCL_INFO(
             "[AicpuTaskCachePolicy][IsOpTypeSupported] opType[%d] is supported for operator unfolding cache", opType);
         return true;
@@ -214,6 +239,100 @@ bool AicpuTaskCachePolicy::IsOpTypeSupported(const OpParam& param)
     // 其它算子不支持
     HCCL_INFO("[AicpuTaskCachePolicy][IsOpTypeSupported] opType[%d] is not supported", param.opType);
     return false;
+}
+
+HcclResult AicpuTaskCachePolicy::IsAlltoallvCacheSupported(
+    const OpParam& param, const AlgResourceCtxSerializable& resCtx, bool& isSupported)
+{
+    isSupported = false;
+    if (param.supportSymmetricMemory) {
+        HCCL_INFO("[AicpuTaskCachePolicy][IsAlltoallvCacheSupported] symmetric memory is not supported");
+        return HCCL_SUCCESS;
+    }
+    if (param.isZeroCopy) {
+        HCCL_INFO("[AicpuTaskCachePolicy][IsAlltoallvCacheSupported] zero copy is not supported");
+        return HCCL_SUCCESS;
+    }
+
+    const char* expectedAlgName
+        = param.opType == HcclCMDType::HCCL_CMD_ALLTOALLV ? ALLTOALLV_CACHE_ALG_NAME : ALLTOALLVC_CACHE_ALG_NAME;
+    if (std::strcmp(param.algName, expectedAlgName) != 0) {
+        HCCL_INFO(
+            "[AicpuTaskCachePolicy][IsAlltoallvCacheSupported] algName[%s] is not supported for opType[%d]",
+            param.algName, param.opType);
+        return HCCL_SUCCESS;
+    }
+
+    const uint32_t rankSize = resCtx.topoInfo.userRankSize;
+    const uint32_t userRank = resCtx.topoInfo.userRank;
+    CHK_PRT_RET(
+        rankSize == 0 || userRank >= rankSize,
+        HCCL_INFO("[%s] invalid rankSize[%u] or userRank[%u]", __func__, rankSize, userRank), HCCL_SUCCESS);
+
+    // 多channel的分片可能随count变化，当前V类缓存仅支持每个远端peer一条有效channel。
+    std::unordered_set<uint32_t> channelPeers;
+    for (const auto& levelChannels : resCtx.channels) {
+        for (const auto& channel : levelChannels) {
+            if (!channel.isValid || channel.remoteRank == userRank) {
+                continue;
+            }
+            if (!channelPeers.insert(channel.remoteRank).second) {
+                HCCL_INFO(
+                    "[AicpuTaskCachePolicy][IsAlltoallvCacheSupported] multiple channels for remoteRank[%u] "
+                    "are not supported",
+                    channel.remoteRank);
+                return HCCL_SUCCESS;
+            }
+        }
+    }
+
+    CHK_PRT_RET(
+        param.all2AllVDataDes.sendCounts == nullptr || param.all2AllVDataDes.recvCounts == nullptr,
+        HCCL_INFO("[%s] counts are unavailable for cache", __func__), HCCL_SUCCESS);
+    const auto* sendCounts = static_cast<const uint64_t*>(param.all2AllVDataDes.sendCounts);
+    const auto* recvCounts = static_cast<const uint64_t*>(param.all2AllVDataDes.recvCounts);
+
+    // 即使本轮只有self-copy，也需回放全peer预热缓存中的同步任务。
+    uint64_t maxSendOrRecvCount = 0;
+    for (uint32_t rank = 0; rank < rankSize; ++rank) {
+        maxSendOrRecvCount = std::max(maxSendOrRecvCount, sendCounts[rank]);
+        maxSendOrRecvCount = std::max(maxSendOrRecvCount, recvCounts[rank]);
+    }
+
+    CHK_PRT_RET(
+        resCtx.algHierarchyInfo.infos.empty() || resCtx.algHierarchyInfo.infos[0].empty(),
+        HCCL_INFO("[%s] algHierarchyInfo is empty", __func__), HCCL_SUCCESS);
+    const auto& subCommRanks = resCtx.algHierarchyInfo.infos[0];
+    uint64_t templateRankSize = subCommRanks[0].size();
+    if (subCommRanks.size() > 1) {
+        templateRankSize *= subCommRanks[1].size();
+    }
+    CHK_PRT_RET(
+        templateRankSize <= 1, HCCL_INFO("[%s] invalid templateRankSize[%llu]", __func__, templateRankSize),
+        HCCL_SUCCESS);
+
+    const uint64_t scratchMultiple = std::min<uint64_t>(ALLTOALLV_CACHE_MAX_CONCURRENT_SIZE, templateRankSize - 1);
+    const uint64_t scratchBoundDataSize
+        = resCtx.cclMem.size / scratchMultiple / ALLTOALLV_CACHE_SLICE_ALIGN * ALLTOALLV_CACHE_SLICE_ALIGN;
+    const uint64_t maxDataSizePerLoop = std::min<uint64_t>(UB_MAX_DATA_SIZE, scratchBoundDataSize);
+    const HcclDataType dataType = param.all2AllVDataDes.sendType;
+    const uint32_t dataTypeValue = static_cast<uint32_t>(dataType);
+    CHK_PRT_RET(
+        dataTypeValue >= static_cast<uint32_t>(HcclDataType::HCCL_DATA_TYPE_RESERVED),
+        HCCL_INFO("[%s] invalid dataType[%d]", __func__, dataType), HCCL_SUCCESS);
+    const uint64_t dataTypeSize = DATATYPE_SIZE_TABLE[dataTypeValue];
+    CHK_PRT_RET(dataTypeSize == 0, HCCL_INFO("[%s] dataTypeSize is zero", __func__), HCCL_SUCCESS);
+    const uint64_t maxDataCountPerLoop = maxDataSizePerLoop / dataTypeSize;
+    if (maxDataCountPerLoop == 0 || maxSendOrRecvCount > maxDataCountPerLoop) {
+        HCCL_INFO(
+            "[AicpuTaskCachePolicy][IsAlltoallvCacheSupported] split case is not supported: "
+            "maxSendOrRecvCount[%llu] maxDataCountPerLoop[%llu]",
+            maxSendOrRecvCount, maxDataCountPerLoop);
+        return HCCL_SUCCESS;
+    }
+
+    isSupported = true;
+    return HCCL_SUCCESS;
 }
 
 } // namespace ops_hccl

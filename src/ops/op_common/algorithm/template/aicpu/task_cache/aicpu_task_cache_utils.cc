@@ -23,6 +23,59 @@ bool AicpuTaskCacheUtils::IsNonVariableOpType(HcclCMDType opType)
     return false;
 }
 
+bool AicpuTaskCacheUtils::IsAlltoallvType(HcclCMDType opType)
+{
+    return opType == HcclCMDType::HCCL_CMD_ALLTOALLV || opType == HcclCMDType::HCCL_CMD_ALLTOALLVC;
+}
+
+HcclResult AicpuTaskCacheUtils::AppendVOpInfoForCache(
+    const OpParam& param, uint32_t rankSize, std::vector<void*>& addrs, std::vector<uint64_t>& sizes)
+{
+    CHK_PRT_RET(
+        rankSize == 0 || addrs.size() != 2 || sizes.size() != 2,
+        HCCL_ERROR("[%s] invalid rankSize or memory arrays", __func__), HCCL_E_PARA);
+    const uint64_t arrayCount = 2 + uint64_t{2} * rankSize;
+    CHK_PRT_RET(
+        arrayCount > UINT32_MAX, HCCL_ERROR("[%s] V array count exceeds protocol limit", __func__), HCCL_E_PARA);
+    addrs.reserve(arrayCount);
+    sizes.reserve(arrayCount);
+    const uint64_t* counts[]
+        = {static_cast<const uint64_t*>(param.all2AllVDataDes.sendCounts),
+           static_cast<const uint64_t*>(param.all2AllVDataDes.recvCounts)};
+    const uint64_t* displs[]
+        = {static_cast<const uint64_t*>(param.all2AllVDataDes.sdispls),
+           static_cast<const uint64_t*>(param.all2AllVDataDes.rdispls)};
+    const HcclDataType types[] = {param.all2AllVDataDes.sendType, param.all2AllVDataDes.recvType};
+    // HCOMM不知道算子data type。传输协议中的counts和displs必须分别为字节数和字节偏移，不能传元素数。
+    // 布局：[input, output, send rank 0..N-1, recv rank 0..N-1]；前两项仍为完整user buffer。
+    for (uint32_t side = 0; side < 2; ++side) {
+        CHK_PTR_NULL(counts[side]);
+        CHK_PTR_NULL(displs[side]);
+        const uint32_t type = static_cast<uint32_t>(types[side]);
+        CHK_PRT_RET(
+            type >= static_cast<uint32_t>(HCCL_DATA_TYPE_RESERVED), HCCL_ERROR("[%s] invalid data type", __func__),
+            HCCL_E_PARA);
+        const uint64_t typeSize = DATATYPE_SIZE_TABLE[type];
+        CHK_PRT_RET(typeSize == 0, HCCL_ERROR("[%s] zero type size", __func__), HCCL_E_PARA);
+        const uint64_t base = reinterpret_cast<uint64_t>(addrs[side]);
+        for (uint32_t rank = 0; rank < rankSize; ++rank) {
+            CHK_PRT_RET(
+                counts[side][rank] > UINT64_MAX / typeSize || displs[side][rank] > UINT64_MAX / typeSize,
+                HCCL_ERROR("[%s] byte conversion overflows", __func__), HCCL_E_PARA);
+            const uint64_t bytes = counts[side][rank] * typeSize;
+            const uint64_t offset = displs[side][rank] * typeSize;
+            CHK_PRT_RET(
+                offset > UINT64_MAX - base || bytes > UINT64_MAX - (base + offset)
+                    || (bytes != 0 && (offset > sizes[side] || bytes > sizes[side] - offset)),
+                HCCL_ERROR("[%s] V memory range is invalid", __func__), HCCL_E_PARA);
+            // 零count的displ仍保留，但不要求对应实际可访问的内存。
+            addrs.push_back(reinterpret_cast<void*>(base + offset));
+            sizes.push_back(bytes);
+        }
+    }
+    return HCCL_SUCCESS;
+}
+
 HcclResult AicpuTaskCacheUtils::GetInputOutputInfoForCache(
     const OpParam& param, const uint32_t rankSize, uint64_t& inputSize, uint64_t& outputSize)
 {

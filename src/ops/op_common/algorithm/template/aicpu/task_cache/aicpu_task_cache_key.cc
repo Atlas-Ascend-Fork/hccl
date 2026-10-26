@@ -41,11 +41,13 @@ namespace {
 
 HcclResult AicpuTaskCacheKey::GetAicpuTaskCacheTag(const OpParam& param, uint64_t inputSize, std::string& cacheTag)
 {
-    // 暂时不考虑v类算子 (应该被cache使能约束拦截, 不应该进入本函数), dataType一定不是reserved
     const HcclCMDType opType = param.opType;
     HcclDataType dataType = HcclDataType::HCCL_DATA_TYPE_RESERVED;
     if (opType == HcclCMDType::HCCL_CMD_ALLTOALL) { // alltoall算子
         dataType = param.all2AllDataDes.sendType;
+    } else if (AicpuTaskCacheUtils::IsAlltoallvType(opType)) {
+        // V类回放按真实类型换算后的字节长度/偏移刷新任务，key使用固定类型标记。
+        dataType = HcclDataType::HCCL_DATA_TYPE_RESERVED;
     } else if (AicpuTaskCacheUtils::IsNonVariableOpType(opType)) { // 非alltoall的非v类算子
         dataType = param.DataDes.dataType;
     } else {
@@ -77,8 +79,10 @@ HcclResult AicpuTaskCacheKey::GetAicpuTaskCacheTag(const OpParam& param, uint64_
     char* ptr = buf;
     const char delimiter = '-';
 
+    // V类算子已在cache准入时限制为小数据量，tag无需区分实际inputSize
+    const uint64_t cacheInputSize = AicpuTaskCacheUtils::IsAlltoallvType(opType) ? 0 : inputSize;
     // inputSize (uint64最多20个字符)
-    ptr = UIntToChars(ptr, static_cast<unsigned long long>(inputSize));
+    ptr = UIntToChars(ptr, cacheInputSize);
     *ptr++ = delimiter;
 
     // opType (uint32最多10个字符)
@@ -120,8 +124,8 @@ HcclResult AicpuTaskCacheKey::GetAicpuTaskCacheTag(const OpParam& param, uint64_
     HCCL_INFO(
         "[AicpuTaskCacheKey][GetAicpuTaskCacheTag] cacheTag[%s] from commId[%s] opType[%d] dataType[%d] "
         "reduceType[%d] isZeroCopy[%d] inputSize[%llu] opMode[%d] supportSymmetricMemory[%d] rootRank[%d]",
-        cacheTag.c_str(), commId, opType, dataType, reduceType, isZeroCopy, inputSize, opMode, supportSymmetricMemory,
-        rootRank);
+        cacheTag.c_str(), commId, opType, dataType, reduceType, isZeroCopy, cacheInputSize, opMode,
+        supportSymmetricMemory, rootRank);
 
     return HCCL_SUCCESS;
 }

@@ -130,6 +130,8 @@ HcclResult ParseInterLinkType();
 
 HcclResult ParseOpExpansion();
 
+HcclResult ParseAicpuTaskCacheEnable();
+
 HcclResult ParseExecTimeout();
 
 HcclResult ParseMultipleDimensionSplitRatio();

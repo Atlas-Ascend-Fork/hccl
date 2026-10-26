@@ -14,6 +14,8 @@
 #include <string>
 #include <algorithm>
 #include <cstdint>
+#include <cctype>
+#include <cstdlib>
 #include <string>
 #include <array>
 #include "log.h"
@@ -228,6 +230,9 @@ HcclResult InitEnvConfig()
             "HCCL_OP_EXPANSION_MODE failed. errNo[%d]",
             HCCL_ERROR_CODE(ret), ret),
         ret);
+
+    // 新开关优先于展开模式中的旧缓存配置，每次初始化均重新解析。
+    CHK_RET(ParseAicpuTaskCacheEnable());
 
     if (g_algEnvConfig.initialized) {
         return HCCL_SUCCESS;
@@ -850,8 +855,40 @@ HcclResult ParseEntryLogEnable()
     return HCCL_SUCCESS;
 }
 
+HcclResult ParseAicpuTaskCacheEnable()
+{
+    std::string value = GetEnv("HCOMM_AICPU_TASK_CACHE_ENABLE");
+    if (value == "EmptyString") {
+        return HCCL_SUCCESS; // 未设置或为空时沿用旧开关的解析结果。
+    }
+
+    const auto first = value.find_first_not_of(" \t\n\r\f\v");
+    if (first == std::string::npos) {
+        return HCCL_SUCCESS;
+    }
+    const auto last = value.find_last_not_of(" \t\n\r\f\v");
+    value = value.substr(first, last - first + 1);
+    std::transform(value.begin(), value.end(), value.begin(), [](unsigned char ch) {
+        return static_cast<char>(std::tolower(ch));
+    });
+    if (value == "true" || value == "1") {
+        g_algEnvConfig.aicpuCacheEnable = 1;
+    } else if (value == "false" || value == "0") {
+        g_algEnvConfig.aicpuCacheEnable = 0;
+    } else {
+        HCCL_ERROR("HCOMM_AICPU_TASK_CACHE_ENABLE [%s] is invalid, expected true, false, 1 or 0.", value.c_str());
+        return HCCL_E_PARA;
+    }
+
+    HCCL_INFO("HCOMM_AICPU_TASK_CACHE_ENABLE set by environment to [%u]", g_algEnvConfig.aicpuCacheEnable);
+    return HCCL_SUCCESS;
+}
+
 HcclResult ParseOpExpansion()
 {
+    // 每次解析前恢复默认开启，避免重复初始化时沿用上次的缓存开关值。
+    // 随后按旧展开模式设置；若配置了 HCOMM_AICPU_TASK_CACHE_ENABLE，则由新开关覆盖。
+    g_algEnvConfig.aicpuCacheEnable = 1;
     const std::string& opExpansionModeEnv = GetEnv("HCCL_OP_EXPANSION_MODE");
     g_algEnvConfig.aicpuUnfold = false;
     g_algEnvConfig.aivMode = false;
@@ -908,6 +945,9 @@ HcclResult ParseOpExpansion()
             HCCL_WARNING("deviceType[%u] does not support HOST_TS", deviceType);
         }
     } else if (opExpansionModeEnv == "AICPU_CacheDisable") {
+        HCCL_WARNING("HCCL_OP_EXPANSION_MODE=AICPU_CacheDisable is deprecated: Deprecated since CANN 9.3.0. "
+                     "Will be removed in versions released after 2028/3/30. "
+                     "Use HCCL_OP_EXPANSION_MODE=AICPU_TS and HCOMM_AICPU_TASK_CACHE_ENABLE=0 instead.");
         if (deviceType == HcclDevType::DEV_TYPE_910) {
             HCCL_WARNING("910 does not support AICPU unfolding.");
         } else {

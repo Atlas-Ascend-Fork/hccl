@@ -32,6 +32,7 @@ extern "C" {
 #endif
 
 namespace ops_hccl {
+HcclResult ClearWarmupMapByCom(HcclComm comm);
 // 协商子通信域名称后缀（CCU fallback协商机制创建的子通信域命名为：父通信域名 + 该后缀，dfx据此识别NEGOTIATIONOP）
 const std::string NEGOTIATION_COMM_SUFFIX = "_negotiation";
 

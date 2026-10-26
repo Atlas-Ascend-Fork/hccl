@@ -16,6 +16,7 @@
 #include <set>
 #include <string>
 #include <memory>
+#include <mutex>
 #include <cstdlib> // 包含getenv函数
 #include <cstring> // 包含strcmp函数
 #include <stdexcept>
@@ -808,11 +809,181 @@ static HcclResult ReportOpProfilingInfo(HcclComm comm, HcclCMDType opType, uint6
 
     return HCCL_SUCCESS;
 }
+namespace {
+    std::mutex g_warmMutex;
+    std::map<HcclComm, std::map<u32, bool>> g_warmMap;
+} // namespace
 
+HcclResult ClearWarmupMapByCom(HcclComm comm)
+{
+    std::lock_guard<std::mutex> lock(g_warmMutex);
+    g_warmMap.erase(comm);
+    return HCCL_SUCCESS;
+}
+
+namespace {
+    void ReleaseWarmupResource(void*& sendBuf, void*& recvBuf)
+    {
+        if (sendBuf != nullptr) {
+            aclError ret = aclrtFree(sendBuf);
+            if (ret != ACL_SUCCESS) {
+                HCCL_ERROR("[OpCommon][ReleaseWarmupResource] aclrtFree sendBuf failed, ret[%d].", ret);
+            }
+            sendBuf = nullptr;
+        }
+        if (recvBuf != nullptr) {
+            aclError ret = aclrtFree(recvBuf);
+            if (ret != ACL_SUCCESS) {
+                HCCL_ERROR("[OpCommon][ReleaseWarmupResource] aclrtFree recvBuf failed, ret[%d].", ret);
+            }
+            recvBuf = nullptr;
+        }
+    }
+
+    HcclResult LaunchWarmupVOperator(HcclComm comm, OpParam& param, const std::string& algName)
+    {
+        if (param.engine != COMM_ENGINE_AICPU_TS && param.engine != COMM_ENGINE_CPU) {
+            return HCCL_SUCCESS;
+        }
+
+        HcclCMDType opType = param.opType;
+        if (opType != HcclCMDType::HCCL_CMD_ALLTOALLV && opType != HcclCMDType::HCCL_CMD_ALLTOALLVC) {
+            return HCCL_SUCCESS; // 非目标算子零成本跳过
+        }
+
+        // 预热只为提前录制 AICPU task cache。正式展开还会按资源和数据量检查完整准入条件。
+#if CANN_VERSION_NUM < CANN_VERSION(9, 1, 0)
+        return HCCL_SUCCESS;
+#endif
+        if (!GetExternalInputHcclAicpuCacheEnable() || !EqualToOrGreaterThan950(param.deviceType) || param.isMc2
+            || param.isCapture || !HcommIsSupportHcommAicpuTsTaskCacheLookup()
+            || !HcommIsSupportHcommAicpuTsTaskCacheSupportsVFormat()) {
+            return HCCL_SUCCESS;
+        }
+        const char* cacheAlgName
+            = opType == HcclCMDType::HCCL_CMD_ALLTOALLV ? "AicpuAllToAllVSoleMesh" : "AicpuAllToAllVCSoleMesh";
+        if (algName != cacheAlgName) {
+            return HCCL_SUCCESS;
+        }
+
+        // 图模式不支持
+        if (param.opMode == OpMode::OFFLOAD) {
+            HCCL_INFO("[OpCommon][LaunchWarmupVOperator] OpMode::OFFLOAD is not supported");
+            return HCCL_SUCCESS;
+        }
+
+        // 零拷贝不支持
+        if (param.isZeroCopy) {
+            HCCL_INFO("[OpCommon][LaunchWarmupVOperator] zero copy is not supported");
+            return HCCL_SUCCESS;
+        }
+
+        // 对称内存不支持
+        if (param.supportSymmetricMemory) {
+            HCCL_INFO("[OpCommon][LaunchWarmupVOperator] symmetric memory is not supported");
+            return HCCL_SUCCESS;
+        }
+
+        // 预热按字节录制；V类cache key不区分数据类型，正式回放按真实类型换算字节长度和偏移。
+        constexpr HcclDataType sendType = HCCL_DATA_TYPE_UINT8;
+        std::string commName(param.commName);
+        bool needWarm = false;
+        {
+            std::lock_guard<std::mutex> lk(g_warmMutex);
+            u32 subKey = static_cast<u32>(opType);
+            if (g_warmMap.find(comm) == g_warmMap.end()) {
+                needWarm = true;
+            } else {
+                needWarm = (g_warmMap[comm].find(subKey) == g_warmMap[comm].end());
+            }
+            g_warmMap[comm][subKey] = true;
+        }
+        if (needWarm) {
+            u32 rankSize = 0;
+            CHK_RET(HcclGetRankSize(comm, &rankSize));
+            if (rankSize <= 1) {
+                HCCL_INFO("[OpCommon][LaunchWarmupVOperator] rankSize[%u] <= 1, skip warmup small op.", rankSize);
+                return HCCL_SUCCESS;
+            }
+
+            const u64 bufSize = static_cast<u64>(rankSize) * DATATYPE_SIZE_TABLE[sendType];
+
+            aclrtStream warmUpStream = nullptr;
+            aclError aclRet = aclrtCreateStream(&warmUpStream);
+            if (aclRet != ACL_SUCCESS) {
+                HCCL_ERROR("[OpCommon][LaunchWarmupVOperator] aclrtCreateStream failed, ret[%d].", aclRet);
+                return HCCL_E_RUNTIME;
+            }
+
+            void* sendBuf = nullptr;
+            void* recvBuf = nullptr;
+            if (aclrtMalloc(&sendBuf, bufSize, ACL_MEM_MALLOC_HUGE_FIRST) != ACL_SUCCESS
+                || aclrtMalloc(&recvBuf, bufSize, ACL_MEM_MALLOC_HUGE_FIRST) != ACL_SUCCESS) {
+                HCCL_ERROR(
+                    "[OpCommon][LaunchWarmupVOperator] aclrtMalloc failed, size[%llu].",
+                    static_cast<unsigned long long>(bufSize));
+                ReleaseWarmupResource(sendBuf, recvBuf);
+                (void)aclrtDestroyStream(warmUpStream);
+                return HCCL_E_RUNTIME;
+            }
+
+            HCCL_INFO(
+                "[OpCommon][LaunchWarmupVOperator] launch small warmUp op, type[%u], comm[%s], rankSize[%u].",
+                static_cast<u32>(opType), commName.c_str(), rankSize);
+
+            HcclResult ret = HCCL_SUCCESS;
+            const u16 smallCount = 1;
+            if (opType == HcclCMDType::HCCL_CMD_ALLTOALLV) {
+                std::vector<u64> sendCounts(rankSize, smallCount);
+                std::vector<u64> recvCounts(rankSize, smallCount);
+                std::vector<u64> sdispls(rankSize, 0);
+                std::vector<u64> rdispls(rankSize, 0);
+                for (u32 i = 1; i < rankSize; i++) {
+                    sdispls[i] = i;
+                    rdispls[i] = i;
+                }
+                ret = HcclAlltoAllV(
+                    sendBuf, sendCounts.data(), sdispls.data(), sendType, recvBuf, recvCounts.data(), rdispls.data(),
+                    sendType, comm, warmUpStream);
+            } else {
+                std::vector<u64> sendCountMatrix(static_cast<size_t>(rankSize) * rankSize, smallCount);
+                ret = HcclAlltoAllVC(sendBuf, sendCountMatrix.data(), sendType, recvBuf, sendType, comm, warmUpStream);
+            }
+
+            if (ret != HCCL_SUCCESS) {
+                HCCL_ERROR(
+                    "[OpCommon][LaunchWarmupVOperator] warmup op failed, ret[%d], comm[%s].", ret, commName.c_str());
+                (void)aclrtSynchronizeStream(warmUpStream);
+                ReleaseWarmupResource(sendBuf, recvBuf);
+                (void)aclrtDestroyStream(warmUpStream);
+                return HCCL_E_INTERNAL;
+            }
+
+            aclRet = aclrtSynchronizeStream(warmUpStream);
+            if (aclRet != ACL_SUCCESS) {
+                HCCL_ERROR(
+                    "[OpCommon][LaunchWarmupVOperator] aclrtSynchronizeStream failed, ret[%d], comm[%s].", aclRet,
+                    commName.c_str());
+                (void)aclrtSynchronizeStream(warmUpStream);
+                ReleaseWarmupResource(sendBuf, recvBuf);
+                (void)aclrtDestroyStream(warmUpStream);
+                return HCCL_E_INTERNAL;
+            }
+            ReleaseWarmupResource(sendBuf, recvBuf);
+            if (aclrtDestroyStream(warmUpStream) != ACL_SUCCESS) {
+                HCCL_ERROR("[OpCommon][LaunchWarmupVOperator] aclrtDestroyStream failed, comm[%s].", commName.c_str());
+            }
+            HCCL_INFO("[OpCommon][LaunchWarmupVOperator] small warmUp op success, comm[%s].", commName.c_str());
+        }
+
+        return HCCL_SUCCESS;
+    }
+} // namespace
 HcclResult HcclExecOp(
     HcclComm comm, OpParam& param, std::unique_ptr<TopoInfoWithNetLayerDetails>& topoInfo, std::string& algName,
     const ResPackGraphMode& resPack)
 {
+    CHK_RET(LaunchWarmupVOperator(comm, param, algName));
     uint64_t beginTime = HcommGetProfilingSysCycleTime();
     HCCL_INFO("[HcclExecOp]Start to execute HcclExecOp. HcommGetProfilingSysCycleTime[%llu us]", beginTime);
 

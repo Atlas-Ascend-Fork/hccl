@@ -13,6 +13,7 @@
 #include "hcomm_dlsym.h"
 #include "load_kernel.h"
 #include "log.h"
+#include "op_common.h"
 #include "hccl_common.h"
 
 using namespace ops_hccl;
@@ -109,6 +110,7 @@ HcclResult AicpuTaskCacheCommStateCallback(HcclComm comm, HcclCommStatePhase sta
     if (state == HCCL_COMM_STATE_PHASE_DESTROY_POST || state == HCCL_COMM_STATE_PHASE_RESUME_POST) {
         // 通信域销毁或者N秒快恢时，调用device接口，清理通信域相关的task缓存
         CHK_RET(AicpuCacheEvictKernelLaunch(comm));
+        CHK_RET(ClearWarmupMapByCom(comm));
     }
 
     return HCCL_SUCCESS;
