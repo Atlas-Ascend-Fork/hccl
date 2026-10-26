@@ -10,7 +10,6 @@ This environment variable is used to configure the inter-server communication al
 >
 > - HCCL provides the adaptive algorithm selection function. By default, HCCL selects an appropriate algorithm based on the product form, data volume, and number of Servers, so you do not need to manually specify an algorithm in most cases. If an inter-Server or inter-SuperPoD communication algorithm is specified using this environment variable, the adaptive algorithm selection function no longer takes effect.
 > - For some communication operators, when a specific type of AI processor is used and the data volume is small, the communication algorithm is adaptively selected by HCCL and is not controlled by this environment variable.
-> - The algorithms listed in this section are the full set of communication algorithms that can be configured in HCCL. For the inter-Server communication algorithms and inter-SuperPoD communication algorithms supported by different products, see [Inter-Server Communication Algorithm Support List](inter_server_algo_support.md) and [Inter-SuperPoD Communication Algorithm Support List](inter_superpod_algo_support.md).
 
 <!-- npu="950" id2 -->
 ## Configuration Description (Ascend 950PR&950DT Products)
@@ -107,21 +106,6 @@ export HCCL_ALGO="allreduce:sequence{mesh,nhr}"
 export HCCL_ALGO="allgather:not(parallel{mesh,nhr})"
 ```
 
-### Configuration Effectiveness Semantics
-
-For Ascend 950PR&950DT products, the HCCL_ALGO configuration only provides algorithm priorities:
-
-- Positively specified algorithms take effect with priority. When multiple positive configurations coexist, the optimal algorithm is selected within the specified algorithm set based on communication cost.
-- When both positive and negative configurations exist, the positive configuration takes precedence.
-
-### Behaviors Under Configuration Errors
-
-Configuration errors do not cause communication failures. In the worst case, the system falls back to adaptive algorithm selection:
-
-- Configuration format error: The entire setting does not take effect. The system prints a warning message, does not block the communication process, and falls back to adaptive algorithm selection.
-- The algorithm combination configured by operator type does not match any registered algorithm: The clause does not take effect. The system prints a warning message and falls back to adaptive algorithm selection.
-- The specified algorithm does not match the current communication use case (for example, hard constraints such as topology or data type are not met): The algorithm is excluded from algorithm selection. The system prints a warning message and falls back to adaptive algorithm selection.
-- The negative configuration excludes all available algorithms for the current use case: The system prints a warning message, ignores the negative configuration, and adaptively selects from all candidate algorithms to ensure normal communication execution.
 <!-- end id2 -->
 
 <!-- npu="A3,910b,910" id3 -->

@@ -32,7 +32,7 @@ During distributed training or inference, different device processes may encount
   <!-- end id8 -->
 
   <!-- npu="910" id1 -->
-- **For Atlas training products**: The unit is second. The value ranges from 0 to 17340, and defaults to `1836`. Integer-second precision is allowed.
+- **For Atlas training products**: The unit is second. The value ranges is (0, 17340], and defaults to `1836`. Integer-second precision is allowed.
 
     Note: For Atlas training products, the actual timeout duration set by the system equals the value of the environment variable that is first integer-divided by 68 and then multiplied by 68, in seconds. If the value of the environment variable is less than 68, it is regarded as 68s by default.
 

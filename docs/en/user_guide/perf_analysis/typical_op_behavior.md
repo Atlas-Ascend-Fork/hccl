@@ -8,7 +8,7 @@ Taking the profile data of the AllReduce operator on dual-server Atlas 800T A2 a
 
 1. Copy communication data from the user input memory to the HCCL Buffer memory.
 
-    ![usermem_to_hcclbuffer](figures/usermen_to_hcclbuffer.png)
+    ![usermem_to_hcclbuffer](figures/usermem_to_hcclbuffer.png)
 
 2. Implement intra-node ReduceScatter communication semantics, including pre-notify synchronization, ReduceInline memory copy, inline computation, and post-notify synchronization.
 
