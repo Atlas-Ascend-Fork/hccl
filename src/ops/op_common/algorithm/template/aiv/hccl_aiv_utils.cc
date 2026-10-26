@@ -273,7 +273,7 @@ static HcclResult SaveAivDfxTaskInfo(const AivOpArgs& opArgs)
     taskInfo.streamId = streamId;
     taskInfo.cmdType = opArgs.cmdType;
     taskInfo.tag = opArgs.sliceId;
-    taskInfo.size = opArgs.count;
+    taskInfo.size = (opArgs.totalDataCount != 0) ? opArgs.totalDataCount : opArgs.count;
     taskInfo.blockDim = opArgs.numBlocks;
     taskInfo.rankSize = opArgs.rankSize;
     taskInfo.aivRdmaStep = 0;
@@ -364,7 +364,7 @@ void ProcessAivExceptionCallBack(aclrtExceptionInfo* exceptionInfo)
         taskSs << "cmdType[" << static_cast<u32>(taskInfo.cmdType) << "], tag[" << taskInfo.tag << "], rank["
                << taskInfo.rank << "], hcclUdi[" << taskInfo.udi << "], rankSize[" << taskInfo.rankSize
                << "], dataCount[" << taskInfo.size << "], blockDim[" << taskInfo.blockDim << "], dataType["
-               << static_cast<u32>(taskInfo.dataType) << "], beginTime[" << taskInfo.beginTime << "], flagMem["
+               << GetDataTypeEnumStr(taskInfo.dataType) << "], beginTime[" << taskInfo.beginTime << "], flagMem["
                << taskInfo.flagMem << "]";
         std::string taskInformation = taskSs.str();
 
@@ -377,10 +377,10 @@ void ProcessAivExceptionCallBack(aclrtExceptionInfo* exceptionInfo)
     HCCL_ERROR(
         "[TaskExecStage][%s][AIV]Task run failed, errorCode[%u], para information is deviceId[%u], streamId[%u], "
         "TaskId[%u], cmdType[%u], tag[%u], rank[%u], hcclUdi[%s], rankSize[%u], dataCount[%llu], blockDim[%u], "
-        "dataType:[%u], beginTime:[%llu], flagMem[%p]",
+        "dataType:[%s], beginTime:[%llu], flagMem[%p]",
         logKeywordL2, errorCode, deviceId, streamId, taskId, taskInfo.cmdType, taskInfo.tag, taskInfo.rank,
-        taskInfo.udi.c_str(), taskInfo.rankSize, taskInfo.size, taskInfo.blockDim, taskInfo.dataType,
-        taskInfo.beginTime, taskInfo.flagMem);
+        taskInfo.udi.c_str(), taskInfo.rankSize, taskInfo.size, taskInfo.blockDim,
+        GetDataTypeEnumStr(taskInfo.dataType).c_str(), taskInfo.beginTime, taskInfo.flagMem);
 
     HCCL_ERROR(
         "[TaskExecStage][%s][AIV]Task run failed, para information is deviceId[%u], streamId[%u], "
@@ -399,10 +399,10 @@ void ProcessAivExceptionCallBack(aclrtExceptionInfo* exceptionInfo)
         }
         HCCL_ERROR(
             "[TaskExecStage][%s][AIV] previous TaskId[%llu], streamId[%llu], cmdType[%u], "
-            "tag[%u], rank[%u], rankSize[%u], dataCount[%llu], blockDim[%u], dataType:[%u], beginTime:[%llu], "
+            "tag[%u], rank[%u], rankSize[%u], dataCount[%llu], blockDim[%u], dataType:[%s], beginTime:[%llu], "
             "flagMem[%p]",
             logKeywordL2, it->taskId, it->streamId, it->cmdType, it->tag, it->rank, it->rankSize, it->size,
-            it->blockDim, it->dataType, it->beginTime, it->flagMem);
+            it->blockDim, GetDataTypeEnumStr(it->dataType).c_str(), it->beginTime, it->flagMem);
         ++printed;
     }
 }
@@ -1024,6 +1024,7 @@ HcclResult ReplayAivInstructionsV(const AivInstruction* instructions, u32 insCou
         CHK_SAFETY_FUNC_RET(memcpy_s(newArgs.extraArgs.sendDispls, copySize, sdispls, copySize));
         CHK_SAFETY_FUNC_RET(memcpy_s(newArgs.extraArgs.recvCounts, copySize, recvCounts, copySize));
         CHK_SAFETY_FUNC_RET(memcpy_s(newArgs.extraArgs.recvDispls, copySize, rdispls, copySize));
+        newArgs.totalDataCount = param.dataCount;
         CHK_RET(ExecuteKernelLaunch(newArgs));
     }
     return HCCL_SUCCESS;

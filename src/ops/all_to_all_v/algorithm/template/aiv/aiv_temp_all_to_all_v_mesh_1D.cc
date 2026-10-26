@@ -78,6 +78,7 @@ HcclResult AivTempAlltoAllVMesh1D::KernelRun(
     dataType_ = param.all2AllVDataDes.sendType;
     AivOpArgs aivAlltoAllVArgs;
     aivAlltoAllVArgs.cmdType = HcclCMDType::HCCL_CMD_ALLTOALLV;
+    aivAlltoAllVArgs.totalDataCount = param.dataCount;
     aivAlltoAllVArgs.input = reinterpret_cast<u64>(tempAlgParams.buffInfo.inputPtr);
     aivAlltoAllVArgs.output = reinterpret_cast<u64>(tempAlgParams.buffInfo.outputPtr);
     aivAlltoAllVArgs.rank = u32(myRank_);

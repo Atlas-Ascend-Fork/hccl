@@ -93,6 +93,7 @@ struct AivOpArgs {
     u32 sendRecvRemoteRank = 0;
     u32 rankSize = 0;
     u64 count = 0;
+    u64 totalDataCount = 0; // 算子上报dfx的总数据量，与AICPU对齐，不参与kernel launch
     HcclDataType dataType = HcclDataType::HCCL_DATA_TYPE_INT32;
     HcclReduceOp op = HcclReduceOp::HCCL_REDUCE_SUM;
     u32 root = 0;
