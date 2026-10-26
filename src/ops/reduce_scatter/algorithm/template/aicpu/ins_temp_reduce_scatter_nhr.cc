@@ -12,6 +12,9 @@
 
 namespace ops_hccl {
 constexpr int TASK_NUM_EXTRA_OVERHEAD = 8;
+// UBX 单层拓扑下 SoleNHR 主要承接每卡 < 1MB 的数据段（CLOS 数非 mesh 数整数倍时 >=1MB 也走 SoleNHR），阈值与
+// IsLargeData 的 1MB 分界对齐
+constexpr u64 RS_NHR_UBX_ISOLATION_THRESHOLD = 1024 * 1024;
 
 std::vector<CostModelParam> InsTempReduceScatterNHR::CalcCostCoeff(CalcCostCoeffParam param)
 {
@@ -76,7 +79,8 @@ HcclResult InsTempReduceScatterNHR::CalcRes(
     std::vector<HcclChannelDesc> channels;
     bool isUBX = topoInfo->level0Topo == Level0Shape::MESH_1D_CLOS && !topoInfo->level0PcieMix;
     if (isUBX) {
-        CHK_RET(CalcChannelRequestNhrMultiJettyUbx(comm, param, topoInfo, subCommRanks_, channels));
+        CHK_RET(CalcChannelRequestNhrMultiJettyUbx(
+            comm, param, topoInfo, subCommRanks_, channels, RS_NHR_UBX_ISOLATION_THRESHOLD));
     } else {
         std::vector<HcclChannelDesc> myChannelDescs;
         CHK_RET(CalcChannelRequestNhr(comm, param, topoInfo, subCommRanks_, myChannelDescs));

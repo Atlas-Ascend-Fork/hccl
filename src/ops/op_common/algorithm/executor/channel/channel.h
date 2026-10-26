@@ -81,9 +81,12 @@ HcclResult GetRankFullMeshLayers(
 HcclResult CalcChannelRequestNhrMultiJetty(
     HcclComm comm, const OpParam& param, const TopoInfoWithNetLayerDetails* topoInfo,
     const std::vector<std::vector<u32>>& subcommInfo, std::vector<HcclChannelDesc>& channels, bool isIsolation = false);
+// isoThreshold：dataSize 小于等于该值时建共享binding单通道，大于时建隔离的多jetty通道.
+// 与 SMALL_SIZE_512KB 保持一致，两处需同步修改.避免额外声明此处定义。
 HcclResult CalcChannelRequestNhrMultiJettyUbx(
     HcclComm comm, const OpParam& param, const TopoInfoWithNetLayerDetails* topoInfo,
-    const std::vector<std::vector<u32>>& subcommInfo, std::vector<HcclChannelDesc>& channels);
+    const std::vector<std::vector<u32>>& subcommInfo, std::vector<HcclChannelDesc>& channels,
+    u64 isoThreshold = 512ULL * 1024);
 HcclResult CalcChannelRequestMeshClosMultiJetty(
     HcclComm comm, const OpParam& param, const TopoInfoWithNetLayerDetails* topoInfo,
     const std::vector<std::vector<u32>>& subcommInfo, std::vector<HcclChannelDesc>& channels, bool isIsolation = false,

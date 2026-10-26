@@ -1224,12 +1224,11 @@ HcclResult CalcChannelRequestNhrMultiJetty(
 
 HcclResult CalcChannelRequestNhrMultiJettyUbx(
     HcclComm comm, const OpParam& param, const TopoInfoWithNetLayerDetails* topoInfo,
-    const std::vector<std::vector<u32>>& subcommInfo, std::vector<HcclChannelDesc>& channels)
+    const std::vector<std::vector<u32>>& subcommInfo, std::vector<HcclChannelDesc>& channels, u64 isoThreshold)
 {
     u64 perDataSize = DATATYPE_SIZE_TABLE[param.DataDes.dataType];
     u64 dataSize = param.DataDes.count * perDataSize;
-    bool isIsolation
-        = !(IsAllConnetedWithTopo(topoInfo, 0, CommTopo::COMM_TOPO_1DMESH) || dataSize <= SMALL_SIZE_512KB);
+    bool isIsolation = !(IsAllConnetedWithTopo(topoInfo, 0, CommTopo::COMM_TOPO_1DMESH) || dataSize <= isoThreshold);
     std::vector<HcclChannelDesc> myChannelDescs;
     CHK_RET(CalcChannelRequestNhrMultiJetty(comm, param, topoInfo, subcommInfo, myChannelDescs, isIsolation));
     for (auto channel : myChannelDescs) {
