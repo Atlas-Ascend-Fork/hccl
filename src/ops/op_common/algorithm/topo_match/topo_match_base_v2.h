@@ -45,6 +45,11 @@ HcclResult ValidateGroup(const std::vector<u32>& group, u32 dim, u32 myRank, con
 // 引擎过滤：非 hostdpu 排除 HOST 层，AIV 排除含 UBG 链路的层
 std::vector<u32> CollectEffectiveIndices(const std::vector<PhysicalLevelInfo>& physicalLevels, OpExecuteConfig engine);
 
+// layer2多实例且不存在当前引擎可用的DEVICE全域来源时, 使用分轨匹配, 不限定全域来源层号。
+// HOSTCPU固定走普通匹配。来源必须具有GLOBAL单实例分区和TopoInstance, 不能仅凭本地规模判定。
+bool ShouldUseRailHierarchy(
+    const std::vector<PhysicalLevelInfo>& physicalLevels, OpExecuteConfig engine, u32 userRankSize);
+
 // 判断算法是否属于 Mesh 类
 bool IsMeshAlgo(AlgoType algo);
 
@@ -67,6 +72,14 @@ HcclResult ResolveSegmentMapping(
 HcclResult ResolveMapping(
     const std::vector<PhysicalLevelInfo>& physicalLevels, const AlgAttrs& algAttrs, u32 userRankSize,
     std::vector<u32>& effIdx, std::vector<u32>& pIndices);
+
+// Two/ThreeLevel在ShouldUseRailHierarchy为true时统一构造规则分轨算法组并校验真实DEVICE来源。
+// HOSTCPU固定走ResolveMapping使用Host全域来源; 本函数不接受HOSTCPU。
+// 本地能力不足不切换到另一种组布局, 不借助额外层绕过轨成员约束。
+// 不查询GetLinks; 失败仅表示该算法布局不支持, 不作为物理断网判据或跨rank错误汇聚。
+HcclResult MatchRailHierarchy(
+    const TopoInfoWithNetLayerDetails& topoInfo, AlgHierarchyInfoForAllLevel& algHierarchyInfo,
+    const AlgAttrs& algAttrs);
 
 // 在 meshEffPos 之上找首个 localRanks 包含 mesh 层 localRanks 的物理层
 int32_t FindUpperEncompassingLevel(

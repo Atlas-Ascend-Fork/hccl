@@ -40,8 +40,9 @@ bool EndpointDescLess(const EndpointDesc& lhs, const EndpointDesc& rhs);
 bool CommAddrEqual(const CommAddr& lhs, const CommAddr& rhs);
 
 /**
- * 候选范围的标准化: 归一 -> 三键排序 -> 范围链校验, 不做合并。candidates按值语义被移动消耗。
- * 返回HCCL_E_NOT_SUPPORT表示不构成范围链或排序键取不到值, 由调用方降级。
+ * 候选范围的标准化: 归一 -> 排序 -> 范围校验, 不做合并。candidates按值语义被移动消耗。
+ * 普通拓扑保持包含链; 分轨按netLayer保存物理来源, 仅要求层内及Server/超节点范围成链。
+ * 返回HCCL_E_NOT_SUPPORT表示不满足对应范围约束或排序键取不到值, 由调用方降级。
  */
 HcclResult NormalizePhysicalLevels(
     std::vector<PhysicalLevelInfo>& candidates, u32 userRank, u32 userRankSize, std::vector<PhysicalLevelInfo>& levels);
@@ -54,8 +55,11 @@ HcclResult ValidatePhysicalLevels(const std::vector<PhysicalLevelInfo>& levels, 
 // ---- 依赖HcclComm (physical_level_build.cc) ----
 
 /**
- * 构建topoInfo->physicalLevels。任何失败一律降级为空视图并返回HCCL_SUCCESS,
- * 绝不改变CalcTopoShape的返回值。
+ * 构建topoInfo->physicalLevels。原始网络成员、分区等数据错误直接返回。
+ * 分轨连通性仅依据全局分区规模判定, 不以本地交集或比例模型决定准入。
+ * 在超节点内可达且网络层信息完整的前提下, 跨超节点连接数量上限不足时返回HCCL_E_NOT_SUPPORT。
+ * 已证明连通或信息不足均继续处理; 成功不保证实际连通或算法支持, 视图表达限制仍降级为空视图。
+ * 相同网络层和全局分区信息得到相同连通性结论, 不替代跨rank数据一致性校验。
  */
 HcclResult BuildPhysicalLevels(HcclComm comm, TopoInfoWithNetLayerDetails* topoInfo);
 

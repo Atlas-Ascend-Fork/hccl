@@ -868,7 +868,7 @@ HcclResult CalcTopoShape(HcclComm comm, TopoInfoWithNetLayerDetails* topoInfo)
     // 与comm无关, 只查本卡; 恒返回HCCL_SUCCESS, 取不到时停在false
     CHK_RET(CalcDeviceFormFactor(topoInfo));
     // 放在最后: 现有字段的提取与派生逻辑完全不受影响, 且可复用已提取的netLayerDetails。
-    // BuildPhysicalLevels恒返回HCCL_SUCCESS, 内部失败一律降级为空视图
+    // BuildPhysicalLevels的网络结构校验错误直接传播; 仅后续视图构建限制可降级为空视图
     CHK_RET(BuildPhysicalLevels(comm, topoInfo));
     return HCCL_SUCCESS;
 }

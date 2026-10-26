@@ -109,6 +109,30 @@ namespace {
         return std::includes(outer.begin(), outer.end(), inner.begin(), inner.end());
     }
 
+    HcclResult ValidateRanges(const std::vector<PhysicalLevelInfo>& levels, bool hasLayer2Partition)
+    {
+        for (size_t idx = 1; idx < levels.size(); idx++) {
+            const auto& lower = levels[idx - 1];
+            const auto& upper = levels[idx];
+            // Normalize已排序; 此处也供ValidatePhysicalLevels直接校验外部输入。
+            if (hasLayer2Partition && upper.ref.netLayer < lower.ref.netLayer) {
+                return HCCL_E_NOT_SUPPORT;
+            }
+            // layer2多实例时保留可能的交叉范围, 不据此决定是否使用分轨算法。
+            // 同netLayer内仍须成链; layer0/1仍维持Server属于超节点的约束。
+            // 这是物理来源目录的约束, 各算法匹配器仍须检查自己消费的来源能承载算法组。
+            if (hasLayer2Partition && lower.ref.netLayer != upper.ref.netLayer
+                && upper.ref.netLayer >= RAIL_NET_LAYER) {
+                continue;
+            }
+            if (!IsSuperSetOf(upper.localRanks, lower.localRanks)) {
+                HCCL_WARNING("[PhysicalLevel] level[%zu] does not contain level[%zu]", idx, idx - 1);
+                return HCCL_E_NOT_SUPPORT;
+            }
+        }
+        return HCCL_SUCCESS;
+    }
+
 } // namespace
 
 bool EndpointDescLess(const EndpointDesc& lhs, const EndpointDesc& rhs)
@@ -141,7 +165,7 @@ HcclResult NormalizePhysicalLevels(
     }
 
     // 1. 归一: rank列表排序去重、portNums降序、protocols去重升序, 剔除不含当前rank的候选,
-    //    并确认topoType可定序(排序第三键的前提)。instSizeListByLayer不参与归一 —— 重排会毁掉布局语义。
+    //    并确认topoType可定序(排序第三键的前提)。instSizeListByLayer保留接口返回序, 不据此推导成员布局。
     //    构建侧已做过同样的规范化, 这一步在正常路径上幂等, 保留是为了让本函数可离线UT
     std::vector<PhysicalLevelInfo> validCands;
     validCands.reserve(candidates.size());
@@ -171,22 +195,22 @@ HcclResult NormalizePhysicalLevels(
         return HCCL_E_NOT_SUPPORT;
     }
 
-    // 2. 三键排序, 不做合并(Level与NetInstance/TopoInstance一一对应)。用sort而非stable_sort:
+    // 2. layer2多实例时先按netLayer分开以保留物理来源, 其他拓扑按三键排序; 不做合并。
+    //    用sort而非stable_sort:
     //    LevelLess是全序, 结果与输入顺序无关 —— 输入顺序来自RankGraph的哈希遍历, 本就不可依赖
-    std::sort(validCands.begin(), validCands.end(), LevelLess);
+    const bool hasLayer2Partition = HasLayer2Partition(validCands);
+    std::sort(validCands.begin(), validCands.end(), [hasLayer2Partition](const auto& lhs, const auto& rhs) {
+        if (hasLayer2Partition && lhs.ref.netLayer != rhs.ref.netLayer) {
+            return lhs.ref.netLayer < rhs.ref.netLayer;
+        }
+        return LevelLess(lhs, rhs);
+    });
     levels = std::move(validCands);
 
-    // 3. 链校验: 相邻范围必须满足包含关系, 允许相等。
-    //    互相重叠但互不包含的范围(典型为2D Mesh的x/y环)在此被拒绝
-    for (size_t idx = 1; idx < levels.size(); idx++) {
-        if (!IsSuperSetOf(levels[idx].localRanks, levels[idx - 1].localRanks)) {
-            HCCL_WARNING(
-                "[PhysicalLevel][Normalize] level[%zu] with rankNum[%zu] does not contain level[%zu] with "
-                "rankNum[%zu], ranges do not form a chain, rank[%u]",
-                idx, levels[idx].localRanks.size(), idx - 1, levels[idx - 1].localRanks.size(), userRank);
-            levels.clear();
-            return HCCL_E_NOT_SUPPORT;
-        }
+    // 3. 保留layer2多实例时的真实交叉范围, 算法匹配器再校验所选来源能承载算法组。
+    if (ValidateRanges(levels, hasLayer2Partition) != HCCL_SUCCESS) {
+        levels.clear();
+        return HCCL_E_NOT_SUPPORT;
     }
 
     HCCL_INFO("[PhysicalLevel][Normalize] rank[%u] got [%zu] levels", userRank, levels.size());
@@ -339,25 +363,6 @@ namespace {
         return ret;
     }
 
-    // 不变量7: 大小非递减 + 包含链。允许相等 —— netLayer 0上同范围的MESH与CLOS两级、
-    // 两个netLayer的本地NetInstance恰好同范围, 都是合法的相等相邻对
-    HcclResult ValidateChain(const std::vector<PhysicalLevelInfo>& levels)
-    {
-        for (size_t idx = 1; idx < levels.size(); idx++) {
-            if (levels[idx].localRanks.size() < levels[idx - 1].localRanks.size()) {
-                HCCL_WARNING(
-                    "[PhysicalLevel][Validate] level[%zu] rankNum[%zu] is less than level[%zu] rankNum[%zu]", idx,
-                    levels[idx].localRanks.size(), idx - 1, levels[idx - 1].localRanks.size());
-                return HCCL_E_NOT_SUPPORT;
-            }
-            if (!IsSuperSetOf(levels[idx].localRanks, levels[idx - 1].localRanks)) {
-                HCCL_WARNING("[PhysicalLevel][Validate] level[%zu] does not contain level[%zu]", idx, idx - 1);
-                return HCCL_E_NOT_SUPPORT;
-            }
-        }
-        return HCCL_SUCCESS;
-    }
-
     // 身份(netLayer, topoInstId)全域唯一。LevelLess的兜底键正是靠这两项才构成全序,
     // 重复则两个Level在比较器下等价, std::sort的相对顺序未指定, 各rank的下标语义会分叉。
     // levels规模是个位数(上限PHYSICAL_LEVEL_NUM_LIMIT), 两两比较不需要额外容器
@@ -399,7 +404,7 @@ HcclResult ValidatePhysicalLevels(const std::vector<PhysicalLevelInfo>& levels, 
         }
     }
 
-    HcclResult ret = ValidateChain(levels);
+    HcclResult ret = ValidateRanges(levels, HasLayer2Partition(levels));
     if (ret == HCCL_SUCCESS) {
         ret = ValidateUniqueSource(levels);
     }

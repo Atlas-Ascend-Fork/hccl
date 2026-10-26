@@ -30,6 +30,10 @@ enum class HcclNetLayer {
     HCCL_NetLayer_MAX,
 };
 
+static_assert(static_cast<u32>(HcclNetLayer::HCCL_NetLayer_L0) == SERVER_NET_LAYER, "Server netLayer mismatch");
+static_assert(static_cast<u32>(HcclNetLayer::HCCL_NetLayer_L1) == POD_NET_LAYER, "Pod netLayer mismatch");
+static_assert(static_cast<u32>(HcclNetLayer::HCCL_NetLayer_L2) == RAIL_NET_LAYER, "Rail netLayer mismatch");
+
 HcclResult InitRankInfo(HcclComm comm, TopoInfo* topoInfo);
 HcclResult InitRankInfo(HcclComm comm, TopoInfoWithNetLayerDetails* topoInfo);
 

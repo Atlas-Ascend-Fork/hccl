@@ -76,9 +76,13 @@ std::vector<CostModelParam> InsV2BarrierSoleExecutor<AlgTopoMatch, InsAlgTemplat
     HcclComm comm, TopoInfoWithNetLayerDetails* topoInfo, const char* algName, const OpParam& param)
 {
     (void)comm;
-    (void)topoInfo;
-    (void)algName;
     (void)param;
+    AlgHierarchyInfoForAllLevel algHierarchyInfo;
+    if (!MatchTopoForProbe<AlgTopoMatch>(
+            topoInfo, algHierarchyInfo, algName, "[InsV2BarrierSoleExecutor][CalcCostCoeff]",
+            TopoProbeScene::PROBE_CALC_COST_COEFF)) {
+        return {};
+    }
     return {{0.0f, 0.0f, 1.0f, 0.0f}};
 }
 

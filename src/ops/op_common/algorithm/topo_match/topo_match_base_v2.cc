@@ -10,6 +10,8 @@
 
 #include "topo_match_base_v2.h"
 #include <algorithm>
+#include <map>
+#include <numeric>
 
 namespace ops_hccl {
 
@@ -121,6 +123,36 @@ std::vector<u32> CollectEffectiveIndices(const std::vector<PhysicalLevelInfo>& p
         effIdx.push_back(i);
     }
     return effIdx;
+}
+
+// 返回当前引擎可用的最高全域DEVICE来源层号; effective已经完成TopoInstance和协议过滤。
+static u32 FindGlobalDeviceLayer(
+    const std::vector<PhysicalLevelInfo>& physicalLevels, const std::vector<u32>& effective, u32 userRankSize)
+{
+    u32 globalLayer = INVALID_UINT;
+    for (u32 idx : effective) {
+        const auto& level = physicalLevels[idx];
+        if (level.ref.netLayer != INVALID_UINT && level.view == PhysicalLevelView::GLOBAL
+            && level.instSizeListByLayer.size() == 1 && level.instSizeListByLayer.front() == userRankSize
+            && level.localRanks.size() == userRankSize && level.locType == ENDPOINT_LOC_TYPE_DEVICE) {
+            if (globalLayer == INVALID_UINT || level.ref.netLayer > globalLayer) {
+                globalLayer = level.ref.netLayer;
+            }
+        }
+    }
+    return globalLayer;
+}
+
+bool ShouldUseRailHierarchy(
+    const std::vector<PhysicalLevelInfo>& physicalLevels, OpExecuteConfig engine, u32 userRankSize)
+{
+    if (engine == OpExecuteConfig::HOSTCPU || userRankSize == 0 || !HasLayer2Partition(physicalLevels)) {
+        return false;
+    }
+    // 复用引擎过滤: Host全域来源以及AIV/CCU不能使用的UBG来源不替代设备分轨路径。
+    // 全域来源也可能位于Server/Pod层, 不以局部匹配成功与否切换算法布局。
+    const auto effective = CollectEffectiveIndices(physicalLevels, engine);
+    return FindGlobalDeviceLayer(physicalLevels, effective, userRankSize) == INVALID_UINT;
 }
 
 // 判断算法是否属于 Mesh 类
@@ -324,6 +356,37 @@ HcclResult ResolveMapping(
     std::vector<u32>& effIdx, std::vector<u32>& pIndices)
 {
     effIdx = CollectEffectiveIndices(physicalLevels, algAttrs.engine);
+    if (algAttrs.engine != OpExecuteConfig::HOSTCPU && HasLayer2Partition(physicalLevels)) {
+        const u32 globalLayer = FindGlobalDeviceLayer(physicalLevels, effIdx, userRankSize);
+        if (globalLayer != INVALID_UINT && globalLayer < RAIL_NET_LAYER) {
+            // 全域来源仅在Server/Pod层时, layer2可能是其内层。普通匹配按范围大小恢复层次,
+            // 否则ThreeLevel会把全域Pod用作中间层, 并在更后方找不到全域来源。
+            // 只重排有效索引, 保留物理来源目录; 存在更高层全域来源时维持既有匹配次序。
+            std::stable_sort(effIdx.begin(), effIdx.end(), [&physicalLevels](u32 lhs, u32 rhs) {
+                return physicalLevels[lhs].localRanks.size() < physicalLevels[rhs].localRanks.size();
+            });
+        }
+    }
+    if (algAttrs.engine == OpExecuteConfig::HOSTCPU && HasLayer2Partition(physicalLevels)) {
+        // HOSTCPU使用Host全域来源; 设备引擎有全域来源时保留layer2参与普通匹配。
+        // 排除非HOST轨层后校验包含链, 保留同层HOST来源供全域锚点匹配。
+        // 后续FindAnchors还须校验存在覆盖全域的HOST来源, 失败时不切换到设备分轨路径。
+        effIdx.erase(
+            std::remove_if(
+                effIdx.begin(), effIdx.end(),
+                [&physicalLevels](u32 idx) {
+                    const auto& level = physicalLevels[idx];
+                    return level.ref.netLayer == RAIL_NET_LAYER && level.locType != ENDPOINT_LOC_TYPE_HOST;
+                }),
+            effIdx.end());
+        for (size_t i = 1; i < effIdx.size(); i++) {
+            const auto& lower = physicalLevels[effIdx[i - 1]].localRanks;
+            const auto& upper = physicalLevels[effIdx[i]].localRanks;
+            if (!std::includes(upper.begin(), upper.end(), lower.begin(), lower.end())) {
+                return HCCL_E_NOT_SUPPORT;
+            }
+        }
+    }
     u32 algoLevelNum = algAttrs.algoTypes.size();
     if (effIdx.size() < algoLevelNum) {
         HCCL_INFO("[ResolveMapping] valid level num[%zu] < algoLevelNum[%u].", effIdx.size(), algoLevelNum);
@@ -382,6 +445,199 @@ std::string FormatPhysicalIdxForAlgoLevels(const std::vector<std::vector<Physica
         idxStr += "} ";
     }
     return idxStr;
+}
+
+// 分轨公共匹配与普通匹配共享此编译单元, host/device及独立LLT目标均包含它。
+namespace {
+
+    const PhysicalLevelInfo* FindNetLevel(const std::vector<PhysicalLevelInfo>& levels, u32 netLayer)
+    {
+        for (const auto& level : levels) {
+            if (level.ref.netLayer == netLayer && level.view == PhysicalLevelView::GLOBAL) {
+                return &level;
+            }
+        }
+        return nullptr;
+    }
+
+    bool ContainsGroup(const std::vector<u32>& ranks, const std::vector<u32>& group)
+    {
+        return std::includes(ranks.begin(), ranks.end(), group.begin(), group.end());
+    }
+
+    bool IsValidPartition(const PhysicalLevelInfo* level, u32 myRank, u32 rankSize)
+    {
+        if (level == nullptr) {
+            return false;
+        }
+        const auto& ranks = level->localRanks;
+        const auto& sizes = level->instSizeListByLayer;
+        return !ranks.empty() && std::is_sorted(ranks.begin(), ranks.end()) && ranks.back() < rankSize
+               && std::adjacent_find(ranks.begin(), ranks.end()) == ranks.end()
+               && std::binary_search(ranks.begin(), ranks.end(), myRank) && !sizes.empty()
+               && std::find(sizes.begin(), sizes.end(), 0U) == sizes.end()
+               && std::accumulate(sizes.begin(), sizes.end(), u64{0}) == rankSize
+               && std::find(sizes.begin(), sizes.end(), static_cast<u32>(ranks.size())) != sizes.end();
+    }
+
+    // 既有执行器以rank编号计算切片坐标, 物理超节点必须由连续且对齐的虚拟块组成。
+    bool IsAlignedRange(const std::vector<u32>& ranks, u32 blockSize)
+    {
+        if (blockSize == 0 || ranks.empty() || ranks.front() % blockSize != 0 || ranks.size() % blockSize != 0) {
+            return false;
+        }
+        for (size_t i = 0; i < ranks.size(); i++) {
+            if (static_cast<u64>(ranks.front()) + i != ranks[i]) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    bool HasCompleteRailColumns(const PhysicalLevelInfo& rail, u32 podSize, u32 rankSize)
+    {
+        const u32 columnSize = rankSize / podSize;
+        // 每条轨必须能承载若干完整的算法顶层组。此条件属于算法布局, 不是parse连通性判据。
+        if (std::any_of(rail.instSizeListByLayer.begin(), rail.instSizeListByLayer.end(), [columnSize](u32 size) {
+                return size % columnSize != 0;
+            })) {
+            return false;
+        }
+        std::map<u32, u32> columnCounts;
+        for (u32 rank : rail.localRanks) {
+            columnCounts[rank % podSize]++;
+        }
+        // 成员已验证唯一且在[0,N)内; 同一余数出现N/P次, 即该编号列完整落在真实轨内。
+        return std::all_of(columnCounts.begin(), columnCounts.end(), [columnSize](const auto& column) {
+            return column.second == columnSize;
+        });
+    }
+
+    HcclResult BuildRailGroups(
+        const TopoInfoWithNetLayerDetails& topoInfo, size_t levelNum, AlgHierarchyInfoForAllLevel& result,
+        std::vector<u32>& netLayers)
+    {
+        const u32 rankSize = topoInfo.userRankSize;
+        const u32 myRank = topoInfo.userRank;
+        const auto* pod = FindNetLevel(topoInfo.physicalLevels, POD_NET_LAYER);
+        const auto* rail = FindNetLevel(topoInfo.physicalLevels, RAIL_NET_LAYER);
+        if (!IsValidPartition(pod, myRank, rankSize) || !IsValidPartition(rail, myRank, rankSize)) {
+            return HCCL_E_NOT_SUPPORT;
+        }
+        // P为算法虚拟块大小, 可以小于真实超节点。infos决定执行器的切片维度,
+        // physicalIdx仅记录能承载该组的物理来源, 不要求组等于整个物理范围。
+        const u32 podSize = CalcGcd(pod->instSizeListByLayer);
+        if (podSize <= 1 || podSize >= rankSize || rankSize % podSize != 0 || !IsAlignedRange(pod->localRanks, podSize)
+            || !HasCompleteRailColumns(*rail, podSize, rankSize)) {
+            HCCL_INFO("[TopoMatchRail] rank[%u], pod/rail do not support regular blocks of size[%u]", myRank, podSize);
+            return HCCL_E_NOT_SUPPORT;
+        }
+
+        result.infos.resize(levelNum, std::vector<std::vector<u32>>(1));
+        const u32 podBase = (myRank / podSize) * podSize;
+        if (levelNum == ALGO_LEVEL_NUM_TWO) {
+            result.infos[0][0] = BuildRepresentativeGroup(1, podSize, podBase);
+            netLayers = {POD_NET_LAYER, RAIL_NET_LAYER};
+            CHK_RET(ValidateGroup(result.infos[0][0], podSize, myRank, "rail pod"));
+        } else {
+            const auto* server = FindNetLevel(topoInfo.physicalLevels, SERVER_NET_LAYER);
+            if (!IsValidPartition(server, myRank, rankSize) || !IsInstListSymmetric(server->instSizeListByLayer)) {
+                return HCCL_E_NOT_SUPPORT;
+            }
+            const u32 serverSize = server->instSizeListByLayer.front();
+            if (podSize % serverSize != 0 || !IsAlignedRange(server->localRanks, serverSize)
+                || !ContainsGroup(pod->localRanks, server->localRanks)) {
+                return HCCL_E_NOT_SUPPORT;
+            }
+            result.infos[0][0] = server->localRanks;
+            result.infos[1][0]
+                = BuildRepresentativeGroup(serverSize, podSize / serverSize, podBase + myRank % serverSize);
+            netLayers = {SERVER_NET_LAYER, POD_NET_LAYER, RAIL_NET_LAYER};
+            CHK_RET(ValidateGroup(result.infos[0][0], serverSize, myRank, "rail server"));
+            CHK_RET(ValidateGroup(result.infos[1][0], podSize / serverSize, myRank, "rail pod representatives"));
+        }
+        result.infos.back()[0] = BuildRepresentativeGroup(podSize, rankSize / podSize, myRank % podSize);
+        return ValidateGroup(result.infos.back()[0], rankSize / podSize, myRank, "rail column");
+    }
+
+    bool PickSource(
+        const std::vector<PhysicalLevelInfo>& levels, const std::vector<u32>& effective, const std::vector<u32>& group,
+        u32 netLayer, AlgoType algo, std::vector<PhysicalLevelIndex>& sources)
+    {
+        // Mesh优先选择能承载整个组的1DMESH, 普通Mesh仍沿用现有CLOS兼容规则。
+        // MeshConcur要求双来源, 不能把多个Server拼成一个不存在的Mesh。
+        const u32 passNum = IsMeshAlgo(algo) && !IsMeshConcurAlgo(algo) ? 2 : 1;
+        for (u32 pass = 0; pass < passNum; pass++) {
+            for (size_t pos = 0; pos < effective.size(); pos++) {
+                const u32 idx = effective[pos];
+                const auto& level = levels[idx];
+                if (level.ref.netLayer != netLayer || level.locType != ENDPOINT_LOC_TYPE_DEVICE
+                    || !ContainsGroup(level.localRanks, group)
+                    || (IsMeshAlgo(algo) && pass == 0 && level.topoType != COMM_TOPO_1DMESH)
+                    || (IsMeshConcurAlgo(algo) && level.topoType != COMM_TOPO_1DMESH)) {
+                    continue;
+                }
+                if (!IsMeshConcurAlgo(algo)) {
+                    sources = {static_cast<PhysicalLevelIndex>(idx)};
+                    return true;
+                }
+                for (size_t upper = pos + 1; upper < effective.size(); upper++) {
+                    const u32 upperIdx = effective[upper];
+                    const auto& candidate = levels[upperIdx];
+                    // Server可借用超节点来源; 超节点/轨的MeshConcur须有同层双来源,
+                    // 不用额外HostDPU等层替代轨内能力。单个CLOS来源不满足MeshConcur。
+                    const u32 maxLayer = netLayer == SERVER_NET_LAYER ? POD_NET_LAYER : netLayer;
+                    if (candidate.ref.netLayer < netLayer || candidate.ref.netLayer > maxLayer
+                        || candidate.locType != ENDPOINT_LOC_TYPE_DEVICE
+                        || !ContainsGroup(candidate.localRanks, level.localRanks)) {
+                        continue;
+                    }
+                    sources = {static_cast<PhysicalLevelIndex>(idx), static_cast<PhysicalLevelIndex>(upperIdx)};
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+} // namespace
+
+HcclResult MatchRailHierarchy(
+    const TopoInfoWithNetLayerDetails& topoInfo, AlgHierarchyInfoForAllLevel& algHierarchyInfo,
+    const AlgAttrs& algAttrs)
+{
+    const size_t levelNum = algAttrs.algoTypes.size();
+    if (topoInfo.userRankSize == 0 || topoInfo.userRank >= topoInfo.userRankSize
+        || (levelNum != ALGO_LEVEL_NUM_TWO && levelNum != ALGO_LEVEL_NUM_THREE)
+        || !ShouldUseRailHierarchy(topoInfo.physicalLevels, algAttrs.engine, topoInfo.userRankSize)) {
+        return HCCL_E_NOT_SUPPORT;
+    }
+    // 在局部结果上构建, 不让不支持的候选留下部分组或来源索引。
+    AlgHierarchyInfoForAllLevel result;
+    std::vector<u32> netLayers;
+    const HcclResult ret = BuildRailGroups(topoInfo, levelNum, result, netLayers);
+    if (ret != HCCL_SUCCESS) {
+        HCCL_INFO(
+            "[TopoMatchRail] rank[%u], regular %zu-level rail layout is not supported", topoInfo.userRank, levelNum);
+        return ret;
+    }
+    const auto effective = CollectEffectiveIndices(topoInfo.physicalLevels, algAttrs.engine);
+    result.physicalIdxForAlgoLevels.resize(levelNum);
+    for (size_t i = 0; i < levelNum; i++) {
+        if (!PickSource(
+                topoInfo.physicalLevels, effective, result.infos[i][0], netLayers[i], algAttrs.algoTypes[i],
+                result.physicalIdxForAlgoLevels[i])) {
+            HCCL_INFO(
+                "[TopoMatchRail] rank[%u], algo level[%zu] has no compatible physical source at netLayer[%u]",
+                topoInfo.userRank, i, netLayers[i]);
+            return HCCL_E_NOT_SUPPORT;
+        }
+    }
+    HCCL_INFO(
+        "[TopoMatchRail] rank[%u], matched [%zu] algorithm levels, physicalIdxForAlgoLevels: [%s]", topoInfo.userRank,
+        levelNum, FormatPhysicalIdxForAlgoLevels(result.physicalIdxForAlgoLevels).c_str());
+    algHierarchyInfo = std::move(result);
+    return HCCL_SUCCESS;
 }
 
 } // namespace ops_hccl

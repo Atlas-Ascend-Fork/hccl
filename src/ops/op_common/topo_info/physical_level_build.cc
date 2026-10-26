@@ -24,6 +24,12 @@ namespace {
     // 日志里一个vector最多展开的元素数, 超出部分省略
     constexpr size_t LOG_VEC_MAX_ITEM = 16;
 
+    struct NetLayerSnapshot {
+        u32 netLayer = 0;
+        std::vector<u32> localRanks;
+        std::vector<u32> instSizeList;
+    };
+
     std::string VecToStr(const std::vector<u32>& vec)
     {
         std::string str;
@@ -195,29 +201,37 @@ namespace {
 
     // 取该layer本地NetInstance的rank集合, 并与netLayerDetails做跨调用一致性校验
     HcclResult
-    FetchLocalNetRanks(HcclComm comm, const NetLayerDetails& details, u32 layer, u32 myRank, std::vector<u32>& ranks)
+    FetchLocalNetRanks(HcclComm comm, const TopoInfoWithNetLayerDetails& topoInfo, u32 layer, std::vector<u32>& ranks)
     {
         u32* rawRanks = nullptr;
         u32 rankNum = 0;
-        if (HcclRankGraphGetRanksByLayer(comm, layer, &rawRanks, &rankNum) != HCCL_SUCCESS || rawRanks == nullptr) {
-            HCCL_WARNING("[PhysicalLevel][Build] get ranks by layer[%u] failed", layer);
-            return HCCL_E_INTERNAL;
+        HcclResult ret = HcclRankGraphGetRanksByLayer(comm, layer, &rawRanks, &rankNum);
+        if (ret != HCCL_SUCCESS) {
+            HCCL_ERROR("[PhysicalLevel][Connectivity] get ranks by layer[%u] failed, ret[%d]", layer, ret);
+            return ret;
         }
-        // HCOMM为该接口只持有一个成员vector, 下一次调用会clear()并重填它, 必须立即复制
-        ranks.assign(rawRanks, rawRanks + rankNum);
-
+        if (rawRanks == nullptr || rankNum == 0 || rankNum > topoInfo.userRankSize) {
+            HCCL_ERROR("[PhysicalLevel][Connectivity] invalid rank list at layer[%u], rankNum[%u]", layer, rankNum);
+            return HCCL_E_PARA;
+        }
         // 跨调用一致性校验: localNetInsSizeOfLayer来自ExtractNetLayerDetails中的另一次调用,
         // 与此处不同源, 不一致说明RankGraph在两次调用之间发生了变化
-        if (ranks.size() != details.localNetInsSizeOfLayer[layer]) {
-            HCCL_WARNING(
-                "[PhysicalLevel][Build] netLayer[%u] rankNum[%zu] mismatches localNetInsSize[%u]", layer, ranks.size(),
-                details.localNetInsSizeOfLayer[layer]);
-            return HCCL_E_INTERNAL;
+        if (rankNum != topoInfo.netLayerDetails.localNetInsSizeOfLayer[layer]) {
+            HCCL_ERROR(
+                "[PhysicalLevel][Connectivity] layer[%u] rankNum[%u] mismatches localNetInsSize[%u]", layer, rankNum,
+                topoInfo.netLayerDetails.localNetInsSizeOfLayer[layer]);
+            return HCCL_E_PARA;
         }
-        if (std::find(ranks.begin(), ranks.end(), myRank) == ranks.end()) {
-            HCCL_WARNING(
-                "[PhysicalLevel][Build] netLayer[%u] local instance does not contain myRank[%u]", layer, myRank);
-            return HCCL_E_INTERNAL;
+        // HCOMM复用返回数组, 下一次查询前立即复制。先核对数量, 再读取数组。
+        ranks.assign(rawRanks, rawRanks + rankNum);
+        // 排序但不去重, 避免把错误成员列表归一成合法范围。
+        std::sort(ranks.begin(), ranks.end());
+        if (ranks.back() >= topoInfo.userRankSize || std::adjacent_find(ranks.begin(), ranks.end()) != ranks.end()
+            || !std::binary_search(ranks.begin(), ranks.end(), topoInfo.userRank)) {
+            HCCL_ERROR(
+                "[PhysicalLevel][Connectivity] invalid members at layer[%u], rank[%u], userRankSize[%u]", layer,
+                topoInfo.userRank, topoInfo.userRankSize);
+            return HCCL_E_PARA;
         }
         return HCCL_SUCCESS;
     }
@@ -228,33 +242,34 @@ namespace {
     HcclResult
     ValidateInstSizeLayout(const std::vector<u32>& instSizeList, u32 layer, size_t localRankNum, u32 userRankSize)
     {
-        if (instSizeList.empty()) {
-            HCCL_WARNING("[PhysicalLevel][Build] netLayer[%u] inst size list is empty", layer);
-            return HCCL_E_INTERNAL;
+        if (instSizeList.empty() || instSizeList.size() > userRankSize) {
+            HCCL_ERROR(
+                "[PhysicalLevel][Connectivity] invalid inst count[%zu] at layer[%u]", instSizeList.size(), layer);
+            return HCCL_E_PARA;
         }
         // 正常路径永不触发(ExtractNetLayerDetails已用同一等式先行校验过)。
         // 保留它只为在HCOMM改变分层语义时第一时间暴露
-        const u32 totalRankNum = std::accumulate(instSizeList.begin(), instSizeList.end(), 0U);
+        const u64 totalRankNum = std::accumulate(instSizeList.begin(), instSizeList.end(), u64{0});
         if (totalRankNum != userRankSize) {
-            HCCL_WARNING(
-                "[PhysicalLevel][Build] netLayer[%u] inst size sum[%u] mismatches userRankSize[%u]", layer,
-                totalRankNum, userRankSize);
-            return HCCL_E_INTERNAL;
+            HCCL_ERROR(
+                "[PhysicalLevel][Connectivity] layer[%u] inst size sum[%llu] mismatches userRankSize[%u]", layer,
+                static_cast<unsigned long long>(totalRankNum), userRankSize);
+            return HCCL_E_PARA;
         }
         // 0能完整穿过其余检查, 于是幽灵空分区会被当成真实Instance计入
         if (std::find(instSizeList.begin(), instSizeList.end(), 0U) != instSizeList.end()) {
-            HCCL_WARNING("[PhysicalLevel][Build] netLayer[%u] inst size list contains a zero entry", layer);
-            return HCCL_E_INTERNAL;
+            HCCL_ERROR("[PhysicalLevel][Connectivity] layer[%u] inst size list contains a zero entry", layer);
+            return HCCL_E_PARA;
         }
         // 顺序无关的自检: 本地实例的规模必须是这一层真实存在的某个分区大小。两个量来源独立
         // (前者来自GetRanksByLayer, 后者来自GetInstSizeListByLayer), 对不上说明两次调用之间
         // RankGraph发生了变化
         if (std::find(instSizeList.begin(), instSizeList.end(), static_cast<u32>(localRankNum)) == instSizeList.end()) {
-            HCCL_WARNING(
-                "[PhysicalLevel][Build] netLayer[%u] local instance has [%zu] ranks, which is not one of the "
+            HCCL_ERROR(
+                "[PhysicalLevel][Connectivity] layer[%u] local instance has [%zu] ranks, which is not one of the "
                 "inst sizes",
                 layer, localRankNum);
-            return HCCL_E_INTERNAL;
+            return HCCL_E_PARA;
         }
         return HCCL_SUCCESS;
     }
@@ -266,19 +281,129 @@ namespace {
         std::vector<u32>& instSizeListByLayer)
     {
         const NetLayerDetails& details = topoInfo->netLayerDetails;
-        const u32 myRank = topoInfo->userRank;
-        if (layer >= details.localNetInsSizeOfLayer.size() || layer >= details.instSizeListOfLayer.size()) {
-            HCCL_WARNING("[PhysicalLevel][Build] netLayer[%u] out of range of netLayerDetails arrays", layer);
-            return HCCL_E_INTERNAL;
+        if (layer >= details.localNetInsSizeOfLayer.size() || layer >= details.instSizeListOfLayer.size()
+            || layer >= details.netInstNumOfLayer.size()) {
+            HCCL_ERROR(
+                "[PhysicalLevel][Connectivity][MissingMetadata] missing partition information at layer[%u]", layer);
+            return HCCL_E_NOT_SUPPORT;
         }
-        HcclResult ret = FetchLocalNetRanks(comm, details, layer, myRank, ranks);
+        HcclResult ret = FetchLocalNetRanks(comm, *topoInfo, layer, ranks);
         if (ret != HCCL_SUCCESS) {
             return ret;
         }
         // 原样透传HCOMM的返回序, 不重排。该序不保证任何含义(HCOMM侧以unordered_map实现),
-        // 消费侧只做与顺序无关的判断(IsInstListSymmetric/CalcGcd), 排序反而会掩盖乱序这件事
+        // physicalLevels的消费方只做与顺序无关的判断(IsInstListSymmetric/CalcGcd)。
+        // 不据此前缀和恢复远端成员; 旧topoInfo初始化中的布局推导不属于该字段的契约。
         instSizeListByLayer = details.instSizeListOfLayer[layer];
+        if (instSizeListByLayer.size() != details.netInstNumOfLayer[layer]) {
+            HCCL_ERROR("[PhysicalLevel][Connectivity] inconsistent partition count at layer[%u]", layer);
+            return HCCL_E_PARA;
+        }
         return ValidateInstSizeLayout(instSizeListByLayer, layer, ranks.size(), topoInfo->userRankSize);
+    }
+
+    HcclResult FetchNetLayerSnapshots(
+        HcclComm comm, const TopoInfoWithNetLayerDetails* topoInfo, std::vector<NetLayerSnapshot>& snapshots)
+    {
+        auto layers = topoInfo->netLayerDetails.netLayers;
+        std::sort(layers.begin(), layers.end());
+        if (layers.size() != topoInfo->netLayerDetails.netLayerNum
+            || std::adjacent_find(layers.begin(), layers.end()) != layers.end()) {
+            HCCL_ERROR(
+                "[PhysicalLevel][Connectivity] inconsistent or duplicate netLayers, rank[%u]", topoInfo->userRank);
+            return HCCL_E_PARA;
+        }
+        if (layers.empty() && topoInfo->userRankSize > 1) {
+            HCCL_ERROR(
+                "[PhysicalLevel][Connectivity][MissingMetadata] no netLayer information, rank[%u]", topoInfo->userRank);
+            return HCCL_E_NOT_SUPPORT;
+        }
+        for (u32 layer : layers) {
+            NetLayerSnapshot snapshot;
+            snapshot.netLayer = layer;
+            CHK_RET(FetchNetInstance(comm, topoInfo, layer, snapshot.localRanks, snapshot.instSizeList));
+            snapshots.push_back(std::move(snapshot));
+        }
+        return HCCL_SUCCESS;
+    }
+
+    HcclResult ValidateRailConnectivity(
+        const std::vector<NetLayerSnapshot>& snapshots, const NetLayerSnapshot& pod, const NetLayerSnapshot& rail,
+        u32 myRank, u32 rankSize)
+    {
+        // 只使用全局规模, 不以本rank所在超节点、轨或交集决定准入。各rank取得相同层列表和
+        // 完整分区时结论相同; 假定NetInstance内理论可达, 不据此保证具体算法或实际建链成功。
+        const u32 minPodSize = *std::min_element(pod.instSizeList.begin(), pod.instSizeList.end());
+        const u32 maxRailSize = *std::max_element(rail.instSizeList.begin(), rail.instSizeList.end());
+        if (maxRailSize > rankSize - minPodSize) {
+            // 最大轨无法放入任一超节点的补集, 因而必然覆盖全部超节点。
+            HCCL_INFO(
+                "[PhysicalLevel][Connectivity] global rail sizes prove connectivity, rank[%u], userRankSize[%u], "
+                "minPodSize[%u], maxRailSize[%u]",
+                myRank, rankSize, minPodSize, maxRailSize);
+            return HCCL_SUCCESS;
+        }
+
+        // 将超节点收缩为P个点。一个s卡实例最多减少s-1个连通分量, 所以每层的上限为N-实例数。
+        // 必须计入layer3等额外跨超节点网络; 多层累计使用u64。上限足够不代表实际连接充分。
+        // 在完整分区和实例内理论可达的模型下, 上限不足是连通性的否证, 不是启发式拒绝。
+        u64 maxConnections = 0;
+        for (const auto& layer : snapshots) {
+            if (layer.netLayer >= RAIL_NET_LAYER) {
+                maxConnections += static_cast<u64>(rankSize) - layer.instSizeList.size();
+            }
+        }
+        const size_t podNum = pod.instSizeList.size();
+        if (maxConnections < podNum - 1) {
+            HCCL_ERROR(
+                "[PhysicalLevel][Connectivity][Disconnected] disconnected: global connection capacity is insufficient, "
+                "rank[%u], userRankSize[%u], podNum[%zu], maxConnections[%llu]",
+                myRank, rankSize, podNum, static_cast<unsigned long long>(maxConnections));
+            return HCCL_E_NOT_SUPPORT;
+        }
+        HCCL_INFO(
+            "[PhysicalLevel][Connectivity] global sizes cannot determine rail connectivity, continue with "
+            "topology matching and channel acquisition, rank[%u], userRankSize[%u], podNum[%zu], "
+            "maxConnections[%llu]",
+            myRank, rankSize, podNum, static_cast<unsigned long long>(maxConnections));
+        return HCCL_SUCCESS;
+    }
+
+    HcclResult ValidatePhysicalConnectivity(const std::vector<NetLayerSnapshot>& snapshots, u32 myRank, u32 rankSize)
+    {
+        // 分区已校验总和为rankSize, 只有一个实例即覆盖全域。具体算法所需链路仍由建链检查。
+        if (rankSize == 1 || std::any_of(snapshots.begin(), snapshots.end(), [rankSize](const NetLayerSnapshot& layer) {
+                return layer.instSizeList.size() == 1 && layer.instSizeList.front() == rankSize;
+            })) {
+            return HCCL_SUCCESS;
+        }
+        const NetLayerSnapshot* pod = nullptr;
+        const NetLayerSnapshot* rail = nullptr;
+        for (const auto& layer : snapshots) {
+            if (layer.netLayer == POD_NET_LAYER) {
+                pod = &layer;
+            } else if (layer.netLayer == RAIL_NET_LAYER) {
+                rail = &layer;
+            }
+        }
+        if (pod == nullptr || rail == nullptr) {
+            // 缺少本地层信息不能排除代表卡或其他网络层提供连接, 不将信息不足判为断网。
+            HCCL_INFO(
+                "[PhysicalLevel][Connectivity] pod or rail layer unavailable, connectivity undetermined, "
+                "continue with topology matching and channel acquisition, rank[%u], userRankSize[%u]",
+                myRank, rankSize);
+            return HCCL_SUCCESS;
+        }
+        for (const auto& layer : snapshots) {
+            if (layer.netLayer < POD_NET_LAYER
+                && !std::includes(
+                    pod->localRanks.begin(), pod->localRanks.end(), layer.localRanks.begin(), layer.localRanks.end())) {
+                HCCL_ERROR(
+                    "[PhysicalLevel][Connectivity] layer[%u] exceeds local pod, rank[%u]", layer.netLayer, myRank);
+                return HCCL_E_PARA;
+            }
+        }
+        return ValidateRailConnectivity(snapshots, *pod, *rail, myRank, rankSize);
     }
 
     // 取该layer上全部TopoInstance的id。空map是合法结果, 返回空列表且不算失败
@@ -375,26 +500,24 @@ namespace {
      *   该层没有TopoInstance -> NetInstance独立成级(hasTopoInst=false)。
      */
     HcclResult BuildLayerCandidates(
-        HcclComm comm, const TopoInfoWithNetLayerDetails* topoInfo, u32 layer,
+        HcclComm comm, const TopoInfoWithNetLayerDetails* topoInfo, const NetLayerSnapshot& snapshot,
         std::vector<PhysicalLevelInfo>& candidates)
     {
         const u32 myRank = topoInfo->userRank;
-        std::vector<u32> netRanks;
-        std::vector<u32> instSizeListByLayer;
-        CHK_RET(FetchNetInstance(comm, topoInfo, layer, netRanks, instSizeListByLayer));
+        const u32 layer = snapshot.netLayer;
+        const auto& netRanks = snapshot.localRanks;
+        const auto& instSizeListByLayer = snapshot.instSizeList;
 
         std::vector<PhysicalLevelInfo> topoLevels;
         CHK_RET(FetchTopoInstances(comm, myRank, layer, topoLevels));
 
-        // 两侧都来自HCOMM且均为升序无重复, 直接比vector即可
-        std::vector<u32> sortedNetRanks = netRanks;
-        std::sort(sortedNetRanks.begin(), sortedNetRanks.end());
+        // NetInstance快照已检查并排序; TopoInstance另行排序后按成员比较。
 
         bool merged = false;
         for (auto& level : topoLevels) {
             std::vector<u32> sortedTopoRanks = level.localRanks;
             std::sort(sortedTopoRanks.begin(), sortedTopoRanks.end());
-            if (sortedTopoRanks == sortedNetRanks) {
+            if (sortedTopoRanks == netRanks) {
                 // 同范围: 把NetInstance的全局分区并进来。分区是该层的全局事实, 同层多个
                 // 同范围TopoInstance(如netLayer 0的Mesh与CLOS)各自都持有它
                 level.view = PhysicalLevelView::GLOBAL;
@@ -417,9 +540,9 @@ namespace {
         if (!merged) {
             // 没有同范围的TopoInstance: 分区信息仍有效但拿不到链路属性, 用hasTopoInst=false显式注明
             PhysicalLevelInfo level;
-            level.localRanks = std::move(netRanks);
+            level.localRanks = netRanks;
             level.view = PhysicalLevelView::GLOBAL;
-            level.instSizeListByLayer = std::move(instSizeListByLayer);
+            level.instSizeListByLayer = instSizeListByLayer;
             level.ref.netLayer = layer;
             level.ref.topoInstId = INVALID_UINT;
             level.hasTopoInst = false;
@@ -433,7 +556,8 @@ namespace {
     }
 
     HcclResult BuildPhysicalLevelCandidates(
-        HcclComm comm, const TopoInfoWithNetLayerDetails* topoInfo, std::vector<PhysicalLevelInfo>& candidates)
+        HcclComm comm, const TopoInfoWithNetLayerDetails* topoInfo, const std::vector<NetLayerSnapshot>& snapshots,
+        std::vector<PhysicalLevelInfo>& candidates)
     {
         candidates.clear();
         if (topoInfo->netLayerDetails.netLayers.empty()) {
@@ -442,8 +566,8 @@ namespace {
         }
         // 只遍历netLayers里的layer: 规避HCOMM对非法layer的抛异常分支, 并保证ref.netLayer都来自
         // GetLayers的实际结果。收集先后无所谓, LevelLess是全序, 不依赖输入顺序
-        for (u32 layer : topoInfo->netLayerDetails.netLayers) {
-            CHK_RET(BuildLayerCandidates(comm, topoInfo, layer, candidates));
+        for (const auto& snapshot : snapshots) {
+            CHK_RET(BuildLayerCandidates(comm, topoInfo, snapshot, candidates));
         }
         return HCCL_SUCCESS;
     }
@@ -454,16 +578,26 @@ HcclResult BuildPhysicalLevels(HcclComm comm, TopoInfoWithNetLayerDetails* topoI
 {
     CHK_PTR_NULL(topoInfo);
     topoInfo->physicalLevels.clear();
-    if (comm == nullptr) {
-        HCCL_WARNING("[PhysicalLevel][Build] comm is null, physicalLevels stays empty");
-        return HCCL_SUCCESS;
-    }
+    CHK_PTR_NULL(comm);
+    CHK_PRT_RET(
+        topoInfo->userRankSize == 0 || topoInfo->userRank >= topoInfo->userRankSize,
+        HCCL_ERROR(
+            "[PhysicalLevel][Connectivity] invalid rank[%u], userRankSize[%u]", topoInfo->userRank,
+            topoInfo->userRankSize),
+        HCCL_E_PARA);
+
+    // 两类错误均直接失败: 必需元数据缺失/非法; 完整分区证明连接数量上限不足。
+    // 后者已否证物理连通性, legacy算法不能补出不存在的跨分区连接, 因此不保留兜底。
+    // 仅视图表达限制可在后续降级; 无法判定连通性的拓扑继续匹配与建链。
+    std::vector<NetLayerSnapshot> snapshots;
+    CHK_RET(FetchNetLayerSnapshots(comm, topoInfo, snapshots));
+    CHK_RET(ValidatePhysicalConnectivity(snapshots, topoInfo->userRank, topoInfo->userRankSize));
 
     // 在临时对象中构建, 全部校验通过后再赋值; 降级或失败时physicalLevels保持为空
     std::vector<PhysicalLevelInfo> candidates;
     std::vector<PhysicalLevelInfo> levels;
 
-    HcclResult ret = BuildPhysicalLevelCandidates(comm, topoInfo, candidates);
+    HcclResult ret = BuildPhysicalLevelCandidates(comm, topoInfo, snapshots, candidates);
     if (ret == HCCL_SUCCESS) {
         ret = NormalizePhysicalLevels(candidates, topoInfo->userRank, topoInfo->userRankSize, levels);
     }
@@ -471,7 +605,7 @@ HcclResult BuildPhysicalLevels(HcclComm comm, TopoInfoWithNetLayerDetails* topoI
         ret = ValidatePhysicalLevels(levels, topoInfo->userRank, topoInfo->userRankSize);
     }
     if (ret != HCCL_SUCCESS) {
-        // 任何失败一律降级, 不改变CalcTopoShape的返回值
+        // 仅保留物理视图构建/表达限制的降级; 前面的结构校验错误已直接返回。
         HCCL_WARNING(
             "[PhysicalLevel][Build] normalize degraded, ret[%d], rank[%u]. physicalLevels stays empty, legacy path "
             "unaffected.",

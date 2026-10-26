@@ -106,6 +106,7 @@ TopoMatchThreeLevel::~TopoMatchThreeLevel() {}
 HcclResult TopoMatchThreeLevel::MatchTopo(
     TopoInfoWithNetLayerDetails* topoInfo, AlgHierarchyInfoForAllLevel& algHierarchyInfo, const AlgAttrs& algAttrs)
 {
+    CHK_PTR_NULL(topoInfo);
     const auto& physicalLevels = topoInfo->physicalLevels;
     u32 myRank = topoInfo->userRank;
     u32 userRankSize = topoInfo->userRankSize;
@@ -117,14 +118,20 @@ HcclResult TopoMatchThreeLevel::MatchTopo(
         return HcclResult::HCCL_E_INTERNAL;
     }
 
+    // 存在当前引擎可用的DEVICE全域来源时走普通匹配, 否则按全局分区选择分轨布局。
+    // 不以各rank本地匹配的成败切换路径。
+    // HOSTCPU使用Host全域来源, 由ResolveMapping排除轨层并校验Host包含链。
+    if (ShouldUseRailHierarchy(physicalLevels, algAttrs.engine, userRankSize)) {
+        return MatchRailHierarchy(*topoInfo, algHierarchyInfo, algAttrs);
+    }
     HcclResult ret = HCCL_SUCCESS;
     // 引擎过滤 + 锚点匹配 + 分段 + 最高层校验
     std::vector<u32> effIdx;
     std::vector<u32> pIndices;
     ret = ResolveMapping(physicalLevels, algAttrs, userRankSize, effIdx, pIndices);
-    CHK_PRT_RET(
-        ret != HCCL_SUCCESS, HCCL_INFO("[TopoMatchThreeLevel] ResolveMapping failed: hcclRet -> %d", ret),
-        HcclResult::HCCL_E_NOT_SUPPORT);
+    if (ret != HCCL_SUCCESS) {
+        return ret;
+    }
     u32 phys0 = effIdx[pIndices[0]];
     u32 phys1 = effIdx[pIndices[1]];
 
@@ -154,6 +161,13 @@ HcclResult TopoMatchThreeLevel::MatchTopo(
     CHK_PRT_RET(
         ret != HCCL_SUCCESS, HCCL_WARNING("[TopoMatchThreeLevel] ValidateGroup level2 failed: hcclRet -> %d", ret),
         HcclResult::HCCL_E_NOT_SUPPORT);
+    // layer2多实例可能与Pod交叉。普通路径的中间组仍须落在所选来源内。
+    const auto& level1Ranks = physicalLevels[phys1].localRanks;
+    if (HasLayer2Partition(physicalLevels)
+        && !std::includes(level1Ranks.begin(), level1Ranks.end(), group1.begin(), group1.end())) {
+        HCCL_INFO("[TopoMatchThreeLevel] Rank [%u], level1 group exceeds its physical source.", myRank);
+        return HCCL_E_NOT_SUPPORT;
+    }
     algHierarchyInfo.infos.resize(ALGO_LEVEL_NUM_THREE);
     for (u32 i = 0; i < ALGO_LEVEL_NUM_THREE; i++) {
         algHierarchyInfo.infos[i].resize(1);

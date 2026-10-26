@@ -92,6 +92,7 @@ TopoMatchTwoLevel::~TopoMatchTwoLevel() {}
 HcclResult TopoMatchTwoLevel::MatchTopo(
     TopoInfoWithNetLayerDetails* topoInfo, AlgHierarchyInfoForAllLevel& algHierarchyInfo, const AlgAttrs& algAttrs)
 {
+    CHK_PTR_NULL(topoInfo);
     const auto& physicalLevels = topoInfo->physicalLevels;
     u32 myRank = topoInfo->userRank;
     u32 userRankSize = topoInfo->userRankSize;
@@ -103,14 +104,20 @@ HcclResult TopoMatchTwoLevel::MatchTopo(
         return HcclResult::HCCL_E_INTERNAL;
     }
 
+    // 存在当前引擎可用的DEVICE全域来源时走普通匹配, 否则按全局分区选择分轨布局。
+    // 不以各rank本地匹配的成败切换路径。
+    // HOSTCPU使用Host全域来源, 由ResolveMapping排除轨层并校验Host包含链。
+    if (ShouldUseRailHierarchy(physicalLevels, algAttrs.engine, userRankSize)) {
+        return MatchRailHierarchy(*topoInfo, algHierarchyInfo, algAttrs);
+    }
     HcclResult ret = HCCL_SUCCESS;
     // 引擎过滤 + 锚点匹配 + 分段 + 最高层校验
     std::vector<u32> effIdx;
     std::vector<u32> pIndices;
     ret = ResolveMapping(physicalLevels, algAttrs, userRankSize, effIdx, pIndices);
-    CHK_PRT_RET(
-        ret != HCCL_SUCCESS, HCCL_INFO("[TopoMatchTwoLevel] ResolveMapping failed: hcclRet -> %d", ret),
-        HcclResult::HCCL_E_NOT_SUPPORT);
+    if (ret != HCCL_SUCCESS) {
+        return ret;
+    }
     u32 phys0 = effIdx[pIndices[0]];
 
     // GCD 校验 p_0（TwoLevel 非对称打平），外层 d1 = userRankSize / d0

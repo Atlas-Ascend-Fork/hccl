@@ -45,6 +45,12 @@ constexpr u32 HCCL_LOGIC_TOPO_LEVEL_NUM = 4; // HCCL逻辑拓扑层级最多4级
 // physicalLevels的条目数上界。
 constexpr u32 PHYSICAL_LEVEL_NUM_LIMIT = 10;
 
+// 物理网络层身份, 不是算法层号或层数。稀疏层号不改变语义, layer3不自动视为轨层。
+// 编号在topo_host.h中与HcclNetLayer编译期绑定, 此处不反向包含该头文件。
+constexpr u32 SERVER_NET_LAYER = 0;
+constexpr u32 POD_NET_LAYER = 1;
+constexpr u32 RAIL_NET_LAYER = 2;
+
 constexpr uint32_t DATATYPE_SIZE_TABLE[HCCL_DATA_TYPE_RESERVED]
     = {sizeof(int8_t),
        sizeof(int16_t),
@@ -104,7 +110,7 @@ constexpr uint64_t CCU_MAX_RANK_SIZE = 128;
 constexpr u32 TOPO_LEVEL_NUM_1 = 1;
 constexpr u32 TOPO_LEVEL_NUM_2 = 2;
 constexpr u32 TOPO_LEVEL_NUM_3 = 3;
-constexpr u32 MIN_SUBGROUP_NUM = 2; // 每层至少2个子组(intra+inter)
+constexpr u32 MIN_SUBGROUP_NUM = 2; // Concurrent匹配器每层所需的最少子组数(intra+inter)
 
 // 按序下发需要
 constexpr u32 ORDER_UNFOLD_THREAD_NOTIFY_IDX = 0;
@@ -196,15 +202,15 @@ struct PhysicalSourceRef {
     u32 topoInstId = INVALID_UINT;
 };
 
-// 范围链上的一环。整条链按三键排序, 相邻两环的rank集合满足包含关系(可以相等)
+// 一个真实物理范围。普通拓扑构成包含链; 分轨按netLayer保存来源, 超节点与轨允许交叉。
 struct PhysicalLevelInfo {
     // 当前rank在该范围内可见的全部rank, 升序去重, 必然含当前rank。
     // 局部量: 同一级上不同rank看到的集合不同(rank 0看到{0..7}, rank 9看到{8..15}),
     std::vector<u32> localRanks;
     PhysicalLevelView view = PhysicalLevelView::LOCAL;
-    // 该netLayer上全部NetInstance的大小, 按最小rankId升序, 即一份分区布局; view为LOCAL时恒为空。
-    // 原样透传HcclRankGraphGetInstSizeListByLayer的返回序, 不重排 —— 重排会毁掉布局语义。
-    // 全局量, 跨rank逐字节相同, 是本结构唯一可用的跨rank一致性锚点
+    // 该netLayer上全部NetInstance的大小; view为LOCAL时恒为空。
+    // 原样透传HcclRankGraphGetInstSizeListByLayer的返回序, 顺序不代表rank归属或实例位置。
+    // 全局规模信息, 消费方只能使用与列表顺序无关的统计, 不能据此前缀和恢复远端成员。
     std::vector<u32> instSizeListByLayer;
     PhysicalSourceRef ref;
 
@@ -226,6 +232,19 @@ struct PhysicalLevelInfo {
     // 原始返回是哈希序, 不排序会导致同一拓扑在不同进程下得到不同的字节流
     std::vector<EndpointDesc> endpoints;
 };
+
+// layer2的全局分区含多个NetInstance, 可能是普通多级拓扑或分轨, 不决定算法匹配路径。
+// 各rank的层列表与全局分区一致时, 此判断不依赖本地TopoInstance是否可用。
+inline bool HasLayer2Partition(const std::vector<PhysicalLevelInfo>& levels)
+{
+    for (const auto& level : levels) {
+        if (level.ref.netLayer == RAIL_NET_LAYER && level.view == PhysicalLevelView::GLOBAL
+            && level.instSizeListByLayer.size() > 1) {
+            return true;
+        }
+    }
+    return false;
+}
 
 /*
  * endpoints走BinaryStream的整块裸拷贝, 只对POD正确。EndpointDesc将来若引入变长成员(如std::string),
@@ -526,7 +545,7 @@ enum class PhysicalLevelIndex : uint32_t {
 
 // 如果能够序列化那么就是下面的结构体
 struct AlgHierarchyInfoForAllLevel {
-    std::vector<std::vector<std::vector<u32>>> infos; // 第一维表示有多少level，第二维是每个level的rankID
+    std::vector<std::vector<std::vector<u32>>> infos;                      // [算法层][该层子组][子组内rank]
     std::vector<std::vector<PhysicalLevelIndex>> physicalIdxForAlgoLevels; // 每个算法层可对应多个物理层
 };
 // 如果能够序列化那么就是下面的结构体
