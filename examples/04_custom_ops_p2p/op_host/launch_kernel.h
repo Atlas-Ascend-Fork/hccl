@@ -13,12 +13,14 @@
 
 #include <string>
 
+#include <hccl/hccl_types.h>
+
 namespace ops_hccl_p2p {
 
 // 使用 ASC 编译的二进制调用函数
 extern HcclResult LaunchKernelAsc(OpParam& param, aclrtStream stream);
 
-HcclResult LaunchKernel(OpParam& param, aclrtStream stream);
+HcclResult LaunchKernel(HcclComm comm, OpParam& param, aclrtStream stream);
 } // namespace ops_hccl_p2p
 
 #endif

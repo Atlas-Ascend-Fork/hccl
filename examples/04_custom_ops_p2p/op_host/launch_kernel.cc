@@ -8,6 +8,8 @@
  * See LICENSE in the root of the software repository for the full text of the License.
  */
 
+#include <hccl/hccl_diag.h>
+
 #include "log.h"
 #include "common.h"
 #include "load_kernel.h"
@@ -32,13 +34,16 @@ HcclResult LaunchKernelWithAsc(OpParam& param, aclrtStream stream)
     return HCCL_SUCCESS;
 }
 
-HcclResult LaunchKernelWithAclrt(OpParam& param, aclrtStream stream)
+HcclResult LaunchKernelWithAclrt(HcclComm comm, OpParam& param, aclrtStream stream)
 {
     // 加载 AICPU Kernel，获取 AICPU 侧链接库的句柄
     CHK_RET(LoadAICPUKernel());
 
     // Host stream通知Device主thread
     CHK_RET(HcommThreadNotifyRecordOnThread(param.cpuThread, param.aicpuThreadOnCpu, 0));
+
+    // 记录 Kernel 下发开始时间戳
+    uint64_t kernelBeginTime = HcommGetProfilingSysCycleTime();
 
     // 获取 Kernel 函数句柄
     std::string kernelName = "HcclLaunchP2PAicpuKernel";
@@ -63,12 +68,16 @@ HcclResult LaunchKernelWithAclrt(OpParam& param, aclrtStream stream)
     constexpr uint32_t numBlocks = 1;
     ACLCHECK(aclrtLaunchKernelWithConfig(funcHandle, numBlocks, stream, &cfg, argsHandle, nullptr));
 
+    // 上报 AICPU Kernel 性能数据
+    char* kernelNameCStr = kernelName.data();
+    CHK_RET(HcclReportAicpuKernel(comm, kernelBeginTime, kernelNameCStr));
+
     // Host stream等待Device的通知
     CHK_RET(HcommThreadNotifyWaitOnThread(param.cpuThread, 0, CUSTOM_TIMEOUT));
     return HCCL_SUCCESS;
 }
 
-HcclResult LaunchKernel(OpParam& param, aclrtStream stream)
+HcclResult LaunchKernel(HcclComm comm, OpParam& param, aclrtStream stream)
 {
     // 通过环境变量判断 Kernel 下发方式，默认使用 aclrt 接口方式
     char* kernelLaunchAscPtr = getenv("HCCL_CUSTOM_KERNEL_LAUNCH_ASC");
@@ -79,7 +88,7 @@ HcclResult LaunchKernel(OpParam& param, aclrtStream stream)
     } else {
         // 传统 ACL API 方式
         HCCL_INFO("[LaunchKernel] Launching kernel with aclrt");
-        return LaunchKernelWithAclrt(param, stream);
+        return LaunchKernelWithAclrt(comm, param, stream);
     }
 }
 } // namespace ops_hccl_p2p

@@ -11,9 +11,11 @@
 #include <string>
 #include <acl/acl_rt.h>
 #include <hccl/hccl_types.h>
+#include <hccl/hccl_diag.h>
 #include "log.h"
 #include "utils.h"
 #include "common.h"
+#include "dfx.h"
 
 namespace ops_hccl_p2p {
 HcclResult GetDeviceType(DeviceType* deviceType)
@@ -89,6 +91,15 @@ HcclResult AcquireChannel(
         return HCCL_E_NOT_FOUND;
     }
     CHK_RET(HcclChannelAcquire(comm, engine, &desc, 1, channel));
+    return HCCL_SUCCESS;
+}
+
+HcclResult DfxRegOpInfoHost(const OpParam& param)
+{
+    // 算子执行前注册Dfx算子信息
+    HcclDfxOpInfo dfxOpInfo{};
+    CHK_RET(FillDfxOpInfo(param, dfxOpInfo));
+    CHK_RET(HcclDfxRegOpInfoByCommId(const_cast<char*>(param.commName), reinterpret_cast<void*>(&dfxOpInfo)));
     return HCCL_SUCCESS;
 }
 } // namespace ops_hccl_p2p

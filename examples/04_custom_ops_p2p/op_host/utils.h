@@ -16,8 +16,15 @@
 #include "common.h"
 
 namespace ops_hccl_p2p {
+
+// 获取设备类型
 HcclResult GetDeviceType(DeviceType* deviceType);
+
+// 创建 Channel
 HcclResult AcquireChannel(
     HcclComm comm, CommEngine engine, DeviceType devType, uint32_t srcRank, uint32_t dstRank, ChannelHandle* channel);
+
+// 注册 Dfx 算子信息
+HcclResult DfxRegOpInfoHost(const OpParam& param);
 } // namespace ops_hccl_p2p
 #endif

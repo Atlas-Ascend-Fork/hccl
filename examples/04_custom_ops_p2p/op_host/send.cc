@@ -9,6 +9,7 @@
  */
 
 #include <hccl/hccl_res_expt.h>
+#include <hccl/hccl_diag.h>
 
 #include "log.h"
 #include "utils.h"
@@ -26,6 +27,14 @@ HcclResult HcclSendCustom(
     CHK_PTR_NULL(comm);
     CHK_PTR_NULL(stream);
 
+    if (dataType >= HCCL_DATA_TYPE_RESERVED) {
+        HCCL_ERROR("[HcclSendCustom] Invalid dataType: %d", dataType);
+        return HCCL_E_PARA;
+    }
+
+    // 记录算子开始执行的时间戳
+    uint64_t beginTime = HcommGetProfilingSysCycleTime();
+
     OpParam param;
     int ret = sprintf_s(param.tag, sizeof(param.tag), "%s", "hccl_custom_p2p");
     if (ret <= 0) {
@@ -38,6 +47,9 @@ HcclResult HcclSendCustom(
     param.count = count;
     param.dataType = dataType;
     param.opType = HcclCMDType::HCCL_CMD_SEND;
+
+    // 算子执行前注册Dfx算子信息
+    CHK_RET(DfxRegOpInfoHost(param));
 
     // ==============================================
     // STEP 1: 解析拓扑信息
@@ -96,7 +108,10 @@ HcclResult HcclSendCustom(
     // ==============================================
     // STEP 3: 下发 AICPU Kernel
     // ==============================================
-    CHK_RET(LaunchKernel(param, stream));
+    CHK_RET(LaunchKernel(comm, param, stream));
+
+    // 算子执行结束后上报性能数据
+    CHK_RET(HcclProfilingReportOp(comm, beginTime));
 
     return HCCL_SUCCESS;
 }

@@ -11,25 +11,53 @@
 #include <string>
 #include <memory>
 #include <hccl/hcomm_primitives.h>
+#include <hccl/hcomm_diag.h>
+#include <hccl/hccl_diag.h>
 #include "log.h"
 #include "utils.h"
 #include "common.h"
+#include "dfx.h"
 #include "exec_op.h"
 
 using namespace ops_hccl_p2p;
 
+// device侧注册Dfx算子信息
+static HcclResult DfxRegOpInfo(const OpParam& param)
+{
+    HcclDfxOpInfo dfxOpInfo{};
+    CHK_RET(FillDfxOpInfo(param, dfxOpInfo));
+    // device侧差异字段
+    dfxOpInfo.cpuTsThread = param.resCtx->cpuThreadOnAicpu;
+    dfxOpInfo.cpuWaitAicpuNotifyIdx = 0;
+    CHK_RET(HcclDfxRegOpInfoByCommId(const_cast<char*>(param.commName), reinterpret_cast<void*>(&dfxOpInfo)));
+    return HCCL_SUCCESS;
+}
+
 extern "C" unsigned int HcclLaunchP2PAicpuKernel(OpParam* param)
 {
     HCCL_INFO("Entry-%s, commName[%s], tag[%s]", __func__, param->commName, param->tag);
-    if (param->devType == DEVICE_TYPE_A2 || param->devType == DEVICE_TYPE_A3) {
-        if (HcommAcquireComm(param->commName) != HCCL_SUCCESS) {
-            HCCL_ERROR("%s HcommAcquireComm fail, commName[%s]", __func__, param->commName);
-            return 1;
-        }
+
+    if (HcommAcquireComm(param->commName) != HCCL_SUCCESS) {
+        HCCL_ERROR("%s HcommAcquireComm fail, commName[%s]", __func__, param->commName);
+        return 1;
     }
 
     if (HcommBatchModeStart(param->tag) != HCCL_SUCCESS) {
         HCCL_ERROR("failed start batch mode");
+        return 1;
+    }
+
+    // 注册Dfx算子信息（须在下发首个task前）
+    if (DfxRegOpInfo(*param) != HCCL_SUCCESS) {
+        HCCL_ERROR("failed to register dfx op info");
+        return 1;
+    }
+
+    // 下发首个task前上报kernel启动任务事件
+    if (HcommProfilingReportKernelStartTask(param->resCtx->aicpuThread, param->commName) != HCCL_SUCCESS) {
+        HCCL_ERROR(
+            "%s failed to report profiling info, thread %lu, commName %s.", __func__, param->resCtx->aicpuThread,
+            param->commName);
         return 1;
     }
 
@@ -52,16 +80,26 @@ extern "C" unsigned int HcclLaunchP2PAicpuKernel(OpParam* param)
         return 1;
     }
 
+    // 执行最后一个task后上报kernel结束任务事件与device算子事件
+    if (HcommProfilingReportKernelEndTask(param->resCtx->aicpuThread, param->commName) != HCCL_SUCCESS) {
+        HCCL_ERROR(
+            "%s failed to report profiling info, thread %lu, commName %s.", __func__, param->resCtx->aicpuThread,
+            param->commName);
+        return 1;
+    }
+    if (HcommProfilingReportDeviceOp(param->commName) != HCCL_SUCCESS) {
+        HCCL_ERROR("%s HcommProfilingReportDeviceOp fail, commName[%s]", __func__, param->commName);
+        return 1;
+    }
+
     if (HcommBatchModeEnd(param->tag) != HCCL_SUCCESS) {
         HCCL_ERROR("failed end batch mode");
         return 1;
     }
 
-    if (param->devType == DEVICE_TYPE_A2 || param->devType == DEVICE_TYPE_A3) {
-        if (HcommReleaseComm(param->commName) != HCCL_SUCCESS) {
-            HCCL_ERROR("%s HcommReleaseComm fail, commName[%s]", __func__, param->commName);
-            return 1;
-        }
+    if (HcommReleaseComm(param->commName) != HCCL_SUCCESS) {
+        HCCL_ERROR("%s HcommReleaseComm fail, commName[%s]", __func__, param->commName);
+        return 1;
     }
     HCCL_INFO("%s success, commName[%s], tag[%s]", __func__, param->commName, param->tag);
     return 0;
