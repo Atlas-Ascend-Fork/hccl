@@ -73,6 +73,7 @@ public:
 private:
     uint32_t mySubCommRank_ = 0;
     uint32_t subCommRootId_ = 0;
+    double dieSplitRatio_ = 1.0;
     std::map<u32, std::vector<HcclChannelDesc>> rankIdToChannelDesc_;
     HcclResult CalcChannelDescs(
         HcclComm comm, const OpParam& param, const TopoInfoWithNetLayerDetails* topoInfo,
@@ -86,10 +87,9 @@ private:
     HcclResult ProcessNHRStepInfo(
         HcclComm comm, std::vector<NHRStepInfo>& stepInfoVector, std::map<u32, u32>& rank2ChannelIdx, u32 enableDieNum,
         std::vector<std::vector<HcclChannelDesc>>& channelsPerDie);
-    HcclResult SplitDataFor2Dies(
-        const OpParam& param, const TemplateDataParams& templateDataParams, uint64_t& die0Size,
-        uint64_t& die1Size) const;
-    void FillKernelRunTempArgs(const TemplateDataParams& templateDataParams, KernelRunTempArgs& tempArgs) const;
+    HcclResult SplitDataFor2Dies(const OpParam& param, uint64_t dataSize, uint64_t& die0Size, uint64_t& die1Size) const;
+    void FillKernelRunTempArgs(
+        const OpParam& param, const TemplateDataParams& templateDataParams, KernelRunTempArgs& tempArgs) const;
     HcclResult PrepareLaunchArgs(const KernelRunTempArgs& tempArgs, std::vector<uint64_t>& taskArgs, uint64_t& argSize);
     HcclResult FillKernelRunArgs(
         const KernelRunTempArgs& tempArgs, const TemplateDataParams& templateDataParams,

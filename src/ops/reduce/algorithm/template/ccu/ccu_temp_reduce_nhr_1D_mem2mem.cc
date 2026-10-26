@@ -167,6 +167,18 @@ HcclResult CcuTempReduceNHR1DMem2Mem::CalcRes(
         CHK_RET(ReverseChannelPerDieIfNeed(comm, myRank_, channelsPerDie));
     }
 
+    constexpr u32 DIE_NUM_2 = 2;
+    double ratio = 1.0;
+    if (enableDieNum == DIE_NUM_2) { // 查询两个die链路的带宽系数，按比例切分数据
+        uint32_t p0 = 0, p1 = 0;
+        CHK_RET(GetChannelBwCoeff(comm, myRank_, channelsPerDie[0][0], p0));
+        CHK_RET(GetChannelBwCoeff(comm, myRank_, channelsPerDie[1][0], p1));
+        if (p0 + p1 > 0) {
+            ratio = static_cast<double>(p0) / (p0 + p1);
+        }
+    }
+    resourceRequest.dieSplitRatio = ratio;
+
     // 3.构造kernelInfo
     for (uint32_t kernelIdx = 0; kernelIdx < kernelNum; kernelIdx++) {
         // 创建每个kernel的ctxArg，放入kernelInfo, 然后将kernelinfo放入resourceRequest.ccuKernelInfos
@@ -281,10 +293,14 @@ HcclResult CcuTempReduceNHR1DMem2Mem::SplitDataFor2Dies(
         die1DataSize = 0;
         return HcclResult::HCCL_SUCCESS;
     }
-    u8 die0PortGroupSize = 6;
-    u8 die1PortGroupSize = 2;
-
-    die0Size = (totalDataCount * die0PortGroupSize / (die0PortGroupSize + die1PortGroupSize)) * dataTypeSize;
+    // die0Size 按 128 字节对齐, 保证 die1 起始地址对齐
+    die0Size = static_cast<uint64_t>(totalDataCount * dieSplitRatio_) * dataTypeSize;
+    die0Size = CcuAlignDown(die0Size, CCU_2DIE_SPLIT_ALIGN_SIZE);
+    if (die0Size == 0) { // 对齐后为0, 数据量不足一个对齐粒度, 退化为不划分die
+        die0Size = totalDataCount * dataTypeSize;
+        die1DataSize = 0;
+        return HcclResult::HCCL_SUCCESS;
+    }
     die1DataSize = templateDataParams.sliceSize - die0Size;
     return HcclResult::HCCL_SUCCESS;
 }
@@ -301,6 +317,14 @@ HcclResult CcuTempReduceNHR1DMem2Mem::CalcSliceInfoAllReduce(const u64 dataSize,
 
     u64 unitAllignSize = DataTypeSizeGet(dataType_);
     u64 unitPerSlice = dataSize / unitAllignSize / templateRankSize_;
+    // 分片粒度对齐到128字节：保证各rank分片起始地址128对齐（CCU本地拷贝/跨卡写地址约束），
+    // 尾块吸收对齐残差；对齐后为0（数据量不足128B*rankSize）时退回等分切分
+    if (CCU_2DIE_SPLIT_ALIGN_SIZE % unitAllignSize == 0) {
+        u64 alignUnits = CcuAlignDown(unitPerSlice, CCU_2DIE_SPLIT_ALIGN_SIZE / unitAllignSize);
+        if (alignUnits > 0) {
+            unitPerSlice = alignUnits;
+        }
+    }
     HCCL_DEBUG("unitAllignSize[%llu] unitPerSlice[%llu]", unitAllignSize, unitPerSlice);
 
     u64 accumOff = 0;
@@ -350,9 +374,22 @@ HcclResult CcuTempReduceNHR1DMem2Mem::PrepareLaunchArgs(
     uint64_t isInputOutputEqual = (inputAddr == outputAddr) ? 1 : 0;
 
     RankSliceInfo die0SliceInfoVec;
+    HCCL_INFO(
+        "[CcuTempReduceNHR1DMem2Mem] dieSplitRatio_[%f] die0Size[%llu] die1Size[%llu] kernelNum[%u] sliceSize[%llu]",
+        dieSplitRatio_, die0Size, die1Size, kernelNum, templateDataParams.sliceSize);
     CHK_RET(CalcSliceInfoAllReduce(die0Size, die0SliceInfoVec));
+    for (u32 rankIdx = 0; rankIdx < die0SliceInfoVec.size(); rankIdx++) {
+        HCCL_DEBUG(
+            "[CcuTempReduceNHR1DMem2Mem] die0 rankIdx[%u] offset[%llu] size[%llu]", rankIdx,
+            die0SliceInfoVec[rankIdx][0].offset, die0SliceInfoVec[rankIdx][0].size);
+    }
     RankSliceInfo die1SliceInfoVec;
     CHK_RET(CalcSliceInfoAllReduce(die1Size, die1SliceInfoVec));
+    for (u32 rankIdx = 0; rankIdx < die1SliceInfoVec.size(); rankIdx++) {
+        HCCL_DEBUG(
+            "[CcuTempReduceNHR1DMem2Mem] die1 rankIdx[%u] offset[%llu] size[%llu]", rankIdx,
+            die1SliceInfoVec[rankIdx][0].offset, die1SliceInfoVec[rankIdx][0].size);
+    }
 
     LoopGroupConfig config{};
     config.msInterleave = CCU_MS_INTERLEAVE;
@@ -397,6 +434,9 @@ HcclResult CcuTempReduceNHR1DMem2Mem::KernelRun(
     }
     u32 kernelNum = templateResource.ccuKernels.size();
 
+    if (templateResource.dieSplitRatio > 0.0) {
+        dieSplitRatio_ = templateResource.dieSplitRatio;
+    }
     std::vector<uint64_t> taskArgs;
     uint64_t argSize = 0;
     CHK_RET(PrepareLaunchArgs(param, templateDataParams, kernelNum, taskArgs, argSize));

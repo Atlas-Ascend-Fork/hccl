@@ -139,7 +139,14 @@ CcuTempAllReduceNHRMem2Mem1D::SplitDataFor2Dies(uint64_t dataCount, uint64_t& di
         return HcclResult::HCCL_SUCCESS;
     }
 
+    // die0Size 按 128 字节对齐, 保证 die1 起始地址对齐
     die0Size = static_cast<uint64_t>(dataCount * dieSplitRatio_) * DataTypeSizeGet(dataType_);
+    die0Size = CcuAlignDown(die0Size, CCU_2DIE_SPLIT_ALIGN_SIZE);
+    if (die0Size == 0) { // 对齐后为0, 数据量不足一个对齐粒度, 退化为不划分die
+        die0Size = dataCount * DataTypeSizeGet(dataType_);
+        die1Size = 0;
+        return HcclResult::HCCL_SUCCESS;
+    }
     die1Size = dataCount * DataTypeSizeGet(dataType_) - die0Size;
     HCCL_INFO("[CcuTempAllReduceNHRMem2Mem1D::SplitDataFor2Dies] die0Size = %llu, die1Size = %llu", die0Size, die1Size);
     return HcclResult::HCCL_SUCCESS;
@@ -349,7 +356,11 @@ HcclResult CcuTempAllReduceNHRMem2Mem1D::KernelRun(
     if (templateResource.dieSplitRatio > 0.0) {
         dieSplitRatio_ = templateResource.dieSplitRatio;
     }
-    SplitDataFor2Dies(dataCount, die0Size, die1Size);
+    if (kernelNum == MAX_DIE_NUM_2) { // 2个kernel按带宽比例切分并对齐切分点, 单kernel全量走die0
+        SplitDataFor2Dies(dataCount, die0Size, die1Size);
+    } else {
+        die0Size = dataCount * DataTypeSizeGet(dataType_);
+    }
 
     buffInfo_ = templateDataParams.buffInfo;
     const uint64_t inputAddr = PointerToAddr(buffInfo_.inputPtr) + buffInfo_.inBuffBaseOff;

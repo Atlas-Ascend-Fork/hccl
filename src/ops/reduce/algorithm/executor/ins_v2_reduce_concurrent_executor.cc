@@ -274,6 +274,7 @@ HcclResult InsV2ReduceConcurrentExecutor<AlgTopoMatch, InsAlgTemplate0, InsAlgTe
 
     if (param.engine == CommEngine::COMM_ENGINE_CCU) {
         AppendCcuTemplateResources(resourceRequest, temp0ResReq, temp1ResReq);
+        resourceRequest.dieSplitRatio = temp1ResReq.dieSplitRatio; // temp1(NHR)模板的2die切分比例
     } else if (param.engine == CommEngine::COMM_ENGINE_AICPU || param.engine == CommEngine::COMM_ENGINE_AICPU_TS) {
         resourceRequest.channels.resize(1);
         resourceRequest.channels[0].insert(
@@ -390,6 +391,7 @@ HcclResult InsV2ReduceConcurrentExecutor<AlgTopoMatch, InsAlgTemplate0, InsAlgTe
         // CCU模式处理逻辑
         templateAlgResforTemp0.ccuKernels.push_back(resCtx.ccuKernels[0]);
         templateAlgResforTemp1.ccuKernels.push_back(resCtx.ccuKernels[1]);
+        templateAlgResforTemp1.dieSplitRatio = resCtx.dieSplitRatio;
     }
     // 准备数据
 

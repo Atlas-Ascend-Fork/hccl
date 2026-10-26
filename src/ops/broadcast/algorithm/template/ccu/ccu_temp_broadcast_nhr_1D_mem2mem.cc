@@ -200,6 +200,18 @@ HcclResult CcuTempBroadcastNHR1DMem2Mem::CalcRes(
         CHK_RET(ReverseChannelPerDieIfNeed(comm, myRank_, channelsPerDie));
     }
 
+    constexpr u32 DIE_NUM_2 = 2;
+    double ratio = 1.0;
+    if (enableDieNum == DIE_NUM_2) { // 查询两个die链路的带宽系数，按比例切分数据
+        uint32_t p0 = 0, p1 = 0;
+        CHK_RET(GetChannelBwCoeff(comm, myRank_, channelsPerDie[0][0], p0));
+        CHK_RET(GetChannelBwCoeff(comm, myRank_, channelsPerDie[1][0], p1));
+        if (p0 + p1 > 0) {
+            ratio = static_cast<double>(p0) / (p0 + p1);
+        }
+    }
+    resourceRequest.dieSplitRatio = ratio;
+
     // 3.构造kernelInfo
     for (uint32_t kernelIdx = 0; kernelIdx < kernelNum; kernelIdx++) {
         // 创建每个kernel的ctxArg，放入kernelInfo, 然后将kernelinfo放入resourceRequest.ccuKernelInfos
@@ -313,12 +325,14 @@ HcclResult CcuTempBroadcastNHR1DMem2Mem::SplitDataFor2Dies(
         die1Size = 0;
         return HCCL_SUCCESS;
     }
-    u8 die0BWcoeff = 6;
-    u8 die1BWcoeff = 2;
-
-    // 查询带宽系数，按比例切分数据
-
-    die0Size = (dataCount * die0BWcoeff / (die0BWcoeff + die1BWcoeff)) * typeSize;
+    // die0Size 按 128 字节对齐, 保证 die1 起始地址对齐
+    die0Size = static_cast<uint64_t>(dataCount * dieSplitRatio_) * typeSize;
+    die0Size = CcuAlignDown(die0Size, CCU_2DIE_SPLIT_ALIGN_SIZE);
+    if (die0Size == 0) { // 对齐后为0, 数据量不足一个对齐粒度, 退化为不划分die
+        die0Size = dataCount * typeSize;
+        die1Size = 0;
+        return HCCL_SUCCESS;
+    }
     die1Size = templateDataParams.sliceSize - die0Size;
     return HCCL_SUCCESS;
 }
@@ -334,6 +348,9 @@ HcclResult CcuTempBroadcastNHR1DMem2Mem::KernelRun(
     if (templateDataParams.sliceSize == 0) {
         HCCL_INFO("[CcuTempBroadcastNHR1DMem2Mem] sliceSize is 0, no need do, just success.");
         return HCCL_SUCCESS;
+    }
+    if (templateResource.dieSplitRatio > 0.0) {
+        dieSplitRatio_ = templateResource.dieSplitRatio;
     }
     uint64_t die0Size = 0;
     uint64_t die1Size = 0;

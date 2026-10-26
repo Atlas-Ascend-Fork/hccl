@@ -124,6 +124,8 @@ HcclResult CcuTempAllGatherConcurrentMeshMem2MemNHR::CalcRes(
         resourceRequest.ccuKernelInfos.end(), meshReq.ccuKernelInfos.begin(), meshReq.ccuKernelInfos.end());
     resourceRequest.ccuKernelInfos.insert(
         resourceRequest.ccuKernelInfos.end(), nhrReq.ccuKernelInfos.begin(), nhrReq.ccuKernelInfos.end());
+    // 传递NHR子模板查询的2die切分比例
+    resourceRequest.dieSplitRatio = nhrReq.dieSplitRatio;
 
     HCCL_INFO(
         "[CcuTempAllGatherConcurrentMeshMem2MemNHR][CalcRes] rank[%u] slaveThreadNum[%u], "
@@ -183,9 +185,14 @@ void CcuTempAllGatherConcurrentMeshMem2MemNHR::CalcNhrDieSplit(
         die1Size = 0;
         return;
     }
-    u8 die0PortGroupSize = 6;
-    u8 die1PortGroupSize = 2;
-    die0Size = (dataCount * die0PortGroupSize / (die0PortGroupSize + die1PortGroupSize)) * typeSize;
+    die0Size = static_cast<u64>(dataCount * dieSplitRatio_) * typeSize;
+    // die0Size 按 128 字节对齐, 保证 die1 起始地址对齐
+    die0Size = CcuAlignDown(die0Size, CCU_2DIE_SPLIT_ALIGN_SIZE);
+    if (die0Size == 0) { // 对齐后为0, 数据量不足一个对齐粒度, 退化为不划分die
+        die0Size = dataCount * typeSize;
+        die1Size = 0;
+        return;
+    }
     die1Size = sliceSize - die0Size;
 }
 
@@ -468,6 +475,9 @@ HcclResult CcuTempAllGatherConcurrentMeshMem2MemNHR::KernelRun(
     u32 nhrKernelNum = templateResource.ccuKernels.size() > meshKernelNum ?
                            static_cast<u32>(templateResource.ccuKernels.size()) - meshKernelNum :
                            0;
+    if (templateResource.dieSplitRatio > 0.0) {
+        dieSplitRatio_ = templateResource.dieSplitRatio;
+    }
     bool hasMesh = (meshCount > 0 && meshKernelNum > 0);
     bool hasNhr = (closCount > 0 && nhrKernelNum > 0);
 
