@@ -517,7 +517,8 @@ REGISTER_EXEC_V2(
 REGISTER_ALG_ATTRS(
     CcuSchedReduceScatterSoleMesh2Die, topo.maxSupportRankSize = CCU_SCHED_MAX_RANK_SIZE;
     topo.supportLevel0Topos = LEVEL0_TOPO_MESH_1D | LEVEL0_TOPO_MESH_1D_CLOS;
-    topo.supportLevel0MeshTypes = MESH_TYPE_NOT_MESH | MESH_TYPE_SINGLE_DIE | MESH_TYPE_TWO_DIE_REGULAR;
+    // 模板PartitionByTwoDieRegular要求两die均有channel，SINGLE_DIE(任一die无链路)必失败，不放行
+    topo.supportLevel0MeshTypes = MESH_TYPE_NOT_MESH | MESH_TYPE_TWO_DIE_REGULAR;
     topo.maxTopoLevelNum = TOPO_LEVEL_NUM_2; topo.isSupportLevel0PcieMix = true; topo.requireAllMeshConnected = true;
     op.isSupportProd = false; op.unsupportedDataTypes = UNSUPPORTED_INT8_AND_64BIT; op.isSupportInplace = false;
     topo.topoCustomCheck = [](const TopoInfoWithNetLayerDetails* topo) -> bool {

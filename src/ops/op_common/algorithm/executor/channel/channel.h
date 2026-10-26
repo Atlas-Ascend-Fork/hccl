@@ -61,6 +61,8 @@ HcclResult CalcChannelRequestNHRWithPriorityTopo(
     HcclComm comm, const OpParam& param, const TopoInfo* topoInfo, const std::vector<std::vector<u32>>& subcommInfo,
     std::vector<HcclChannelDesc>& channels, CommTopo priorityTopo);
 HcclResult GetTopoTypeByLink(HcclComm comm, uint32_t netLayer, CommLink& link, CommTopo& topoType);
+// 获取link对应的channel，多条link时优先取priorityTopo对应的1条。
+// 与对端在所有netLayer均查不到link（完全无链路）时返回HCCL_E_INTERNAL，不再静默返回成功。
 HcclResult ProcessLinksForChannel(
     HcclComm comm, u32 myRank, u32 rank, std::vector<HcclChannelDesc>& channels, CommTopo priorityTopo,
     u32 topoLevelNums);

@@ -978,12 +978,15 @@ HcclResult GetTopoTypeByLink(HcclComm comm, uint32_t netLayer, CommLink& link, C
 /*
  *   获取link对应的channel。对于2个rank之间，存在多条link的场景，会优先获取指定TopoType的1条channel。
  *   如果多条link都没有指定的TopoType，则返回第一条link对应的channel。
+ *   与对端在所有netLayer均查不到link（完全无链路）时返回HCCL_E_INTERNAL，不再静默返回成功，
+ *   以拦截空channel列表沿调用链传递（Issue #838）。
  */
 HcclResult ProcessLinksForChannel(
     HcclComm comm, u32 myRank, u32 rank, std::vector<HcclChannelDesc>& channels, CommTopo priorityTopo,
     u32 topoLevelNums)
 {
 #ifndef AICPU_COMPILE
+    size_t channelCountBefore = channels.size();
     uint32_t* netLayers;
     uint32_t netLayerNum;
     CHK_RET(HcclRankGraphGetLayers(comm, &netLayers, &netLayerNum));
@@ -1038,6 +1041,16 @@ HcclResult ProcessLinksForChannel(
         }
     }
 
+    // 与对端遍历所有netLayer均未建链时在源头报错，避免空channel列表沿调用链静默传递、错误延迟到kernel
+    // 执行期才暴露(Issue #838)。与CalcChannelRequestMesh1D/CalcChannelRequestNhrMultiJetty/
+    // CalcChannelRequestMeshClosMultiJetty的既有逐对端检查保持一致。
+    CHK_PRT_RET(
+        channels.size() == channelCountBefore,
+        HCCL_ERROR(
+            "[CalcChannelRequestWithPriorTopo] Failed to create channel between myRank=%u and rank=%u, there is no "
+            "link.",
+            myRank, rank),
+        HcclResult::HCCL_E_INTERNAL);
 #endif
     return HCCL_SUCCESS;
 }
