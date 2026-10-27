@@ -108,7 +108,7 @@ enum class AlgoType : uint8_t {
     MESH_MULTIJETTY,
     GROUP_MESH,
     PAIRWISE,
-    HIER,
+    HD,
     UNKNOWN,
 };
 

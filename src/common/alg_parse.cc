@@ -56,7 +56,8 @@ static const std::map<std::string, std::string> ALGO_TYPES
        {"nhrmultijetty", "NHRMultiJetty"},
        {"meshmultijetty", "MeshMultiJetty"},
        {"meshconcurrent", "MeshConcurrent"},
-       {"pairwise", "Pairwise"}};
+       {"pairwise", "Pairwise"},
+       {"hd", "HD"}};
 
 // 小写字符串转换（自由函数，供全局使用）
 static std::string ToLowerStr(const std::string& s)
@@ -881,6 +882,7 @@ const std::map<AlgoType, std::string>& GetAlgoTypeToNameMap()
         {AlgoType::MESH_CONCURRENT, "MeshConcurrent"},
         {AlgoType::GROUP_MESH, "GroupMesh"},
         {AlgoType::PAIRWISE, "Pairwise"},
+        {AlgoType::HD, "HD"},
     };
     return map;
 }
@@ -905,6 +907,7 @@ const std::map<std::string, AlgoType>& GetAlgoNameToTypeMap()
         {"MeshConcurrent", AlgoType::MESH_CONCURRENT},
         {"GroupMesh", AlgoType::GROUP_MESH},
         {"Pairwise", AlgoType::PAIRWISE},
+        {"HD", AlgoType::HD},
     };
     return map;
 }

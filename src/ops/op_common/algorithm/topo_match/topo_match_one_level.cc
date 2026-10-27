@@ -82,6 +82,14 @@ HcclResult TopoMatchOneLevel::MatchTopo(
         return HcclResult::HCCL_E_NOT_SUPPORT;
     }
 
+    // HD 调度仅支持 2 的整数次幂 rank 数；选中层的 localRanks.size() 等于 userRankSize
+    if (algAttrs.algoTypes[0] == AlgoType::HD && !IsPowerOfTwo(topoInfo->userRankSize)) {
+        HCCL_INFO(
+            "[TopoMatchOneLevel] Rank [%u], rankSize[%u] is not a power of two, HD not supported.", topoInfo->userRank,
+            topoInfo->userRankSize);
+        return HcclResult::HCCL_E_NOT_SUPPORT;
+    }
+
     algHierarchyInfo.infos.resize(1);
     algHierarchyInfo.infos[0].resize(1);
     algHierarchyInfo.infos[0][0] = physicalLevels[effIdx[picked]].localRanks;

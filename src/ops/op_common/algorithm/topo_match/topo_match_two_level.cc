@@ -138,6 +138,13 @@ HcclResult TopoMatchTwoLevel::MatchTopo(
         return HcclResult::HCCL_E_NOT_SUPPORT;
     }
 
+    // 框间 HD 仅支持 2 的整数次幂维度；非对称拓扑使用 GCD 打平后的 d1
+    if (algAttrs.algoTypes[1] == AlgoType::HD && !IsPowerOfTwo(d1)) {
+        HCCL_INFO(
+            "[TopoMatchTwoLevel] Rank [%u], inter dim size[%u] is not a power of two, HD not supported.", myRank, d1);
+        return HcclResult::HCCL_E_NOT_SUPPORT;
+    }
+
     // 构造 infos
     std::vector<u32> group0 = BuildLevel0Group(physicalLevels[phys0], myRank, asymmetric, gcd);
     std::vector<u32> group1 = BuildRepresentativeGroup(d0, d1, myRank % d0);

@@ -23,6 +23,81 @@ protected:
     TopoMatchTwoLevel matcher_;
 };
 
+// d0=3、d1=4：仅 HD 所在的框间维度要求为 2 的整数次幂
+TEST_F(TopoMatchTwoLevelTest, HdPowerOfTwoInterDimWithNonPowerOfTwoIntraDim)
+{
+    auto topo = MakeTopoInfo(
+        1, 12,
+        {
+            MakeLevel(Range(3), PhysicalLevelView::GLOBAL, {3, 3, 3, 3}, true, COMM_TOPO_1DMESH),
+            MakeLevel(Range(12), PhysicalLevelView::GLOBAL, {12}),
+        });
+    AlgAttrs profile = MakeProfile({AlgoType::MESH, AlgoType::HD});
+    AlgHierarchyInfoForAllLevel info;
+    ASSERT_EQ(matcher_.MatchTopo(&topo, info, profile), HcclResult::HCCL_SUCCESS);
+    ASSERT_EQ(info.infos[0][0], Range(3));
+    ASSERT_EQ(info.infos[1][0], (std::vector<u32>{1, 4, 7, 10}));
+    ASSERT_EQ(info.physicalIdxForAlgoLevels[0][0], PhysicalLevelIndex::PHYSICAL_LEVEL_IDX_0);
+    ASSERT_EQ(info.physicalIdxForAlgoLevels[1][0], PhysicalLevelIndex::PHYSICAL_LEVEL_IDX_1);
+}
+
+TEST_F(TopoMatchTwoLevelTest, HdNonPowerOfTwoInterDim)
+{
+    auto topo = MakeTopoInfo(
+        3, 24,
+        {
+            MakeLevel(Range(8), PhysicalLevelView::GLOBAL, {8, 8, 8}, true, COMM_TOPO_1DMESH),
+            MakeLevel(Range(24), PhysicalLevelView::GLOBAL, {24}),
+        });
+    AlgAttrs profile = MakeProfile({AlgoType::MESH, AlgoType::HD});
+    AlgHierarchyInfoForAllLevel info;
+    ASSERT_EQ(matcher_.MatchTopo(&topo, info, profile), HcclResult::HCCL_E_NOT_SUPPORT);
+}
+
+TEST_F(TopoMatchTwoLevelTest, NhrNonPowerOfTwoInterDim)
+{
+    auto topo = MakeTopoInfo(
+        3, 24,
+        {
+            MakeLevel(Range(8), PhysicalLevelView::GLOBAL, {8, 8, 8}, true, COMM_TOPO_1DMESH),
+            MakeLevel(Range(24), PhysicalLevelView::GLOBAL, {24}),
+        });
+    AlgAttrs profile = MakeProfile({AlgoType::MESH, AlgoType::NHR});
+    AlgHierarchyInfoForAllLevel info;
+    ASSERT_EQ(matcher_.MatchTopo(&topo, info, profile), HcclResult::HCCL_SUCCESS);
+    ASSERT_EQ(info.infos[1][0], (std::vector<u32>{3, 11, 19}));
+}
+
+// GCD(12,4)=4、d1=16/4=4，校验打平后的算法维度
+TEST_F(TopoMatchTwoLevelTest, HdAsymmetricPowerOfTwoInterDim)
+{
+    auto topo = MakeTopoInfo(
+        5, 16,
+        {
+            MakeLevel(Range(12), PhysicalLevelView::GLOBAL, {12, 4}, true, COMM_TOPO_1DMESH),
+            MakeLevel(Range(16), PhysicalLevelView::GLOBAL, {16}),
+        });
+    AlgAttrs profile = MakeProfile({AlgoType::MESH, AlgoType::HD});
+    AlgHierarchyInfoForAllLevel info;
+    ASSERT_EQ(matcher_.MatchTopo(&topo, info, profile), HcclResult::HCCL_SUCCESS);
+    ASSERT_EQ(info.infos[0][0], (std::vector<u32>{4, 5, 6, 7}));
+    ASSERT_EQ(info.infos[1][0], (std::vector<u32>{1, 5, 9, 13}));
+}
+
+// localRanks.size()=16 为 2 的整数次幂，但 GCD(16,4)=4、d1=20/4=5，应拒绝
+TEST_F(TopoMatchTwoLevelTest, HdAsymmetricNonPowerOfTwoInterDim)
+{
+    auto topo = MakeTopoInfo(
+        2, 20,
+        {
+            MakeLevel(Range(16), PhysicalLevelView::GLOBAL, {16, 4}, true, COMM_TOPO_1DMESH),
+            MakeLevel(Range(20), PhysicalLevelView::GLOBAL, {20}),
+        });
+    AlgAttrs profile = MakeProfile({AlgoType::MESH, AlgoType::HD});
+    AlgHierarchyInfoForAllLevel info;
+    ASSERT_EQ(matcher_.MatchTopo(&topo, info, profile), HcclResult::HCCL_E_NOT_SUPPORT);
+}
+
 // T1: 对称 2 层 GLOBAL，d0=8, d1=2
 TEST_F(TopoMatchTwoLevelTest, SymmetricTwoLevelGlobal)
 {

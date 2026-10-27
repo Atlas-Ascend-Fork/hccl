@@ -231,6 +231,7 @@ add_library(hccl_aicpu_kernel SHARED
     ${HCCL_DEV_BASE}/src/ops/reduce_scatter/algorithm/template/aicpu/ins_temp_reduce_scatter_mesh_1D_meshchunk.cc
     ${HCCL_DEV_BASE}/src/ops/reduce_scatter/algorithm/template/aicpu/ins_temp_reduce_scatter_mesh_1D_Z_axis_detour.cc
     ${HCCL_DEV_BASE}/src/ops/reduce_scatter/algorithm/template/aicpu/ins_temp_reduce_scatter_mesh_1d_dpu.cc
+    ${HCCL_DEV_BASE}/src/ops/all_reduce/algorithm/template/aicpu/ins_temp_reduce_scatter_hd.cc
 
     ${HCCL_DEV_BASE}/src/ops/all_gather/algorithm/executor/ins_v2_all_gather_sole_executor.cc
     ${HCCL_DEV_BASE}/src/ops/all_gather/algorithm/executor/ins_v2_all_gather_parallel_executor.cc
@@ -239,6 +240,7 @@ add_library(hccl_aicpu_kernel SHARED
     ${HCCL_DEV_BASE}/src/ops/all_gather/algorithm/template/aicpu/ins_temp_all_gather_mesh_1D.cc
     ${HCCL_DEV_BASE}/src/ops/all_gather/algorithm/template/aicpu/ins_temp_all_gather_nhr.cc
     ${HCCL_DEV_BASE}/src/ops/all_gather/algorithm/template/aicpu/ins_temp_all_gather_mesh_1D_Z_axis_detour.cc
+    ${HCCL_DEV_BASE}/src/ops/all_reduce/algorithm/template/aicpu/ins_temp_all_gather_hd.cc
     ${HCCL_DEV_BASE}/src/ops/all_gather/algorithm/executor/ins_v2_all_gather_sequence_executor.cc
     ${HCCL_DEV_BASE}/src/ops/all_gather/algorithm/executor/ins_v2_all_gather_sequence_executor_3level_dpu.cc
     ${HCCL_DEV_BASE}/src/ops/all_gather/algorithm/template/aicpu/ins_temp_all_gather_nhr_dpu.cc
@@ -293,6 +295,7 @@ add_library(hccl_aicpu_kernel SHARED
     ${HCCL_DEV_BASE}/src/ops/all_reduce/algorithm/template/aicpu/ins_temp_all_reduce_nhr.cc
     ${HCCL_DEV_BASE}/src/ops/all_reduce/algorithm/template/aicpu/ins_temp_all_reduce_aicpu_reduce_nhr.cc
     ${HCCL_DEV_BASE}/src/ops/all_reduce/algorithm/template/aicpu/ins_temp_all_reduce_mesh_1D_two_shot_mesh_chunk.cc
+    ${HCCL_DEV_BASE}/src/ops/all_reduce/algorithm/template/aicpu/ins_temp_all_reduce_hd.cc
 
     ${HCCL_DEV_BASE}/src/ops/broadcast/algorithm/executor/ins_v2_broadcast_sole_executor.cc
     ${HCCL_DEV_BASE}/src/ops/broadcast/algorithm/executor/ins_v2_broadcast_parallel_executor.cc

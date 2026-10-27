@@ -18,6 +18,8 @@ namespace ops_hccl {
 TopoMatchBaseV2::TopoMatchBaseV2() {}
 TopoMatchBaseV2::~TopoMatchBaseV2() {}
 
+bool IsPowerOfTwo(u32 value) { return value != 0 && (value & (value - 1)) == 0; }
+
 u32 CalcGcdByPair(u32 a, u32 b)
 {
     if (a == 0 || b == 0) {

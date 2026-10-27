@@ -27,6 +27,9 @@ constexpr u32 ALGO_LEVEL_NUM_TWO = 2;
 constexpr u32 ALGO_LEVEL_NUM_THREE = 3;
 constexpr u32 CONCURRENT_SUBGROUP_NUM = 2;
 
+// 判断是否为 2 的整数次幂（含 1，排除 0）
+bool IsPowerOfTwo(u32 value);
+
 // 辗转相除求两数最大公约数；a 或 b 为 0 时返回 1 避免退化
 u32 CalcGcdByPair(u32 a, u32 b);
 

@@ -23,6 +23,38 @@ protected:
     TopoMatchOneLevel matcher_;
 };
 
+TEST_F(TopoMatchOneLevelTest, HdPowerOfTwoRanks)
+{
+    for (u32 rankSize : {1u, 2u, 8u}) {
+        SCOPED_TRACE(rankSize);
+        auto topo = MakeTopoInfo(0, rankSize, {MakeLevel(Range(rankSize), PhysicalLevelView::GLOBAL, {rankSize})});
+        AlgAttrs profile = MakeProfile({AlgoType::HD});
+        AlgHierarchyInfoForAllLevel info;
+        ASSERT_EQ(matcher_.MatchTopo(&topo, info, profile), HcclResult::HCCL_SUCCESS);
+        ASSERT_EQ(info.infos.size(), 1u);
+        ASSERT_EQ(info.infos[0][0], Range(rankSize));
+        ASSERT_EQ(info.physicalIdxForAlgoLevels[0].size(), 1u);
+        ASSERT_EQ(info.physicalIdxForAlgoLevels[0][0], PhysicalLevelIndex::PHYSICAL_LEVEL_IDX_0);
+    }
+}
+
+TEST_F(TopoMatchOneLevelTest, HdNonPowerOfTwoRanks)
+{
+    auto topo = MakeTopoInfo(0, 6, {MakeLevel(Range(6), PhysicalLevelView::GLOBAL, {6})});
+    AlgAttrs profile = MakeProfile({AlgoType::HD});
+    AlgHierarchyInfoForAllLevel info;
+    ASSERT_EQ(matcher_.MatchTopo(&topo, info, profile), HcclResult::HCCL_E_NOT_SUPPORT);
+}
+
+TEST_F(TopoMatchOneLevelTest, NhrNonPowerOfTwoRanks)
+{
+    auto topo = MakeTopoInfo(0, 6, {MakeLevel(Range(6), PhysicalLevelView::GLOBAL, {6})});
+    AlgAttrs profile = MakeProfile({AlgoType::NHR});
+    AlgHierarchyInfoForAllLevel info;
+    ASSERT_EQ(matcher_.MatchTopo(&topo, info, profile), HcclResult::HCCL_SUCCESS);
+    ASSERT_EQ(info.infos[0][0], Range(6));
+}
+
 // O1: 非 hostdpu 单层满 localRanks
 TEST_F(TopoMatchOneLevelTest, NonHostdpuSingleLevelFullLocalRanks)
 {
