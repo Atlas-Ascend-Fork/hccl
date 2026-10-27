@@ -136,8 +136,11 @@ add_library(hccl_aicpu_kernel SHARED
     ${CMAKE_CURRENT_SOURCE_DIR}/ops/all_to_all_v/algorithm/template/aicpu/ins_temp_all_to_all_v_pairwise.cc
     ${CMAKE_CURRENT_SOURCE_DIR}/ops/all_to_all_v/algorithm/template/aicpu/ins_temp_ubx_all_to_all_v_mesh_1D.cc
     ${CMAKE_CURRENT_SOURCE_DIR}/ops/all_to_all_v/algorithm/executor/ins_v2_all_to_all_sequence_executor.cc
+    ${CMAKE_CURRENT_SOURCE_DIR}/ops/all_to_all_v/algorithm/executor/ins_v2_all_to_all_v_sequence_executor.cc
     ${CMAKE_CURRENT_SOURCE_DIR}/ops/all_to_all_v/algorithm/template/aicpu/hier/alltoall_stage_template_registry.cc
     ${CMAKE_CURRENT_SOURCE_DIR}/ops/all_to_all_v/algorithm/template/aicpu/hier/ins_temp_all_to_all_hier_mesh_stage.cc
+    ${CMAKE_CURRENT_SOURCE_DIR}/ops/all_to_all_v/algorithm/template/aicpu/hier/ins_temp_all_to_all_v_hier_mesh_stage.cc
+    ${CMAKE_CURRENT_SOURCE_DIR}/ops/all_to_all_v/algorithm/template/aicpu/hier/ins_temp_all_to_all_v_meta_stage.cc
 
     ${CMAKE_CURRENT_SOURCE_DIR}/ops/all_reduce/algorithm/executor/ins_v2_all_reduce_sole_executor.cc
     ${CMAKE_CURRENT_SOURCE_DIR}/ops/all_reduce/algorithm/executor/ins_v2_all_reduce_parallel_executor.cc
