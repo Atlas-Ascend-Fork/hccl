@@ -21,16 +21,12 @@ std::vector<CostModelParam> InsTempReduceScatterMesh1dDpu::CalcCostCoeff(CalcCos
 
     float B1 = 0.0f;
     float B2 = 0.0f;
-    CostModelManager::Global()->CalcMeshParam(
-        param.dataRatio, param.netType, param.portNum[0], param.rankSize, A, false, EngineType::CPU);
-    if (param.inputBuffer != param.scratchBuffer) {
-        CostModelManager::Global()->CalcLocalCopyParams(param.dataRatio * 2, EngineType::CPU, B);
-    } else {
-        B = 0.0f;
-    }
+    int portNum = param.portNum.empty() ? 1 : param.portNum[0];
+    CostModelManager::Global()->CalcMeshParam(param.dataRatio, param.netType, portNum, param.rankSize, A);
+    CostModelManager::Global()->CalcLocalCopyParams(param.dataRatio * 2, EngineType::AICPU, B1);
     CostModelManager::Global()->CalcLocalReduceParams((param.rankSize - 1) * param.dataRatio, EngineType::AICPU, B2);
     B = B1 + B2;
-    CostModelManager::Global()->CalcDpuLatencyParams(GetNHRStepNum(param.rankSize), 1, 2, param.rankSize - 1, C);
+    CostModelManager::Global()->CalcDpuLatencyParams(1, param.rankSize - 1, param.rankSize - 1, param.rankSize - 1, C);
 
     std::vector<CostModelParam> params;
     params.push_back({A, B, C, D});
