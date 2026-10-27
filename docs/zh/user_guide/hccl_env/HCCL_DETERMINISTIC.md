@@ -10,7 +10,7 @@ HCCL_DETERMINISTIC支持的取值如下：
 
 - false（默认值）：关闭确定性计算。
   <!-- npu="950" id6 -->
-  - 针对Ascend 950PR&950DT系列产品：所有归约类通信算子强制为确定性计算，不受此配置影响。
+  - 针对Ascend 950PR&950DT系列产品：所有归约类通信算子强制为true配置，不受此配置影响。
   <!-- end id6 -->
   <!-- npu="A3" id4 -->
   - 针对Atlas A3系列产品：
@@ -41,7 +41,7 @@ HCCL_DETERMINISTIC支持的取值如下：
   - 针对Ascend 950PR&950DT系列产品，
     - 支持归约类通信算子AllReduce、ReduceScatter。
     - 通信规模要求rank size ≥ 3。
-    - 仅支持归约类通信算子展开模式为AI_CPU和AIV，其他展开模式（CCU_MS、CCU_SCHED）配置保序功能会回退到AI_CPU，使能保序。
+    - 仅支持归约类通信算子展开模式为AI CPU和Vector Core，其他展开模式（CCU_MS、CCU_SCHED）配置保序功能会回退到AI CPU，使能保序。
     - 不支持RoCE协议的链路。
   <!-- end id12 -->
   <!-- npu="A3" id11 -->
