@@ -46,15 +46,25 @@ namespace {
         bool thirdIsOuterSlow = false;
     };
 
+    struct OmniPipeStageBandwidth {
+        double meshBandwidth = 0.0;
+        double closBandwidth = 0.0;
+        double thirdBandwidth = 0.0;
+        double costMeshBandwidth = 0.0;
+        double costClosBandwidth = 0.0;
+        double meshFanoutBandwidth = 0.0;
+        bool meshFanoutPath = false;
+    };
+
     OmniPipeStageCost CalcStageCost(
-        const OmniPipeCostAxes& axes, u64 totalRankSize, double meshBandwidth, double closBandwidth,
-        double thirdBandwidth, double costMeshBandwidth, double costClosBandwidth, OmniNeedSetStepNum needSetStepNum,
-        bool isReduceScatter, EngineType engine)
+        const OmniPipeCostAxes& axes, u64 totalRankSize, const OmniPipeStageBandwidth& bandwidth,
+        OmniNeedSetStepNum needSetStepNum, bool isReduceScatter, EngineType engine)
     {
         OmniPipeStageCost stage;
         const u64 maxStepNum = static_cast<u64>(SetMaxStepNumOmni(needSetStepNum) + (isReduceScatter ? 1 : 0));
-        const double meshPlanBandwidth = meshBandwidth;
-        const double closPlanBandwidth = axes.clos > 1 ? closBandwidth / (axes.clos - 1) : closBandwidth;
+        const double meshPlanBandwidth = bandwidth.meshBandwidth;
+        const double closPlanBandwidth
+            = axes.clos > 1 ? bandwidth.closBandwidth / (axes.clos - 1) : bandwidth.closBandwidth;
         const u64 innerStepNum = CalcStepNumByAxes(
             meshPlanBandwidth, closPlanBandwidth, axes.mesh, axes.clos, maxStepNum, isReduceScatter);
 
@@ -72,7 +82,8 @@ namespace {
             xyBandwidth = closPlanBandwidth;
         }
 
-        const double thirdPlanBandwidth = axes.third > 1 ? thirdBandwidth / (axes.third - 1) : thirdBandwidth;
+        const double thirdPlanBandwidth
+            = axes.third > 1 ? bandwidth.thirdBandwidth / (axes.third - 1) : bandwidth.thirdBandwidth;
         const u64 outerStepNum = CalcStepNumByAxes(
             xyBandwidth, thirdPlanBandwidth, axes.mesh * axes.clos, axes.third, maxStepNum, isReduceScatter);
         stage.xyStepNum = innerStepNum * outerStepNum;
@@ -88,23 +99,29 @@ namespace {
         const bool closActive = axes.clos > 1;
         if (meshActive && closActive) {
             if (stage.innerReachesMaxStep) {
-                stage.transferCoeff = meshPlanBandwidth <= closPlanBandwidth ? (axes.mesh - 1) / costMeshBandwidth :
-                                                                               (axes.clos - 1) / costClosBandwidth;
+                stage.transferCoeff = meshPlanBandwidth <= closPlanBandwidth ?
+                                          (axes.mesh - 1) / bandwidth.costMeshBandwidth :
+                                          (axes.clos - 1) / bandwidth.costClosBandwidth;
             } else {
-                stage.transferCoeff = (totalRankSize - 1) / (costMeshBandwidth + costClosBandwidth);
+                stage.transferCoeff = (totalRankSize - 1) / (bandwidth.costMeshBandwidth + bandwidth.costClosBandwidth);
             }
         } else if (meshActive) {
-            stage.transferCoeff = (axes.mesh - 1) / costMeshBandwidth;
+            stage.transferCoeff = (axes.mesh - 1) / bandwidth.costMeshBandwidth;
         } else if (closActive) {
-            stage.transferCoeff = (axes.clos - 1) / costClosBandwidth;
+            stage.transferCoeff = (axes.clos - 1) / bandwidth.costClosBandwidth;
         }
         if (thirdActive) {
             if (stage.outerReachesMaxStep) {
                 stage.transferCoeff = stage.thirdIsOuterSlow ? 1.0 / thirdPlanBandwidth : 1.0 / xyBandwidth;
+                // 跨机 MESH_1D + HostDPU：level0 模板对 (mesh-1) 个 peer 逐个交换，该扇出传输
+                // 与第三轴串行，原公式在上式里整项丢失（plog 实测 peer_exchange=2*(mesh-1)）。
+                if (bandwidth.meshFanoutPath && stage.thirdIsOuterSlow && meshActive) {
+                    stage.transferCoeff += static_cast<double>(axes.mesh - 1) / bandwidth.meshFanoutBandwidth;
+                }
             } else {
-                double activeBandwidth = thirdBandwidth;
-                activeBandwidth += meshActive ? meshBandwidth : 0.0;
-                activeBandwidth += closActive ? closBandwidth : 0.0;
+                double activeBandwidth = bandwidth.thirdBandwidth;
+                activeBandwidth += meshActive ? bandwidth.meshBandwidth : 0.0;
+                activeBandwidth += closActive ? bandwidth.closBandwidth : 0.0;
                 stage.transferCoeff = (totalRankSize - 1) / activeBandwidth;
             }
         }
@@ -123,6 +140,10 @@ namespace {
                                                 GetNHRStepNum(static_cast<u32>(axes.third)), 2, 1,
                                                 static_cast<u32>(axes.third) - 1) :
                                             0.0f;
+        }
+        // 第三轴每步 = DPU 软件栈固定开销 + 跨框同步往返（MESH1D_DPU_STEP_RTT_S_AR，实测标定）
+        if (bandwidth.meshFanoutPath) {
+            thirdLatency += static_cast<float>(MESH1D_DPU_STEP_RTT_S_AR);
         }
         stage.syncCost = 2.0f * static_cast<float>(stage.xyStepNum) * std::max(meshLatency, nhrLatency)
                          + static_cast<float>(stage.thirdStepNum) * thirdLatency;
@@ -200,49 +221,51 @@ std::vector<CostModelParam> InsV2AllReduceOmniPipeExecutor<
         needSetStepNum = OmniNeedSetStepNum::OMNIPIPE_UBX_32P;
     }
 
-    double rsMeshBandwidth = BW_OMNI_DEFAULT / OMNIPIPE_FIXED_UB_UTILIZATION;
-    double rsClosBandwidth = BW_OMNI_DEFAULT / OMNIPIPE_FIXED_UB_UTILIZATION;
-    double agMeshBandwidth = BW_OMNI_DEFAULT / OMNIPIPE_FIXED_UB_UTILIZATION;
-    double agClosBandwidth = BW_OMNI_DEFAULT / OMNIPIPE_FIXED_UB_UTILIZATION;
-    double thirdBandwidth = BW_OMNI_UBX_ROCE / OMNIPIPE_FIXED_UB_UTILIZATION;
+    OmniPipeStageBandwidth rsBandwidth;
+    rsBandwidth.meshBandwidth = BW_OMNI_DEFAULT / OMNIPIPE_FIXED_UB_UTILIZATION;
+    rsBandwidth.closBandwidth = BW_OMNI_DEFAULT / OMNIPIPE_FIXED_UB_UTILIZATION;
+    rsBandwidth.thirdBandwidth = BW_OMNI_UBX_ROCE / OMNIPIPE_FIXED_UB_UTILIZATION;
+    OmniPipeStageBandwidth agBandwidth = rsBandwidth;
     if (topoInfo->level0PcieMix) {
         if (axes.clos == RANK_SIZE_LEVEL1_2) {
-            rsClosBandwidth = BW_OMNI_PCIE_EIGHT_RS_CLOS / OMNIPIPE_FIXED_UB_UTILIZATION;
-            agClosBandwidth = BW_OMNI_PCIE_EIGHT_AG_CLOS / OMNIPIPE_FIXED_UB_UTILIZATION;
+            rsBandwidth.closBandwidth = BW_OMNI_PCIE_EIGHT_RS_CLOS / OMNIPIPE_FIXED_UB_UTILIZATION;
+            agBandwidth.closBandwidth = BW_OMNI_PCIE_EIGHT_AG_CLOS / OMNIPIPE_FIXED_UB_UTILIZATION;
         } else if (axes.clos == RANK_SIZE_LEVEL1_4) {
-            rsClosBandwidth = BW_OMNI_PCIE_SIXTEEN_RS_CLOS / OMNIPIPE_FIXED_UB_UTILIZATION;
-            agClosBandwidth = BW_OMNI_PCIE_SIXTEEN_AG_CLOS / OMNIPIPE_FIXED_UB_UTILIZATION;
+            rsBandwidth.closBandwidth = BW_OMNI_PCIE_SIXTEEN_RS_CLOS / OMNIPIPE_FIXED_UB_UTILIZATION;
+            agBandwidth.closBandwidth = BW_OMNI_PCIE_SIXTEEN_AG_CLOS / OMNIPIPE_FIXED_UB_UTILIZATION;
         }
     } else if (topoInfo->level0Topo == Level0Shape::MESH_1D_CLOS) {
-        rsClosBandwidth = BW_OMNI_UBX_RS_CLOS / OMNIPIPE_FIXED_UB_UTILIZATION;
-        agClosBandwidth = BW_OMNI_UBX_AG_CLOS / OMNIPIPE_FIXED_UB_UTILIZATION;
+        rsBandwidth.closBandwidth = BW_OMNI_UBX_RS_CLOS / OMNIPIPE_FIXED_UB_UTILIZATION;
+        agBandwidth.closBandwidth = BW_OMNI_UBX_AG_CLOS / OMNIPIPE_FIXED_UB_UTILIZATION;
     } else if (topoInfo->level0Topo == Level0Shape::MESH_1D && !topoInfo->topLevelUboe) {
-        // 先给定一个超低带宽，使算法不会被优先选中
-        rsMeshBandwidth = BW_OMNI_INVALID / OMNIPIPE_FIXED_UB_UTILIZATION;
-        rsClosBandwidth = BW_OMNI_INVALID / OMNIPIPE_FIXED_UB_UTILIZATION;
-        agMeshBandwidth = BW_OMNI_INVALID / OMNIPIPE_FIXED_UB_UTILIZATION;
-        agClosBandwidth = BW_OMNI_INVALID / OMNIPIPE_FIXED_UB_UTILIZATION;
-        thirdBandwidth = BW_OMNI_INVALID / OMNIPIPE_FIXED_UB_UTILIZATION;
+        // 跨机 MESH_1D + HostDPU：第三轴用实测标定带宽，并单独表达 level0 的 peer 扇出带宽
+        rsBandwidth.closBandwidth = BW_OMNI_COMMON_RS_CLOS / OMNIPIPE_FIXED_UB_UTILIZATION;
+        agBandwidth.closBandwidth = BW_OMNI_COMMON_AG_CLOS / OMNIPIPE_FIXED_UB_UTILIZATION;
+        rsBandwidth.thirdBandwidth = BW_OMNI_MESH1D_DPU_COST_THIRD_AR / OMNIPIPE_FIXED_UB_UTILIZATION;
+        agBandwidth.thirdBandwidth = rsBandwidth.thirdBandwidth;
+        // level0 mesh 的 peer 扇出带宽（仅跨机 MESH_1D + HostDPU 路径标定）
+        rsBandwidth.meshFanoutBandwidth = BW_OMNI_MESH1D_DPU_COST_MESH_AR / OMNIPIPE_FIXED_UB_UTILIZATION;
+        rsBandwidth.meshFanoutPath = true;
+        agBandwidth.meshFanoutBandwidth = rsBandwidth.meshFanoutBandwidth;
+        agBandwidth.meshFanoutPath = true;
     }
-    double rsCostMeshBandwidth = rsMeshBandwidth;
-    double rsCostClosBandwidth = rsClosBandwidth;
-    double agCostMeshBandwidth = agMeshBandwidth;
-    double agCostClosBandwidth = agClosBandwidth;
+    rsBandwidth.costMeshBandwidth = rsBandwidth.meshBandwidth;
+    rsBandwidth.costClosBandwidth = rsBandwidth.closBandwidth;
+    agBandwidth.costMeshBandwidth = agBandwidth.meshBandwidth;
+    agBandwidth.costClosBandwidth = agBandwidth.closBandwidth;
     const bool useUbx2dCostBandwidth = !topoInfo->level0PcieMix && topoInfo->level0Topo == Level0Shape::MESH_1D_CLOS
                                        && axes.mesh > 1 && axes.clos > 1 && axes.third == 1;
     if (useUbx2dCostBandwidth) {
-        rsCostMeshBandwidth = BW_OMNI_UBX_2D_COST_RS_MESH / OMNIPIPE_FIXED_UB_UTILIZATION;
-        rsCostClosBandwidth = BW_OMNI_UBX_2D_COST_RS_CLOS / OMNIPIPE_FIXED_UB_UTILIZATION;
-        agCostMeshBandwidth = BW_OMNI_UBX_2D_COST_AG_MESH / OMNIPIPE_FIXED_UB_UTILIZATION;
-        agCostClosBandwidth = BW_OMNI_UBX_2D_COST_AG_CLOS / OMNIPIPE_FIXED_UB_UTILIZATION;
+        rsBandwidth.costMeshBandwidth = BW_OMNI_UBX_2D_COST_RS_MESH / OMNIPIPE_FIXED_UB_UTILIZATION;
+        rsBandwidth.costClosBandwidth = BW_OMNI_UBX_2D_COST_RS_CLOS / OMNIPIPE_FIXED_UB_UTILIZATION;
+        agBandwidth.costMeshBandwidth = BW_OMNI_UBX_2D_COST_AG_MESH / OMNIPIPE_FIXED_UB_UTILIZATION;
+        agBandwidth.costClosBandwidth = BW_OMNI_UBX_2D_COST_AG_CLOS / OMNIPIPE_FIXED_UB_UTILIZATION;
     }
 
-    const OmniPipeStageCost rsCost = CalcStageCost(
-        axes, topoInfo->userRankSize, rsMeshBandwidth, rsClosBandwidth, thirdBandwidth, rsCostMeshBandwidth,
-        rsCostClosBandwidth, needSetStepNum, true, EngineType::AICPU);
-    const OmniPipeStageCost agCost = CalcStageCost(
-        axes, topoInfo->userRankSize, agMeshBandwidth, agClosBandwidth, thirdBandwidth, agCostMeshBandwidth,
-        agCostClosBandwidth, needSetStepNum, false, EngineType::AICPU);
+    const OmniPipeStageCost rsCost
+        = CalcStageCost(axes, topoInfo->userRankSize, rsBandwidth, needSetStepNum, true, EngineType::AICPU);
+    const OmniPipeStageCost agCost
+        = CalcStageCost(axes, topoInfo->userRankSize, agBandwidth, needSetStepNum, false, EngineType::AICPU);
 
     CostModelParam costParam{};
     costParam.A = static_cast<float>(
@@ -254,15 +277,19 @@ std::vector<CostModelParam> InsV2AllReduceOmniPipeExecutor<
 
     HCCL_INFO(
         "[%s] algName[%s] axes[%llu,%llu,%llu] rsPlanBandwidth[%f,%f] rsCostBandwidth[%f,%f] "
+        "rsMeshFanoutBandwidth[%f], rsMeshFanoutPath[%d] "
         "rsSteps[%llu,%llu] rsXyBandwidth[%f] "
         "rsThirdPlanBandwidth[%f] rsInnerMax[%d] rsOuterMax[%d] rsThirdIsOuterSlow[%d] rsTransferCoeff[%f] "
-        "agPlanBandwidth[%f,%f] agCostBandwidth[%f,%f] agSteps[%llu,%llu] agXyBandwidth[%f] "
+        "agPlanBandwidth[%f,%f] agCostBandwidth[%f,%f] agMeshFanoutBandwidth[%f], agMeshFanoutPath[%d] "
+        "agSteps[%llu,%llu] agXyBandwidth[%f] "
         "agThirdPlanBandwidth[%f] agInnerMax[%d] agOuterMax[%d] "
         "agThirdIsOuterSlow[%d] agTransferCoeff[%f] Ufixed[%f] A[%e] B[%e] C[%e].",
-        __func__, algName, axes.mesh, axes.clos, axes.third, rsMeshBandwidth, rsClosBandwidth, rsCostMeshBandwidth,
-        rsCostClosBandwidth, rsCost.xyStepNum, rsCost.thirdStepNum, rsCost.xyBandwidth, rsCost.thirdPlanBandwidth,
-        rsCost.innerReachesMaxStep, rsCost.outerReachesMaxStep, rsCost.thirdIsOuterSlow, rsCost.transferCoeff,
-        agMeshBandwidth, agClosBandwidth, agCostMeshBandwidth, agCostClosBandwidth, agCost.xyStepNum,
+        __func__, algName, axes.mesh, axes.clos, axes.third, rsBandwidth.meshBandwidth, rsBandwidth.closBandwidth,
+        rsBandwidth.costMeshBandwidth, rsBandwidth.costClosBandwidth, rsBandwidth.meshFanoutBandwidth,
+        rsBandwidth.meshFanoutPath, rsCost.xyStepNum, rsCost.thirdStepNum, rsCost.xyBandwidth,
+        rsCost.thirdPlanBandwidth, rsCost.innerReachesMaxStep, rsCost.outerReachesMaxStep, rsCost.thirdIsOuterSlow,
+        rsCost.transferCoeff, agBandwidth.meshBandwidth, agBandwidth.closBandwidth, agBandwidth.costMeshBandwidth,
+        agBandwidth.costClosBandwidth, agBandwidth.meshFanoutBandwidth, agBandwidth.meshFanoutPath, agCost.xyStepNum,
         agCost.thirdStepNum, agCost.xyBandwidth, agCost.thirdPlanBandwidth, agCost.innerReachesMaxStep,
         agCost.outerReachesMaxStep, agCost.thirdIsOuterSlow, agCost.transferCoeff, OMNIPIPE_FIXED_UB_UTILIZATION,
         costParam.A, costParam.B, costParam.C);
@@ -1244,10 +1271,11 @@ REGISTER_EXEC_V2_MULTI(
     InsTempAllGatherOmniPipeNHRDPU);
 REGISTER_ALG_ATTRS(
     DpuAllReducePipeLineMeshNHRNHR, topo.supportLevel0Topos = LEVEL0_TOPO_MESH_1D_CLOS | LEVEL0_TOPO_MESH_1D;
-    topo.isHostDpuOnly = true; topo.topoCustomCheck = [](const TopoInfoWithNetLayerDetails* topo) -> bool {
+    topo.isSupportLevel1Nhr = true; topo.isHostDpuOnly = true;
+    topo.topoCustomCheck = [](const TopoInfoWithNetLayerDetails* topo) -> bool {
         if (topo->level0Topo == Level0Shape::MESH_1D_CLOS) {
             return !topo->level0PcieMix;
         }
-        return topo->topoLevelNums == TOPO_LEVEL_NUM_3;
+        return topo->topoLevelNums == TOPO_LEVEL_NUM_3 && topo->level0Symmetric && !IsOnlyThirdAxisTopo(topo);
     });
 } // namespace ops_hccl

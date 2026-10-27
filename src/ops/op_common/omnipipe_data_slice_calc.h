@@ -36,10 +36,28 @@ constexpr double BW_OMNI_UBX_ROCE = 25;
 constexpr double BW_OMNI_UBX_AG_CLOS = 191;
 constexpr double BW_OMNI_UBX_RS_CLOS = 225;
 
-constexpr double BW_OMNI_INVALID = 1.0;
 constexpr double BW_OMNI_COMMON_ROCE = 25;
 constexpr double BW_OMNI_COMMON_AG_CLOS = 191;
 constexpr double BW_OMNI_COMMON_RS_CLOS = 224;
+
+// 实测覆盖：bufsize:200/256/1024/2048/4096; 2个950 1825pod节点；topo:2+2/4+4/8+8;
+// loopCount=1、level2StepCount=2、level0StepCount=1场景下耗时仍随 ranksize 增长：
+// level0 mesh 模板对同组 (mesh-1) 个 peer 逐个执行一次 SendRecvWrite（plog 中 peer_exchange=2*(mesh-1)、DPU
+// notify_wait=7+2*(mesh-1)）， 而原 cost 公式在 third>1 且 third 为外轴瓶颈时直接令
+// transferCoeff=1/thirdPlanBandwidth， 把 level0 的扇出传输整项丢掉了；meshLatency 也只计 1 个 task。
+// 实测该扇出项把每 rank 有效带宽从 1+1 的 ~23GB/s 拉到 8+8 的 ~10GB/s。
+constexpr double BW_OMNI_MESH1D_DPU_COST_THIRD_AG = 20.0;
+constexpr double BW_OMNI_MESH1D_DPU_COST_THIRD_RS = 25.0;
+constexpr double BW_OMNI_MESH1D_DPU_COST_THIRD_AR = 21.0;
+// level0 mesh 扇出：每 rank 向 (mesh-1) 个 peer 各发一份的有效带宽。
+constexpr double BW_OMNI_MESH1D_DPU_COST_MESH_AG = 80.0;
+constexpr double BW_OMNI_MESH1D_DPU_COST_MESH_RS = 220.0;
+constexpr double BW_OMNI_MESH1D_DPU_COST_MESH_AR = 320.0;
+// 第三轴每个流水步的同步往返时延（原公式的 thirdLatency 只含 DPU 软件栈固定开销
+// 2*PRE_SYNC + CHANNEL_FENCE + THREAD_FENCE + SND_RCV_CALL + HD_LATENCY = 60us/步）。
+constexpr double MESH1D_DPU_STEP_RTT_S_AG = 0.60e-3;
+constexpr double MESH1D_DPU_STEP_RTT_S_RS = 4.00e-3;
+constexpr double MESH1D_DPU_STEP_RTT_S_AR = 3.50e-3;
 
 // CostModel effective bandwidth calibrated with 1GiB data on 2D UBX OmniPipe.
 constexpr double BW_OMNI_UBX_2D_COST_AG_MESH = 92.049;

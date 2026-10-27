@@ -23,6 +23,7 @@ protected:
         unsetenv("ENABLE_HOSTDPU_FOR_LLT");
         unsetenv("HCCL_INDEPENDENT_OP");
         unsetenv("HCCL_ENABLE_OPEN_AICPU");
+        unsetenv("HCCL_ALGO");
     }
     static void SetUpTestCase() {}
     static void TearDownTestCase() {}
@@ -42,6 +43,7 @@ void RunReduceScatterOmniPipeDPU(const TopoMeta& topoMeta, u64 recvCount, HcclDa
 // 对称3级: x=4, y=4, z=2, int8
 TEST_F(ST_REDUCE_SCATTER_OMNIPIPE_DPU_TEST, omnipipe_dpu_3level_4x4x2_int8)
 {
+    setenv("HCCL_ALGO", "reducescatter:pipeline{mesh,nhr,mesh}", 1);
     TopoMeta topoMeta;
     GenTopoMeta(topoMeta, 2, 4, 4);
     u64 recvCount = 512;
@@ -53,6 +55,7 @@ TEST_F(ST_REDUCE_SCATTER_OMNIPIPE_DPU_TEST, omnipipe_dpu_3level_4x4x2_int8)
 // 对称3级: x=2, y=2, z=2, bfp16
 TEST_F(ST_REDUCE_SCATTER_OMNIPIPE_DPU_TEST, omnipipe_dpu_3level_2x2x2_bfp16)
 {
+    setenv("HCCL_ALGO", "reducescatter:pipeline{mesh,nhr,mesh}", 1);
     TopoMeta topoMeta;
     GenTopoMeta(topoMeta, 2, 2, 2);
     u64 recvCount = 256;
@@ -64,6 +67,7 @@ TEST_F(ST_REDUCE_SCATTER_OMNIPIPE_DPU_TEST, omnipipe_dpu_3level_2x2x2_bfp16)
 // 对称3级: x=8, y=4, z=2, int32
 TEST_F(ST_REDUCE_SCATTER_OMNIPIPE_DPU_TEST, omnipipe_dpu_3level_8x4x2_int32)
 {
+    setenv("HCCL_ALGO", "reducescatter:pipeline{mesh,nhr,mesh}", 1);
     TopoMeta topoMeta;
     GenTopoMeta(topoMeta, 2, 4, 8);
     u64 recvCount = 2048;
@@ -75,6 +79,7 @@ TEST_F(ST_REDUCE_SCATTER_OMNIPIPE_DPU_TEST, omnipipe_dpu_3level_8x4x2_int32)
 // 大数据量: 1M
 TEST_F(ST_REDUCE_SCATTER_OMNIPIPE_DPU_TEST, omnipipe_dpu_3level_4x4x2_fp32_1m)
 {
+    setenv("HCCL_ALGO", "reducescatter:pipeline{mesh,nhr,mesh}", 1);
     TopoMeta topoMeta;
     GenTopoMeta(topoMeta, 2, 4, 4);
     u64 recvCount = 1024 * 1024;
@@ -98,6 +103,7 @@ TEST_F(ST_REDUCE_SCATTER_OMNIPIPE_DPU_TEST, omnipipe_dpu_3level_4x4x1_fp32)
 // yRankSize=1 (L1退化)
 TEST_F(ST_REDUCE_SCATTER_OMNIPIPE_DPU_TEST, omnipipe_dpu_3level_4x1x2_fp32)
 {
+    setenv("HCCL_ALGO", "reducescatter:pipeline{mesh,nhr,mesh}", 1);
     TopoMeta topoMeta;
     GenTopoMeta(topoMeta, 2, 1, 4);
     u64 recvCount = 512;
@@ -109,6 +115,7 @@ TEST_F(ST_REDUCE_SCATTER_OMNIPIPE_DPU_TEST, omnipipe_dpu_3level_4x1x2_fp32)
 // xRankSize=1 (L0退化)
 TEST_F(ST_REDUCE_SCATTER_OMNIPIPE_DPU_TEST, omnipipe_dpu_3level_1x4x2_fp32)
 {
+    setenv("HCCL_ALGO", "reducescatter:pipeline{mesh,nhr,mesh}", 1);
     TopoMeta topoMeta;
     GenTopoMeta(topoMeta, 2, 4, 1);
     u64 recvCount = 512;
@@ -117,9 +124,21 @@ TEST_F(ST_REDUCE_SCATTER_OMNIPIPE_DPU_TEST, omnipipe_dpu_3level_1x4x2_fp32)
     RunReduceScatterOmniPipeDPU(topoMeta, recvCount, dataType, reduceOp);
 }
 
+// 非对称TopoMeta
+TEST_F(ST_REDUCE_SCATTER_OMNIPIPE_DPU_TEST, omnipipe_dpu_3level_L0asym_int32_512)
+{
+    setenv("HCCL_ALGO", "reducescatter:pipeline{mesh,nhr,mesh}", 1);
+    TopoMeta topoMeta{{{0, 1}, {0, 1}}, {{0, 1}}};
+    u64 dataCount = 512;
+    HcclDataType dataType = HcclDataType::HCCL_DATA_TYPE_INT32;
+    HcclReduceOp reduceOp = HcclReduceOp::HCCL_REDUCE_SUM;
+    RunReduceScatterOmniPipeDPU(topoMeta, dataCount, dataType, reduceOp);
+}
+
 // 最小数据量
 TEST_F(ST_REDUCE_SCATTER_OMNIPIPE_DPU_TEST, omnipipe_dpu_3level_2x2x2_fp32_recv1)
 {
+    setenv("HCCL_ALGO", "reducescatter:pipeline{mesh,nhr,mesh}", 1);
     TopoMeta topoMeta;
     GenTopoMeta(topoMeta, 2, 2, 2);
     u64 recvCount = 1;

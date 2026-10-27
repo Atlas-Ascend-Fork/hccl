@@ -78,6 +78,7 @@ void TopoModel::InitHostDpuInfo(uint32_t serverNum)
     EndpointDesc endpoint{};
     endpoint.protocol = CommProtocol::COMM_PROTOCOL_ROCE;
     endpoint.loc.locType = EndpointLocType::ENDPOINT_LOC_TYPE_HOST;
+    endpoint.protocol = CommProtocol::COMM_PROTOCOL_ROCE;
 
     dpuDesc_.push_back(endpoint);
 }
@@ -181,6 +182,7 @@ void TopoModel::InitEndpointMap(
     endpoint.loc.device.superPodIdx = superpodId;
     endpoint.loc.device.serverIdx = serverId;
     endpoint.loc.locType = EndpointLocType::ENDPOINT_LOC_TYPE_DEVICE;
+    endpoint.protocol = CommProtocol::COMM_PROTOCOL_UB_CTP;
     rankId2Endpoint_[rankId] = endpoint;
 }
 

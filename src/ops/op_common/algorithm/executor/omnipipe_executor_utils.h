@@ -49,6 +49,31 @@ struct OmniPipeCostAxes {
     u64 third = 1;
 };
 
+// L0==1&&L1==1时，只剩第三轴（框间）一条链路，没有可被流水掩盖的并行维度
+inline bool IsOnlyThirdAxisTopo(const TopoInfoWithNetLayerDetails* topo)
+{
+    if (topo == nullptr || topo->serverNum == 0) {
+        return false;
+    }
+    // L0 == 1：每服务器只有 1 张卡
+    if (topo->serverNum != topo->userRankSize) {
+        return false;
+    }
+    // L1 == 1：每台服务器独占一个超节点（L1 实例）
+    if (topo->serverNumPerSuperPod == 1) {
+        return true;
+    }
+    if (topo->superPodNum != 0 && topo->superPodNum == topo->serverNum) {
+        return true;
+    }
+    const auto& layers = topo->netLayerDetails.netLayers;
+    const auto& sizes = topo->netLayerDetails.localNetInsSizeOfLayer;
+    if (layers.size() < 2 || layers[1] >= sizes.size()) {
+        return false;
+    }
+    return sizes[layers[1]] == 1;
+}
+
 // Cost 维度与执行路径使用同一组 TopoMatch 逻辑通信组，避免非对称物理实例在各 rank 上产生不同结果。
 inline OmniPipeCostAxes CalcOmniPipeCostAxes(const AlgHierarchyInfoForAllLevel& algHierarchyInfo)
 {

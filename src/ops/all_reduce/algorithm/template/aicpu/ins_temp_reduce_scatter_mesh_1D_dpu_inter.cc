@@ -35,7 +35,8 @@ std::vector<CostModelParam> InsTempReduceScatterMesh1dDpuInter::CalcCostCoeff(Ca
 
     float B1 = 0.0f;
     float B2 = 0.0f;
-    CostModelManager::Global()->CalcMeshParam(param.dataRatio, param.netType, portNum, param.rankSize, A);
+    CostModelManager::Global()->CalcMeshParam(
+        param.dataRatio, param.netType, portNum, param.rankSize, A, false, EngineType::CPU);
     CostModelManager::Global()->CalcLocalCopyParams(param.dataRatio * 2, EngineType::AICPU, B1);
     CostModelManager::Global()->CalcLocalReduceParams((param.rankSize - 1) * param.dataRatio, EngineType::AICPU, B2);
     B = B1 + B2;

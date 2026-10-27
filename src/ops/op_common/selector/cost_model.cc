@@ -118,14 +118,15 @@ void CostModelManager::InitBandwidth()
     localReduceBw_ = 900.0f * 1000 * 1000 * 1000;
     crossChipBw_ = 56.0f * 1000 * 1000 * 1000;
     crossChipReduceBw_ = 56.0f * 1000 * 1000 * 1000;
+    roceBw_ = 25.0f * 1000 * 1000 * 1000;
     ccuLocalCopyBw_ = 200.0f * 1000 * 1000 * 1000;
     ccuLocalReduceBw_ = 35.0f * 1000 * 1000 * 1000;
     ccuCircleLocalCopyBw_ = 47.6f * 1024 * 1024 * 1024;
     ccuCircleLocalReduceBw_ = 47.6f * 1024 * 1024 * 1024;
     HCCL_INFO(
-        "[CostModelManager] localCopyBw=%f localReduceBw=%f crossChipBw=%f crossChipReduceBw=%f "
+        "[CostModelManager] localCopyBw=%f localReduceBw=%f crossChipBw=%f crossChipReduceBw=%f roceBw=%f"
         "ccuLocalCopyBw=%f ccuLocalReduceBw=%f ccuCircleLocalCopyBw=%f ccuCircleLocalReduceBw=%f.",
-        localCopyBw_, localReduceBw_, crossChipBw_, crossChipReduceBw_, ccuLocalCopyBw_, ccuLocalReduceBw_,
+        localCopyBw_, localReduceBw_, crossChipBw_, crossChipReduceBw_, roceBw_, ccuLocalCopyBw_, ccuLocalReduceBw_,
         ccuCircleLocalCopyBw_, ccuCircleLocalReduceBw_);
 #endif
 }
@@ -516,7 +517,8 @@ void CostModelManager::ApplyTopoPriority(CostModel& costModel, const TopoInfoWit
 
 #endif
 
-void CostModelManager::CalcMeshParam(float n, CommTopo netType, int portNum, u32 rankSize, float& A, bool isPod)
+void CostModelManager::CalcMeshParam(
+    float n, CommTopo netType, int portNum, u32 rankSize, float& A, bool isPod, EngineType engine)
 {
     // n用来表示传输数据量和总数据量之间的关系
     A = 0.0f;
@@ -524,23 +526,28 @@ void CostModelManager::CalcMeshParam(float n, CommTopo netType, int portNum, u32
     if (isPod && netType == CommTopo::COMM_TOPO_CLOS) {
         portNumEff = portNumEff / 2.0;
     }
+    float linkBw = crossChipBw_;
+    if (engine == EngineType::CPU) {
+        // host网卡是几个NPU共享的，这个和组网和使用的网卡都有关系。
+        linkBw = roceBw_;
+    }
     if (netType == CommTopo::COMM_TOPO_1DMESH) {
         // cost = D/B(write)
-        A = n / crossChipBw_;
+        A = n / linkBw;
     } else if (netType == CommTopo::COMM_TOPO_CLOS) {
         // cost = nD/B(write)
-        A = static_cast<float>((n * (rankSize - 1)) / (portNumEff * crossChipBw_));
+        A = static_cast<float>((n * (rankSize - 1)) / (portNumEff * linkBw));
     } else {
         HCCL_ERROR("[CostModelManager] CalcMeshParams unsupported netType=%d.", static_cast<int>(netType));
     }
     HCCL_INFO(
-        "[CostModelManager] CalcMeshParams n=%f netType=%d portNum=%d portNumEff=%f A=%f crossChipBw=%f.", n,
-        static_cast<int>(netType), portNum, portNumEff, A, crossChipBw_);
+        "[CostModelManager] CalcMeshParams n=%f netType=%d portNum=%d portNumEff=%f A=%f linkBw=%f.", n,
+        static_cast<int>(netType), portNum, portNumEff, A, linkBw);
     return;
 }
 
 void CostModelManager::CalcNHRParams(
-    float n, CommTopo netType, int portNum, u32 rankSize, float& A, bool isPod, bool halvePodPort)
+    float n, CommTopo netType, int portNum, u32 rankSize, float& A, bool isPod, bool halvePodPort, EngineType engine)
 {
     // n用来表示传输数据和总数据量之间的关系
     // rankSize是指总共通信的rankSize
@@ -549,12 +556,17 @@ void CostModelManager::CalcNHRParams(
     if (isPod && netType == CommTopo::COMM_TOPO_CLOS && halvePodPort) {
         portNumEff = portNumEff / 2.0;
     }
+    float linkBw = crossChipBw_;
+    if (engine == EngineType::CPU) {
+        // host网卡是几个NPU共享的，这个和组网和使用的网卡都有关系。
+        linkBw = roceBw_;
+    }
     float data = n * (rankSize - 1);
-    A = static_cast<float>(data / (portNumEff * crossChipBw_));
+    A = static_cast<float>(data / (portNumEff * linkBw));
     HCCL_INFO(
-        "[CostModelManager] CalcNHRParams n=%f netType=%d portNum=%d portNumEff=%f A=%f crossChipBw=%f "
+        "[CostModelManager] CalcNHRParams n=%f netType=%d portNum=%d portNumEff=%f A=%f linkBw=%f "
         "rankSize=%u data=n*(rs-1)=%f.",
-        n, static_cast<int>(netType), portNum, portNumEff, A, crossChipBw_, rankSize, data);
+        n, static_cast<int>(netType), portNum, portNumEff, A, linkBw, rankSize, data);
     return;
 }
 

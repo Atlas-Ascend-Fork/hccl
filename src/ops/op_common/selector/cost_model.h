@@ -137,10 +137,13 @@ public:
     // portNum: clos组网下使用的端口数量，mesh组网时为0
     // A: 出参，接收计算得到的A值
     // 计算Mesh算法的A参数
-    void CalcMeshParam(float n, CommTopo netType, int portNum, u32 rankSize, float& A, bool isPod = false);
+    void CalcMeshParam(
+        float n, CommTopo netType, int portNum, u32 rankSize, float& A, bool isPod = false,
+        EngineType engine = EngineType::AICPU);
     // 计算NHR算法的A参数; halvePodPort=false 时不做 isPod CLOS 端口减半(单server pod内CLOS无跨pod端口预留)
     void CalcNHRParams(
-        float n, CommTopo netType, int portNum, u32 rankSize, float& A, bool isPod = false, bool halvePodPort = true);
+        float n, CommTopo netType, int portNum, u32 rankSize, float& A, bool isPod = false, bool halvePodPort = true,
+        EngineType engine = EngineType::AICPU);
     // n: 输入数据占总数据量DataSize的比例
     // B: 出参，接收计算得到的B值
     // 计算本地拷贝的B参数
@@ -177,6 +180,7 @@ private:
     float localReduceBw_{};          // 本地reduce带宽
     float crossChipBw_{};            // 跨片带宽
     float crossChipReduceBw_{};      // 跨片reduce带宽
+    float roceBw_{};                 // host ROCE链路带宽(跨机ROCE线速)
     float ccuLocalCopyBw_{};         // ccu场景本地拷贝带宽
     float ccuLocalReduceBw_{};       // ccu场景本地reduce带宽
     float ccuCircleLocalCopyBw_{};   // ccu环形场景本地拷贝带宽

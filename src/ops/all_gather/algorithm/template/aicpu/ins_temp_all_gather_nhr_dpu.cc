@@ -28,7 +28,8 @@ std::vector<CostModelParam> InsTempAllGatherNHRDPU::CalcCostCoeff(CalcCostCoeffP
     float C = 0.0f;
     float D = 0.0f;
 
-    CostModelManager::Global()->CalcNHRParams(param.dataRatio, param.netType, param.portNum[0], param.rankSize, A);
+    CostModelManager::Global()->CalcNHRParams(
+        param.dataRatio, param.netType, param.portNum[0], param.rankSize, A, false, true, EngineType::CPU);
     if (param.inputBuffer != param.scratchBuffer) {
         if (param.outputBuffer == BufferType::HCCL_BUFFER) {
             // 输出即 scratch（三级 AG 的 L2）：NHR 环直接跨步落位、PostLocalCopy 跳过，仅剩 pre-copy 1 份

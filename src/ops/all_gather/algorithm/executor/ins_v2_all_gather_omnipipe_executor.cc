@@ -146,6 +146,9 @@ InsV2AllGatherOmniPipeExecutor<AlgTopoMatch, InsAlgTemplate0, InsAlgTemplate1, I
     double meshBandwidth = BW_OMNI_DEFAULT / OMNIPIPE_FIXED_UB_UTILIZATION;
     double closBandwidth = BW_OMNI_DEFAULT / OMNIPIPE_FIXED_UB_UTILIZATION;
     double thirdBandwidth = BW_OMNI_UBX_ROCE / OMNIPIPE_FIXED_UB_UTILIZATION;
+    // level0 mesh 的 peer 扇出带宽（仅跨机 MESH_1D + HostDPU 路径标定）
+    double meshFanoutBandwidth = 0.0;
+    bool meshFanoutPath = false;
     if (topoInfo->level0PcieMix) {
         if (axes.clos == RANK_LEVEL_2) {
             closBandwidth = BW_OMNI_PCIE_EIGHT_AG_CLOS / OMNIPIPE_FIXED_UB_UTILIZATION;
@@ -155,10 +158,11 @@ InsV2AllGatherOmniPipeExecutor<AlgTopoMatch, InsAlgTemplate0, InsAlgTemplate1, I
     } else if (topoInfo->level0Topo == Level0Shape::MESH_1D_CLOS) {
         closBandwidth = BW_OMNI_UBX_AG_CLOS / OMNIPIPE_FIXED_UB_UTILIZATION;
     } else if (topoInfo->level0Topo == Level0Shape::MESH_1D && !topoInfo->topLevelUboe) {
-        // 先给定一个超低带宽，使算法不会被优先选中
-        meshBandwidth = BW_OMNI_INVALID / OMNIPIPE_FIXED_UB_UTILIZATION;
-        closBandwidth = BW_OMNI_INVALID / OMNIPIPE_FIXED_UB_UTILIZATION;
-        thirdBandwidth = BW_OMNI_INVALID / OMNIPIPE_FIXED_UB_UTILIZATION;
+        // 跨机 MESH_1D + HostDPU：第三轴用实测标定带宽，并单独表达 level0 的 peer 扇出带宽
+        closBandwidth = BW_OMNI_COMMON_AG_CLOS / OMNIPIPE_FIXED_UB_UTILIZATION;
+        thirdBandwidth = BW_OMNI_MESH1D_DPU_COST_THIRD_AG / OMNIPIPE_FIXED_UB_UTILIZATION;
+        meshFanoutBandwidth = BW_OMNI_MESH1D_DPU_COST_MESH_AG / OMNIPIPE_FIXED_UB_UTILIZATION;
+        meshFanoutPath = true;
     }
     double costMeshBandwidth = meshBandwidth;
     double costClosBandwidth = closBandwidth;
@@ -215,6 +219,11 @@ InsV2AllGatherOmniPipeExecutor<AlgTopoMatch, InsAlgTemplate0, InsAlgTemplate1, I
     if (thirdActive) {
         if (outerReachesMax) {
             transferCoeff = thirdIsOuterSlow ? 1.0 / thirdPlanBandwidth : 1.0 / xyBandwidth;
+            // 跨机 MESH_1D + HostDPU：level0 模板对 (mesh-1) 个 peer 逐个交换，该扇出传输
+            // 与第三轴串行，原公式在上式里整项丢失（plog 实测 peer_exchange=2*(mesh-1)）。
+            if (meshFanoutPath && thirdIsOuterSlow && meshActive) {
+                transferCoeff += static_cast<double>(axes.mesh - 1) / meshFanoutBandwidth;
+            }
         } else {
             double activeBandwidth = thirdBandwidth;
             activeBandwidth += meshActive ? meshBandwidth : 0.0;
@@ -231,21 +240,26 @@ InsV2AllGatherOmniPipeExecutor<AlgTopoMatch, InsAlgTemplate0, InsAlgTemplate1, I
     const float meshLatency = meshActive ? CalcTemplateLatency(1, EngineType::AICPU) : 0.0f;
     const float nhrLatency
         = closActive ? CalcTemplateLatency(GetNHRStepNum(static_cast<u32>(axes.clos)), EngineType::AICPU) : 0.0f;
-    const float thirdLatency
-        = axes.third > 1 ? CalcDpuTemplateLatency(
-                               GetNHRStepNum(static_cast<u32>(axes.third)), 2, 1, static_cast<u32>(axes.third) - 1) :
-                           0.0f;
+    float thirdLatency = axes.third > 1 ?
+                             CalcDpuTemplateLatency(
+                                 GetNHRStepNum(static_cast<u32>(axes.third)), 2, 1, static_cast<u32>(axes.third) - 1) :
+                             0.0f;
+    // 第三轴每步 = DPU 软件栈固定开销 + 跨框同步往返（MESH1D_DPU_STEP_RTT_S_AG，2*1*8环境实测标定）
+    if (meshFanoutPath) {
+        thirdLatency += static_cast<float>(MESH1D_DPU_STEP_RTT_S_AG);
+    }
 
     costParam.C = 2.0f * static_cast<float>(xyStepNum) * std::max(meshLatency, nhrLatency)
                   + static_cast<float>(thirdStepNum) * thirdLatency;
 
     HCCL_INFO(
         "[InsV2AllGatherOmniPipeExecutor][%s] algName[%s] axes[%llu,%llu,%llu] steps[%llu,%llu] planBandwidth[%f,%f] "
-        "costBandwidth[%f,%f] xyBandwidth[%f] thirdPlanBandwidth[%f] "
+        "costBandwidth[%f,%f] xyBandwidth[%f] thirdPlanBandwidth[%f] meshFanoutBandwidth[%f] meshFanoutPath[%d]"
         "innerMax[%d] outerMax[%d] thirdIsOuterSlow[%d] transferCoeff[%f] Ufixed[%f] A[%e] B[%e] C[%e].",
         __func__, algName, axes.mesh, axes.clos, axes.third, xyStepNum, thirdStepNum, meshBandwidth, closBandwidth,
-        costMeshBandwidth, costClosBandwidth, xyBandwidth, thirdPlanBandwidth, innerReachesMax, outerReachesMax,
-        thirdIsOuterSlow, transferCoeff, OMNIPIPE_FIXED_UB_UTILIZATION, costParam.A, costParam.B, costParam.C);
+        costMeshBandwidth, costClosBandwidth, xyBandwidth, thirdPlanBandwidth, meshFanoutBandwidth, meshFanoutPath,
+        innerReachesMax, outerReachesMax, thirdIsOuterSlow, transferCoeff, OMNIPIPE_FIXED_UB_UTILIZATION, costParam.A,
+        costParam.B, costParam.C);
     return {costParam};
 }
 
@@ -866,10 +880,11 @@ REGISTER_EXEC_V2_MULTI(
     TopoMatchThreeLevel, InsTempAllGatherOmniPipeMesh1D, InsTempAllGatherOmniPipeNHR, InsTempAllGatherOmniPipeNHRDPU);
 REGISTER_ALG_ATTRS(
     DpuAllGatherPipeLineMeshNHRNHR, topo.supportLevel0Topos = LEVEL0_TOPO_MESH_1D_CLOS | LEVEL0_TOPO_MESH_1D;
-    topo.isHostDpuOnly = true; topo.topoCustomCheck = [](const TopoInfoWithNetLayerDetails* topo) -> bool {
+    topo.isSupportLevel1Nhr = true; topo.isHostDpuOnly = true;
+    topo.topoCustomCheck = [](const TopoInfoWithNetLayerDetails* topo) -> bool {
         if (topo->level0Topo == Level0Shape::MESH_1D_CLOS) {
             return !topo->level0PcieMix;
         }
-        return topo->topoLevelNums == TOPO_LEVEL_NUM_3;
+        return topo->topoLevelNums == TOPO_LEVEL_NUM_3 && topo->level0Symmetric && !IsOnlyThirdAxisTopo(topo);
     });
 } // namespace ops_hccl

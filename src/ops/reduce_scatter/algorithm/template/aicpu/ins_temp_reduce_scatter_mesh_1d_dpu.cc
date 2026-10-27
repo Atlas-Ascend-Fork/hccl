@@ -21,7 +21,8 @@ std::vector<CostModelParam> InsTempReduceScatterMesh1dDpu::CalcCostCoeff(CalcCos
 
     float B1 = 0.0f;
     float B2 = 0.0f;
-    CostModelManager::Global()->CalcNHRParams(param.dataRatio, param.netType, param.portNum[0], param.rankSize, A);
+    CostModelManager::Global()->CalcMeshParam(
+        param.dataRatio, param.netType, param.portNum[0], param.rankSize, A, false, EngineType::CPU);
     if (param.inputBuffer != param.scratchBuffer) {
         CostModelManager::Global()->CalcLocalCopyParams(param.dataRatio * 2, EngineType::CPU, B);
     } else {
