@@ -173,7 +173,9 @@ Selector(HcclComm comm, OpParam& param, std::unique_ptr<TopoInfoWithNetLayerDeta
     param.hcclComm = comm;
     // 获取基础拓扑
     CHK_RET(HcclCalcTopoInfo(comm, param, topoInfo));
-    if (topoInfo->topLevelUboe && param.commOpExpansionMode != HcclOpExpansionMode::HCCL_OP_EXPANSION_AIV_ONLY) {
+    if (topoInfo->topLevelUboe && param.commOpExpansionMode != HcclOpExpansionMode::HCCL_OP_EXPANSION_AIV_ONLY
+        && param.commOpExpansionMode != static_cast<HcclOpExpansionMode>(HCCL_OP_EXPANSION_EXT_CCU_MS_ONLY)
+        && param.commOpExpansionMode != static_cast<HcclOpExpansionMode>(HCCL_OP_EXPANSION_EXT_CCU_SCHED_ONLY)) {
         param.opExecuteConfig = OpExecuteConfig::AICPU_TS;
     }
 
@@ -189,6 +191,12 @@ Selector(HcclComm comm, OpParam& param, std::unique_ptr<TopoInfoWithNetLayerDeta
         CHK_RET(collAlgSelector->Run(param, topoInfo.get(), algName));
     }
     CHK_RET(checkValidAlgName(algName));
+    // ccu only 模式命中 CCU 算法后归一化为基模式，后续资源/执行路径仅感知基模式
+    if (param.opExecuteConfig == OpExecuteConfig::CCU_MS_ONLY) {
+        param.opExecuteConfig = OpExecuteConfig::CCU_MS;
+    } else if (param.opExecuteConfig == OpExecuteConfig::CCU_SCHED_ONLY) {
+        param.opExecuteConfig = OpExecuteConfig::CCU_SCHED;
+    }
     CHK_RET(SetCommEngine(param));
     // AIV_ONLY 模式下禁止回退到非 AIV 引擎，未选中 AIV 时直接返回不支持。
     if (param.commOpExpansionMode == HcclOpExpansionMode::HCCL_OP_EXPANSION_AIV_ONLY
@@ -382,9 +390,6 @@ HcclResult SetOpParamFastLaunchTag(OpParam& param)
     // 5 一次性拼接
     return AppendFastLaunchTag(param, dataTypeStr, reduceOpStr, countStr, rootStr);
 }
-
-static constexpr uint32_t opExpansionModeCcuSched = 5;
-static constexpr uint32_t opExpansionModeCcuMs = 4;
 
 bool ShouldGoCcuFastLaunch(HcclComm comm, OpParam& param, CcuFastLaunchCtx** ccuFastLaunchCtx)
 {
@@ -1062,6 +1067,11 @@ HcclResult HcclExecOp(
     auto resRet
         = HcclGetAlgRes(comm, param, executor, topoInfo.get(), resCtxHost, &resCtxSequence, isResourceReused, resPack);
     if (resRet == HCCL_E_UNAVAIL) {
+        if (param.commOpExpansionMode == static_cast<HcclOpExpansionMode>(HCCL_OP_EXPANSION_EXT_CCU_MS_ONLY)
+            || param.commOpExpansionMode == static_cast<HcclOpExpansionMode>(HCCL_OP_EXPANSION_EXT_CCU_SCHED_ONLY)) {
+            HCCL_ERROR("[HcclGetAlgRes] resource unavailable, ccu only mode does not support fallback.");
+            return HCCL_E_NOT_SUPPORT;
+        }
         HCCL_WARNING("[HcclGetAlgRes] resource unavailable, try to fallback.");
         CHK_RET(FallbackOp(comm, param, topoInfo, algName, resPack));
         return HCCL_SUCCESS;
@@ -2571,7 +2581,9 @@ static const std::vector<HcommCcuResType>& GetCcuInsCreateResTypes()
 // V1(950) 默认资源规格
 static uint32_t GetDefaultResFractionV1(HcommCcuResType resType, HcclOpExpansionMode opExpansionMode)
 {
-    bool isCcuMs = (opExpansionMode == HcclOpExpansionMode::HCCL_OP_EXPANSION_MODE_CCU_MS);
+    bool isCcuMs
+        = (opExpansionMode == HcclOpExpansionMode::HCCL_OP_EXPANSION_MODE_CCU_MS
+           || opExpansionMode == static_cast<HcclOpExpansionMode>(HCCL_OP_EXPANSION_EXT_CCU_MS_ONLY));
     switch (resType) {
         case HCOMM_CCU_RES_TYPE_ADDRESS:
             return CCU_DEFAULT_RES_FRACTION_ADDRESS;
@@ -2593,7 +2605,9 @@ static uint32_t GetDefaultResFractionV1(HcommCcuResType resType, HcclOpExpansion
 // V2(960) 默认资源规格
 static uint32_t GetDefaultResFractionV2(HcommCcuResType resType, HcclOpExpansionMode opExpansionMode)
 {
-    bool isCcuMs = (opExpansionMode == HcclOpExpansionMode::HCCL_OP_EXPANSION_MODE_CCU_MS);
+    bool isCcuMs
+        = (opExpansionMode == HcclOpExpansionMode::HCCL_OP_EXPANSION_MODE_CCU_MS
+           || opExpansionMode == static_cast<HcclOpExpansionMode>(HCCL_OP_EXPANSION_EXT_CCU_MS_ONLY));
     switch (resType) {
         case HCOMM_CCU_RES_TYPE_ADDRESS:
             return CCU_DEFAULT_RES_FRACTION_ADDRESS_V2;
@@ -3836,7 +3850,7 @@ HcclResult DecideHcclOpExpansionMode(HcclComm comm, HcclOpExpansionMode& finalMo
         useConfigOpExpansionMode = true;
     } else {
         HCCL_INFO("[DecideHcclOpExpansionMode] HcclConfigGetInfo is not supported, use environment mode.");
-        finalMode = static_cast<HcclOpExpansionMode>(opExpansionModeCcuMs);
+        finalMode = static_cast<HcclOpExpansionMode>(HCCL_OP_EXPANSION_EXT_CCU_MS);
     }
 
     // A5及后续代际仅通过HcclConfigGetInfo获取展开模式，其他型号保留环境变量方式
@@ -3850,9 +3864,9 @@ HcclResult DecideHcclOpExpansionMode(HcclComm comm, HcclOpExpansionMode& finalMo
         } else if (GetExternalInputHcclAivMode() == true) {
             finalMode = HcclOpExpansionMode::HCCL_OP_EXPANSION_MODE_AIV;
         } else if (GetExternalInputHcclCcuMSMode()) {
-            finalMode = static_cast<HcclOpExpansionMode>(opExpansionModeCcuMs);
+            finalMode = static_cast<HcclOpExpansionMode>(HCCL_OP_EXPANSION_EXT_CCU_MS);
         } else if (GetExternalInputHcclCcuSchedMode()) {
-            finalMode = static_cast<HcclOpExpansionMode>(opExpansionModeCcuSched);
+            finalMode = static_cast<HcclOpExpansionMode>(HCCL_OP_EXPANSION_EXT_CCU_SCHED);
         }
         if (useConfigOpExpansionMode && configOpExpansionMode != finalMode) {
             HCCL_DEBUG(
@@ -3888,7 +3902,7 @@ HcclResult GetUbMultiChannelNum(HcclComm comm, u32& multiChannelNum)
 
 HcclResult ApplyOpExpansionMode(OpParam& param, HcclOpExpansionMode finalMode)
 {
-    switch (finalMode) {
+    switch (static_cast<uint32_t>(finalMode)) {
         case HcclOpExpansionMode::HCCL_OP_EXPANSION_MODE_AI_CPU:
             param.opExecuteConfig = OpExecuteConfig::AICPU_TS;
             param.engine = CommEngine::COMM_ENGINE_AICPU_TS;
@@ -3907,15 +3921,25 @@ HcclResult ApplyOpExpansionMode(OpParam& param, HcclOpExpansionMode finalMode)
             CHK_RET(RegisterKernel());
             HCCL_DEBUG("[ApplyOpExpansionMode] AIV_ONLY mode selected.");
             break;
-        case static_cast<HcclOpExpansionMode>(opExpansionModeCcuMs):
+        case static_cast<HcclOpExpansionMode>(HCCL_OP_EXPANSION_EXT_CCU_MS):
             param.opExecuteConfig = OpExecuteConfig::CCU_MS;
             param.engine = CommEngine::COMM_ENGINE_CCU;
             HCCL_DEBUG("[ApplyOpExpansionMode] CCU_MS mode selected.");
             break;
-        case static_cast<HcclOpExpansionMode>(opExpansionModeCcuSched):
+        case static_cast<HcclOpExpansionMode>(HCCL_OP_EXPANSION_EXT_CCU_SCHED):
             param.opExecuteConfig = OpExecuteConfig::CCU_SCHED;
             param.engine = CommEngine::COMM_ENGINE_CCU;
             HCCL_DEBUG("[ApplyOpExpansionMode] CCU_SCHED mode selected.");
+            break;
+        case static_cast<HcclOpExpansionMode>(HCCL_OP_EXPANSION_EXT_CCU_MS_ONLY):
+            param.opExecuteConfig = OpExecuteConfig::CCU_MS_ONLY;
+            param.engine = CommEngine::COMM_ENGINE_CCU;
+            HCCL_DEBUG("[ApplyOpExpansionMode] CCU_MS_ONLY mode selected.");
+            break;
+        case static_cast<HcclOpExpansionMode>(HCCL_OP_EXPANSION_EXT_CCU_SCHED_ONLY):
+            param.opExecuteConfig = OpExecuteConfig::CCU_SCHED_ONLY;
+            param.engine = CommEngine::COMM_ENGINE_CCU;
+            HCCL_DEBUG("[ApplyOpExpansionMode] CCU_SCHED_ONLY mode selected.");
             break;
         default:
             // 回退到aicpu

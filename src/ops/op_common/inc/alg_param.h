@@ -146,16 +146,25 @@ enum class OpExecuteConfig {
     CCU_SCHED = 6,
     AICPU = 7,
     HOSTCPU = 8,
-    CCU_FAIL
+    CCU_MS_ONLY = 9,
+    CCU_SCHED_ONLY = 10,
+    CCU_FAIL = 11
 };
 
 // OpExecuteConfig → 字符串(用于日志)
 static const std::map<OpExecuteConfig, const char*> ENGINE_STR_MAP = {
-    {OpExecuteConfig::DEFAULT, "DEFAULT"},     {OpExecuteConfig::HOSTCPU_TS, "HOSTCPU_TS"},
-    {OpExecuteConfig::AICPU_TS, "AICPU_TS"},   {OpExecuteConfig::AIV, "AIV"},
-    {OpExecuteConfig::AIV_ONLY, "AIV_ONLY"},   {OpExecuteConfig::CCU_MS, "CCU_MS"},
-    {OpExecuteConfig::CCU_SCHED, "CCU_SCHED"}, {OpExecuteConfig::AICPU, "AICPU"},
-    {OpExecuteConfig::HOSTCPU, "HOSTCPU"},     {OpExecuteConfig::CCU_FAIL, "CCU_FAIL"},
+    {OpExecuteConfig::DEFAULT, "DEFAULT"},
+    {OpExecuteConfig::HOSTCPU_TS, "HOSTCPU_TS"},
+    {OpExecuteConfig::AICPU_TS, "AICPU_TS"},
+    {OpExecuteConfig::AIV, "AIV"},
+    {OpExecuteConfig::AIV_ONLY, "AIV_ONLY"},
+    {OpExecuteConfig::CCU_MS, "CCU_MS"},
+    {OpExecuteConfig::CCU_SCHED, "CCU_SCHED"},
+    {OpExecuteConfig::CCU_MS_ONLY, "CCU_MS_ONLY"},
+    {OpExecuteConfig::CCU_SCHED_ONLY, "CCU_SCHED_ONLY"},
+    {OpExecuteConfig::AICPU, "AICPU"},
+    {OpExecuteConfig::HOSTCPU, "HOSTCPU"},
+    {OpExecuteConfig::CCU_FAIL, "CCU_FAIL"},
 };
 
 enum class OpMode { OFFLOAD = 0, OPBASE = 1, ACLGRAPH = 2, NEGOTIATIONOP = 3 };

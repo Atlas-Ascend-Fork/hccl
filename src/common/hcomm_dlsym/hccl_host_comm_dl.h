@@ -37,6 +37,13 @@ typedef HcclOpExpansionMode HcclConfigTypeOpExpansionMode;
 #define HCCL_CONFIG_TYPE_DETERMINISTIC 3
 #define HCCL_CONFIG_TYPE_UDI 4
 
+// HcclOpExpansionMode兼容处理定义：外部头文件枚举名随版本不一致或暂未收录，统一按数值引用，后续新增取值参照此处定义
+// 命名不得与枚举名重名，故加EXT段区分
+#define HCCL_OP_EXPANSION_EXT_CCU_MS 4
+#define HCCL_OP_EXPANSION_EXT_CCU_SCHED 5
+#define HCCL_OP_EXPANSION_EXT_CCU_MS_ONLY 7
+#define HCCL_OP_EXPANSION_EXT_CCU_SCHED_ONLY 8
+
 #ifdef __cplusplus
 extern "C" {
 #endif

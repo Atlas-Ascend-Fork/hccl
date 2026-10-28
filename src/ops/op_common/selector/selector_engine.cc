@@ -76,6 +76,10 @@ static std::vector<OpExecuteConfig> GetEnginePriority(OpExecuteConfig opExecuteC
                 OpExecuteConfig::HOSTCPU};
         case OpExecuteConfig::CCU_SCHED:
             return {OpExecuteConfig::CCU_SCHED, OpExecuteConfig::AICPU_TS, OpExecuteConfig::HOSTCPU};
+        case OpExecuteConfig::CCU_MS_ONLY:
+            return {OpExecuteConfig::CCU_MS};
+        case OpExecuteConfig::CCU_SCHED_ONLY:
+            return {OpExecuteConfig::CCU_SCHED};
         case OpExecuteConfig::AIV:
             return {OpExecuteConfig::AIV, OpExecuteConfig::AICPU_TS, OpExecuteConfig::HOSTCPU};
         case OpExecuteConfig::AIV_ONLY:
@@ -89,19 +93,36 @@ static std::vector<OpExecuteConfig> GetEnginePriority(OpExecuteConfig opExecuteC
     }
 }
 
-void SelectorEngine::LogAivOnlyNotMatch(const OpParam& param, const TopoInfoWithNetLayerDetails* topoInfo)
+// only 模式(AIV_ONLY/CCU_MS_ONLY/CCU_SCHED_ONLY)对应诊断的基引擎
+static OpExecuteConfig GetOnlyModeDiagnoseEngine(OpExecuteConfig opExecuteConfig)
+{
+    switch (opExecuteConfig) {
+        case OpExecuteConfig::CCU_MS_ONLY:
+            return OpExecuteConfig::CCU_MS;
+        case OpExecuteConfig::CCU_SCHED_ONLY:
+            return OpExecuteConfig::CCU_SCHED;
+        case OpExecuteConfig::AIV_ONLY:
+            return OpExecuteConfig::AIV;
+        default:
+            return opExecuteConfig;
+    }
+}
+
+void SelectorEngine::LogOnlyModeNotMatch(
+    const OpParam& param, const TopoInfoWithNetLayerDetails* topoInfo, OpExecuteConfig engine)
 {
     HCCL_ERROR(
-        "Failed to select AIV algorithm while configured as AIV_ONLY. "
+        "Failed to select %s algorithm while configured as %s. "
         "Current topology: topoLevelNums=%u, level0Topo=%u, level0PcieMix=%d, level2UbRtp=%d, "
         "Level1Nhr=%d, userRankSize=%u. opType=%d, dataType=%d, dataSize=%llu, reduceOp=%d.",
-        topoInfo->topoLevelNums, static_cast<uint32_t>(topoInfo->level0Topo), static_cast<int>(topoInfo->level0PcieMix),
+        ENGINE_STR_MAP.at(engine), ENGINE_STR_MAP.at(param.opExecuteConfig), topoInfo->topoLevelNums,
+        static_cast<uint32_t>(topoInfo->level0Topo), static_cast<int>(topoInfo->level0PcieMix),
         static_cast<int>(topoInfo->level2UbRtp), static_cast<int>(topoInfo->Level1Nhr), topoInfo->userRankSize,
         static_cast<int>(param.opType), static_cast<int>(param.DataDes.dataType), param.inputSize,
         static_cast<int>(param.reduceType));
 
-    // 回溯检查所有 AIV 算法被过滤的原因
-    HCCL_ERROR("[SelectorEngine] AIV algorithm filter details:");
+    // 回溯检查所有该引擎算法被过滤的原因
+    HCCL_ERROR("[SelectorEngine] %s algorithm filter details:", ENGINE_STR_MAP.at(engine));
     const AllAlgos* allAlgos = GetAllAlgos();
     if (allAlgos == nullptr) {
         return;
@@ -112,7 +133,7 @@ void SelectorEngine::LogAivOnlyNotMatch(const OpParam& param, const TopoInfoWith
             continue;
         }
         const AlgAttrs* attrs = AlgAttrsRegistry::Instance().Get(alg.algName);
-        if (attrs == nullptr || attrs->engine != OpExecuteConfig::AIV) {
+        if (attrs == nullptr || attrs->engine != engine) {
             continue;
         }
         std::string algName = alg.algName;
@@ -243,9 +264,18 @@ SelectorEngine::Run(HcclComm comm, OpParam& param, TopoInfoWithNetLayerDetails* 
         "[SelectorEngine] Run start, opType=%d, opExecuteConfig=%d.", static_cast<int>(param.opType),
         static_cast<int>(param.opExecuteConfig));
 
-    if (param.opExecuteConfig != OpExecuteConfig::AIV_ONLY && AutoSelectorBase::IsRollBackAiv(param, topoInfo)) {
-        HCCL_INFO("[SelectorEngine] Need to roll back AIV algo, opType=%d.", static_cast<int>(param.opType));
-        param.opExecuteConfig = OpExecuteConfig::AIV_ONLY;
+    if (AutoSelectorBase::IsRollBackAiv(param, topoInfo)) {
+        if (param.opExecuteConfig == OpExecuteConfig::CCU_MS_ONLY
+            || param.opExecuteConfig == OpExecuteConfig::CCU_SCHED_ONLY) {
+            HCCL_ERROR(
+                "[SelectorEngine] need to roll back AIV algo, opType=%d, ccu only mode does not support fallback.",
+                static_cast<int>(param.opType));
+            return HCCL_E_NOT_SUPPORT;
+        }
+        if (param.opExecuteConfig != OpExecuteConfig::AIV_ONLY) {
+            HCCL_INFO("[SelectorEngine] Need to roll back AIV algo, opType=%d.", static_cast<int>(param.opType));
+            param.opExecuteConfig = OpExecuteConfig::AIV_ONLY;
+        }
     }
 
     // step 0: tuner 初始化（每通信域仅一次，独立于 costModel 引擎副本）
@@ -288,8 +318,9 @@ SelectorEngine::Run(HcclComm comm, OpParam& param, TopoInfoWithNetLayerDetails* 
 
     if (ret != HCCL_SUCCESS) {
         HCCL_ERROR("[SelectorEngine] Run failed, no algorithm selected.");
-        if (param.opExecuteConfig == OpExecuteConfig::AIV_ONLY) {
-            LogAivOnlyNotMatch(param, topoInfo);
+        if (param.opExecuteConfig == OpExecuteConfig::AIV_ONLY || param.opExecuteConfig == OpExecuteConfig::CCU_MS_ONLY
+            || param.opExecuteConfig == OpExecuteConfig::CCU_SCHED_ONLY) {
+            LogOnlyModeNotMatch(param, topoInfo, GetOnlyModeDiagnoseEngine(param.opExecuteConfig));
         }
         return ret;
     }

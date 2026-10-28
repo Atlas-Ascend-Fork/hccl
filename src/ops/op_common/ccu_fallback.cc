@@ -27,8 +27,6 @@ constexpr int32_t NEGOTIATION_SUCCESS_VAL = 0x5a5a5a5a;
 constexpr int32_t NEGOTIATION_FAIL_VAL = 0x00000000;
 // 通信域状态回调统一注册名：同名覆盖幂等（cb与args恒定），回调按comm动态查询协商tag判定归属
 constexpr char CCU_NEGO_RESOURCE_CALLBACK[] = "ccu_nego_resource_callback";
-static constexpr uint32_t opExpansionModeCcuMs = 4;
-static constexpr uint32_t opExpansionModeCcuSched = 5;
 // HcclCommConfig.hcclOpExpansionMode取值: 0:默认 1:host 2:aicpu 3:aiv，与HcclOpExpansionMode枚举值空间不同
 static constexpr uint32_t commConfigOpExpansionAicpu = 2;
 
@@ -42,6 +40,8 @@ constexpr uint64_t SEND_BUF_SIZE = sizeof(CheckParamInfo);
 static constexpr uint32_t EXEC_CONFIG_LEVEL_CCU_MS = 3;
 static constexpr uint32_t EXEC_CONFIG_LEVEL_CCU_SCHED = 2;
 
+// 入参必为归一化后的基模式：CCU only 模式在 Selector() 命中 CCU 算法后已归一化为
+// CCU_MS/CCU_SCHED（见 op_common.cc），跨 rank 协商交换与比较的配置不会出现 *_ONLY。
 static uint32_t GetOpExecuteConfigLevel(OpExecuteConfig config)
 {
     switch (config) {
@@ -390,8 +390,10 @@ static HcclResult IsCommExpansionModeCcu(HcclComm comm, bool& isCommCcuMode)
     CHK_RET(
         hcommFunction.dlHcclConfigGetInfo(comm, HcclConfigType::HCCL_CONFIG_TYPE_OP_EXPANSION_MODE, infoLen, &mode));
 
-    if (mode == static_cast<HcclOpExpansionMode>(opExpansionModeCcuMs)
-        || mode == static_cast<HcclOpExpansionMode>(opExpansionModeCcuSched)) {
+    if (mode == static_cast<HcclOpExpansionMode>(HCCL_OP_EXPANSION_EXT_CCU_MS)
+        || mode == static_cast<HcclOpExpansionMode>(HCCL_OP_EXPANSION_EXT_CCU_SCHED)
+        || mode == static_cast<HcclOpExpansionMode>(HCCL_OP_EXPANSION_EXT_CCU_MS_ONLY)
+        || mode == static_cast<HcclOpExpansionMode>(HCCL_OP_EXPANSION_EXT_CCU_SCHED_ONLY)) {
         isCommCcuMode = true;
     }
 
@@ -566,6 +568,13 @@ HcclResult CheckCcuParamAndFallback(
     CHK_RET(CompareCcuParam(recvInfos, rankSize, param, lowestConfig));
 
     if (lowestConfig != param.opExecuteConfig) {
+        if (param.commOpExpansionMode == static_cast<HcclOpExpansionMode>(HCCL_OP_EXPANSION_EXT_CCU_MS_ONLY)
+            || param.commOpExpansionMode == static_cast<HcclOpExpansionMode>(HCCL_OP_EXPANSION_EXT_CCU_SCHED_ONLY)) {
+            HCCL_ERROR(
+                "[%s] config mismatch, local[%u] vs lowest[%u], ccu only mode does not support fallback.", __func__,
+                static_cast<uint32_t>(param.opExecuteConfig), static_cast<uint32_t>(lowestConfig));
+            return HCCL_E_NOT_SUPPORT;
+        }
         HCCL_INFO(
             "[%s] config mismatch, local[%u] vs lowest[%u], fallback.", __func__,
             static_cast<uint32_t>(param.opExecuteConfig), static_cast<uint32_t>(lowestConfig));

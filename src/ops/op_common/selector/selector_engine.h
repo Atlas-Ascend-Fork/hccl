@@ -41,8 +41,9 @@ private:
 
     HcclResult SelectMinCost(const CostTable& ct, OpParam& param, std::string& algName);
 
-    // AIV_ONLY 模式下选不到 AIV 算法时打印 ERROR，包含当前拓扑条件
-    static void LogAivOnlyNotMatch(const OpParam& param, const TopoInfoWithNetLayerDetails* topoInfo);
+    // only 模式(AIV_ONLY/CCU_MS_ONLY/CCU_SCHED_ONLY)选不到对应引擎算法时打印 ERROR，包含当前拓扑条件
+    static void
+    LogOnlyModeNotMatch(const OpParam& param, const TopoInfoWithNetLayerDetails* topoInfo, OpExecuteConfig engine);
 
     static std::string QueryTemplateInfo(const std::string& algName);
 
