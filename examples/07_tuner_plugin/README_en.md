@@ -54,7 +54,7 @@ Prerequisites:
 
 - Python >= 3.8
 - `mpirun` in PATH (MPICH or Open MPI). For version requirements, see the
-  [official install guide (Chinese)](https://gitcode.com/cann/oam-tools/blob/master/docs/zh/hccl_test/inst_and_compile.md):
+  [official install guide (Chinese)](https://gitcode.com/cann/oam-tools/blob/master/docs/zh/user_guide/hccl_test/inst_and_compile.md):
   Open MPI 4.1.5 across all products (the only version supporting IPv6); MPICH
   4.1.3 for 950/A3 series, 3.2.1 for A2/Atlas series
 - CANN environment sourced (`$ASCEND_HOME_PATH` set), with hccl_test at
@@ -76,7 +76,7 @@ Command example:
 
 ```bash
 # Environment variables (per the official hccl_test execution guide (Chinese):
-# https://gitcode.com/cann/oam-tools/blob/master/docs/zh/hccl_test/execution.md)
+# https://gitcode.com/cann/oam-tools/blob/master/docs/zh/user_guide/hccl_test/execution.md)
 ulimit -n 65535
 export INSTALL_DIR=/usr/local/Ascend/cann
 source $INSTALL_DIR/set_env.sh

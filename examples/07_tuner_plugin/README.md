@@ -51,7 +51,7 @@ costTable 找出当前环境真正支持的算法，存成名单 JSON；然后�
 运行前请确认：
 
 - Python >= 3.8
-- `mpirun` 在 PATH 中（MPICH 或 Open MPI 均可）。版本要求见[官方安装文档](https://gitcode.com/cann/oam-tools/blob/master/docs/zh/hccl_test/inst_and_compile.md)：
+- `mpirun` 在 PATH 中（MPICH 或 Open MPI 均可）。版本要求见[官方安装文档](https://gitcode.com/cann/oam-tools/blob/master/docs/zh/user_guide/hccl_test/inst_and_compile.md)：
   Open MPI 统一 4.1.5（IPv6 仅此版本支持）；MPICH 按产品：950/A3 系 4.1.3，A2/Atlas 系 3.2.1
 - 已 source CANN 环境变量（`$ASCEND_HOME_PATH` 已设置），hccl_test 位于
   `$ASCEND_HOME_PATH/tools/hccl_test/bin/`（可用 `--bin-dir` 改）；
@@ -65,7 +65,7 @@ costTable 找出当前环境真正支持的算法，存成名单 JSON；然后�
 命令示例：
 
 ```bash
-# 环境变量（参考 hccl_test 官方执行文档 https://gitcode.com/cann/oam-tools/blob/master/docs/zh/hccl_test/execution.md）
+# 环境变量（参考 hccl_test 官方执行文档 https://gitcode.com/cann/oam-tools/blob/master/docs/zh/user_guide/hccl_test/execution.md）
 ulimit -n 65535
 export INSTALL_DIR=/usr/local/Ascend/cann
 source $INSTALL_DIR/set_env.sh

@@ -5,7 +5,7 @@
 Collective communication is a global collaborative behavior within a communicator. It is often difficult to analyze the performance issues of collective communication using the profile data of only one rank. Therefore, you need to collect the profile data of all ranks to accurately identify the performance bottleneck of collective communication. Currently, profile data can be collected in the following two ways:
 
 - Method 1: Refer to *[Performance Tuning Tool User Guide](https://hiascend.com/en/document/redirect/CannCommunityToolProfiling)* to collect profile data.
-- Method 2: Refer to the *[HCCL Performance Tester User Guide](https://gitcode.com/cann/oam-tools/blob/master/docs/zh/hccl_test/README.md)* and use HCCL Test to collect profile data and test performance.
+- Method 2: Refer to the *[HCCL Performance Tester User Guide](https://gitcode.com/cann/oam-tools/blob/master/docs/zh/user_guide/hccl_test/README.md)* and use HCCL Test to collect profile data and test performance.
 
   Follow the steps below to run HCCL Test for collecting profile data:
 

@@ -1,10 +1,10 @@
 # Source Code Build
 
-<!-- md-trans-meta sourceCommit=unknown translatedAt=2026-09-12T08:42:08.608Z pushedAt=2026-09-18T08:03:58.155Z -->
+This topic describes how to build, install, and test the HCCL source code. For environment preparation, you can choose [Docker Deployment](#scenario-1-docker-deployment) or [Host Deployment](#scenario-2-host-deployment).
 
 ## Environment Preparation
 
-This project supports source code build. Before build and run, complete basic environment setup and source code download by following the steps below. Ensure that the NPU driver, firmware, and CANN software are installed.
+This project supports source code build. Before building, complete the basic environment setup and source code download by following the steps below, and install the CANN Toolkit package. The NPU driver, firmware, and CANN ops package are runtime dependencies. If you only compile the source code of this project, you can skip installing them; however, install them before running or on-board testing.
 
 ### Prerequisites
 
@@ -17,17 +17,90 @@ The following lists the software dependencies for building this project. Ensure 
 - ccache (optional, used to speed up recompilation)
 - GoogleTest (only required when running UTs; release-1.14.0 recommended)
 
-### Installing the CANN Software Package
+### Scenario 1: Docker Deployment
 
-1. **Install the Driver and Firmware (Runtime Dependency)**
+**1. Install the driver and firmware**: Install Docker on the host machine, and install the matching driver and firmware by referring to the *[CANN Software Installation Guide](https://www.hiascend.com/en/document/redirect/CannCommunityInstWizard)*.
+
+**2. Download the build image**: The A3 image is used as an example below. Select and run one command based on the CPU architecture of the host machine.
+
+```bash
+# x86_64
+docker pull --platform=amd64 swr.cn-south-1.myhuaweicloud.com/ascendhub/cann:9.0.1-a3-ubuntu22.04-py3.12-devel
+# aarch64
+docker pull --platform=arm64 swr.cn-south-1.myhuaweicloud.com/ascendhub/cann:9.0.1-a3-ubuntu22.04-py3.12-devel
+```
+
+The image comes with build tools and CANN software pre-installed, and you enter the container as user `root` by default. For other products and versions, select an image in [Ascend-CANN Image](https://www.hiascend.com/developer/ascendhub/detail/17da20d1c2b6493cb38765adeba85884). The image version must match the source code branch, driver, and firmware. When developing the master version or changing the CANN version, you can update CANN in the container by referring to [Installing the CANN Software Package](#installing-the-cann-software-package).
+
+**3. Create and enter the container**: The following assumes that `/dev/davinci0` and `/dev/davinci1` are used and the driver is installed in `/usr/local/Ascend`.
+
+```bash
+image=swr.cn-south-1.myhuaweicloud.com/ascendhub/cann:9.0.1-a3-ubuntu22.04-py3.12-devel
+docker run --name env_for_hccl_build --network host \
+  --device /dev/davinci0 \
+  --device /dev/davinci1 \
+  --device /dev/davinci_manager \
+  --device /dev/devmm_svm \
+  --device /dev/hisi_hdc \
+  -v /usr/local/dcmi:/usr/local/dcmi \
+  -v /usr/local/bin/npu-smi:/usr/local/bin/npu-smi \
+  -v /usr/bin/hccn_tool:/usr/bin/hccn_tool \
+  -v /usr/local/Ascend/driver/lib64:/usr/local/Ascend/driver/lib64 \
+  -v /usr/local/Ascend/driver/tools:/usr/local/Ascend/driver/tools \
+  -v /usr/local/Ascend/driver/version.info:/usr/local/Ascend/driver/version.info \
+  -v /etc/ascend_install.info:/etc/ascend_install.info \
+  -it "${image}" bash
+```
+
+Adjust the device numbers and mount paths according to the actual environment. When compiling only, the device and driver-related mounts can be omitted; retain them for on-board testing. For more options, run `docker run --help`.
+
+#### A5 (Atlas 950) Container Configuration
+
+A5 uses a matching image and mounts `/dev/ummu`, `/dev/uburma`, and the driver `topo` directory to support topology discovery and UB communication; `/dev/devmm_svm` does not need to be mounted. Two devices are still used as an example below:
+
+```bash
+image=swr.cn-south-1.myhuaweicloud.com/ascendhub/cann:9.1.0-950-openeuler24.03-py3.12
+docker run --name env_for_hccl_build_a5 --network host \
+  --device /dev/davinci0 \
+  --device /dev/davinci1 \
+  --device /dev/davinci_manager \
+  --device /dev/hisi_hdc \
+  --device /dev/ummu \
+  --device /dev/uburma \
+  -v /usr/local/dcmi:/usr/local/dcmi \
+  -v /usr/local/bin/npu-smi:/usr/local/bin/npu-smi \
+  -v /usr/bin/hccn_tool:/usr/bin/hccn_tool \
+  -v /usr/local/Ascend/driver/lib64:/usr/local/Ascend/driver/lib64 \
+  -v /usr/local/Ascend/driver/tools:/usr/local/Ascend/driver/tools \
+  -v /usr/local/Ascend/driver/topo:/usr/local/Ascend/driver/topo \
+  -v /usr/local/Ascend/driver/version.info:/usr/local/Ascend/driver/version.info \
+  -v /etc/ascend_install.info:/etc/ascend_install.info \
+  -it "${image}" bash
+```
+
+#### Building and Testing in the Container
+
+After entering the container, load the CANN environment variables. The script path depends on the actual installation location of the selected image:
+
+```bash
+source /usr/local/Ascend/ascend-toolkit/set_env.sh
+```
+
+Then proceed with [Build and Installation](#build-and-installation) and [Test](#test). Before using HCCL Test, prepare MPI and build the tool in the container by following the matching [Tool Guide](https://www.hiascend.com/en/document/redirect/CannCommunityToolHcclTest); the test devices must be consistent with the container mapping. If you directly test the HCCL bundled with the image, you do not need to rebuild HCCL or disable signature verification.
+
+### Scenario 2: Host Deployment
+
+#### Installing the CANN Software Package
+
+1. **Install the driver and firmware (runtime dependency)**
 
     For downloading and installing the driver and firmware, see "Preparing Software Packages" and "Installing the NPU Driver and Firmware" in *[CANN Software Installation Guide](https://www.hiascend.com/en/document/redirect/CannCommunityInstWizard)*. The driver and firmware are runtime dependencies. If you only need to compile the source code of this project, you can skip this step.
 
-2. **Install the CANN Software Package**
+2. **Install the CANN software package**
 
-    - **Use case 1: Try the master version or develop based on the master version**
+    - **Use case 1: Try the master version capabilities or develop based on the master version**
 
-        Click [here](https://ascend.devcloud.huaweicloud.com/artifactory/cann-run-mirror/software/master/), select the latest version, and download the corresponding software package based on the product model and environment architecture. The installation commands are as follows. For more instructions, see *[CANN Software Installation Guide](https://www.hiascend.com/en/document/redirect/CannCommunityInstWizard)*.
+        Click the [download link](https://ascend.devcloud.huaweicloud.com/artifactory/cann-run-mirror/software/master/), select the latest version, and download the corresponding software package based on the product model and environment architecture. The installation commands are as follows. For more instructions, see *[CANN Software Installation Guide](https://www.hiascend.com/en/document/redirect/CannCommunityInstWizard)*.
 
         1. Install the CANN Toolkit.
 
@@ -35,12 +108,12 @@ The following lists the software dependencies for building this project. Ensure 
             # Ensure that the installation package has the execute permission.
             chmod +x Ascend-cann-toolkit_${cann_version}_linux-${arch}.run
             # Installation command
-           ./Ascend-cann-toolkit_${cann_version}_linux-${arch}.run --install --install-path=${install_path}
-           ```
+            ./Ascend-cann-toolkit_${cann_version}_linux-${arch}.run --install --install-path=${install_path}
+            ```
 
         2. Install the CANN ops package (runtime dependency).
 
-            This package is not required if you only compile the source code of this project.
+            The CANN ops package is a runtime dependency. If you only compile the source code of this project, you can skip installing this package.
 
             ```bash
             # Ensure that the installation package has the execute permission.
@@ -49,16 +122,16 @@ The following lists the software dependencies for building this project. Ensure 
             ./Ascend-cann-${soc_name}-ops_${cann_version}_linux-${arch}.run --install --install-path=${install_path}
             ```
 
-        - ${cann_version}: CANN software package version number.
-        - ${arch}: Indicates the CPU architecture, such as aarch64 or x86_64.
-        - \$\{soc_name\}: NPU model.
+        - \$\{cann_version\}: CANN software package version number.
+        - \$\{arch\}: CPU architecture, such as aarch64 or x86_64.
+        - \$\{soc_name\}: NPU model name.
         - \$\{install_path\}: specified installation path. The CANN ops package must be installed in the same path as the CANN Toolkit. For user `root`, the default installation path is `/usr/local/Ascend`.
 
-    - **Use case 2: Try a released version or develop based on a released version**
+    - **Use case 2: Try the capabilities of a released version or develop based on a released version**
 
         Visit the [CANN download center](https://www.hiascend.com/en/cann/download), select a release (only CANN 8.5.0 and later versions are supported), download the corresponding software package based on the product model and environment architecture, and then complete the installation by following the commands provided on the webpage.
 
-### Environment Verification
+#### Environment Verification
 
 After installing the CANN software packages, verify that the environment is functional.
 
@@ -78,7 +151,7 @@ After installing the CANN software packages, verify that the environment is func
     cat /usr/local/Ascend/cann/<arch>-linux/ascend_ops_install.info
    ```
 
-### Environment Variable Configuration
+#### Environment Variable Configuration
 
 Choose the appropriate command to make the environment variables take effect.
 
@@ -130,7 +203,7 @@ Install the built HCCL software package:
 bash ./build_out/cann-hccl_<version>_linux-<arch>.run --full
 ```
 
-Note: During build, replace the software package name in the preceding command with the actual name.
+Note: When building, replace the software package name in the preceding command with the actual software package name.
 
 After installation, the user-built HCCL software package replaces the HCCL-related software in the installed CANN Toolkit package.
 
@@ -142,7 +215,7 @@ If you want to uninstall the built HCCL software package and restore the state a
 bash ./build_out/cann-hccl_<version>_linux-<arch>.run --uninstall
 ```
 
-Note: When uninstalling, replace the software package name in the preceding command with the actual name.
+Note: When uninstalling, replace the software package name in the preceding command with the actual software package name.
 
 ## Test
 
