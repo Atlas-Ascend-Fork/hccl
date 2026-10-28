@@ -62,6 +62,8 @@
     该配置项仅支持Broadcast、Reduce、AllReduce、ReduceScatter、AllGather算子，当前仅支持单机场景。
     针对Reduce、AllReduce、ReduceScatter算子，数据类型仅支持int16、int32、float16、float32、bfp16。其他通信算子支持的数据类型可参见对应的集合通信接口参考。
 
+    CCU资源扩容及额外实例的复用规则参见下文CCU_SCHED小节的说明。
+
   - **CCU_SCHED**：代表通信算子在CCU展开，使用调度模式。
 
     调度模式指使用CCU作为调度器，向UB引擎调度UB WQE任务。调度模式下不使用CcuBuffer，直接在两个rank间进行片上内存到片上内存的数据传输。
@@ -74,7 +76,15 @@
 
     此模式下，ReduceScatterV、AllGatherV算子仅支持单Server场景。
 
-    当CCU资源不足时，系统会自动切换为AI_CPU模式。
+    AlltoAllV使用CCU调度算法执行时，若通信域已有CCU实例的容量不能满足其资源需求，HCCL会在设备剩余资源允许的情况下自动申请一份额外CCU实例，并使用该实例执行算子，无需额外配置。
+
+    - 每个通信域最多创建一份额外CCU实例。原实例和额外实例分别承载完整的算子资源需求，容量不叠加使用。
+    - 同一通信域内，后续CCU算子在需要申请资源时优先复用已有的额外实例；额外实例容量不足时，不再继续扩容，也不退查原实例。
+    - 支持单算子流程和图模式的资源申请，图回放不重复创建额外实例。
+    - 额外实例由HCCL管理，在调用[HcclCommDestroy](https://gitcode.com/cann/hcomm/blob/master/docs/zh/api_ref/comm_mgr_c/HcclCommDestroy.md)销毁通信域时通过回调释放，业务无需单独释放。
+    - 扩容需使用配套版本的HCOMM库。需要创建额外实例但HCOMM不支持所需销毁回调能力时，不创建额外实例，沿用回退流程。
+
+    在无法获得满足需求的CCU资源时，系统会自动切换为AI_CPU模式。
   <!-- end id2 -->
 
   <!-- npu="A3" id3 -->

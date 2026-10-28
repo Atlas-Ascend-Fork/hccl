@@ -17,7 +17,7 @@
 - 新增CCU调度模式，但受CCU硬件资源规格限制，建议结合实际业务场景灵活使用。
     CCU适用场景：64P以内通信算子（AlltoAllV算子16P内）场景可考虑开启CCU模式，用以提升通信性能。通信域间CCU资源无法复用，多通信域场景下需评估CCU硬件资源是否充足。
     CCU配置方式：HCCL集合通信默认使用AI CPU模式，如需开启CCU，提供如下两种配置方式：
-        1. 通过环境变量开启CCU调度模式时，资源不足情况下HCCL会回退为AI CPU模式，配置方法详见[HCCL_OP_EXPANSION_MODE](./hccl_env/HCCL_OP_EXPANSION_MODE.md)。
+        1. 通过环境变量开启CCU调度模式时，AlltoAllV算子可在设备资源允许的情况下自动申请额外CCU实例；无法获得满足需求的CCU资源时，HCCL会回退为AI CPU模式。配置方法及扩容约束详见[《HCCL_OP_EXPANSION_MODE》](./hccl_env/HCCL_OP_EXPANSION_MODE.md)。
         2. 基于通信域粒度配置CCU使能，可将CCU通信域独立管理，按需规划使用CCU资源，配置方法详见[HcclCommInitClusterInfoConfig](https://gitcode.com/cann/hcomm/blob/master/docs/zh/api_ref/comm_mgr_c/HcclCommInitClusterInfoConfig.md)。
     CCU硬件资源规格：
 

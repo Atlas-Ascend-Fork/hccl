@@ -111,9 +111,11 @@ HcclResult GetGraphModeBuffers(
     HcclComm comm, ChannelHandle channelHandle, const char* inputBuffTag, const char* outputBuffTag,
     ChannelInfo& channel);
 // opExpansionMode 为通信域原始展开模式，影响默认资源阈值（如 CCU_MS 模式 LOOP/CCU_BUF 默认值更大）
+// allowCreateExtraIns根据HcclGetDeviceType和opType设置，设备代际由EqualToOrGreaterThan950判断；
+// 仅A5及后续代际的AlltoAllV为true，允许原实例不足时创建额外实例；已有额外实例可由所有CCU算子复用。
 HcclResult HcclGetCcuKernel(
     HcclComm comm, HcclOpExpansionMode opExpansionMode, AlgResourceRequest& resRequest,
-    std::unique_ptr<AlgResourceCtxSerializable>& resCtxHost);
+    std::unique_ptr<AlgResourceCtxSerializable>& resCtxHost, bool allowCreateExtraIns);
 
 HcclResult HcclGetChannelForCcu(HcclComm comm, const OpParam& param, AlgResourceRequest& resRequest);
 
