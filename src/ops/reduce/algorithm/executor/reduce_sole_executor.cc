@@ -380,7 +380,7 @@ REGISTER_EXEC_V2(
     HcclCMDType::HCCL_CMD_REDUCE, CcuSchedReduceSoleMesh, ReduceSoleExecutor, TopoMatchOneLevel,
     CcuTempReduceMesh1DMem2Mem);
 REGISTER_ALG_ATTRS(
-    CcuSchedReduceSoleMesh, topo.maxSupportRankSize = CCU_SCHED_MAX_RANK_SIZE; topo.maxTopoLevelNum = 1;
+    CcuSchedReduceSoleMesh, topo.maxSupportRankSize = REDUCE_MESH_MEM2MEM_MAX_RANK_SIZE; topo.maxTopoLevelNum = 1;
     topo.supportLevel0Topos = LEVEL0_TOPO_MESH_1D | LEVEL0_TOPO_MESH_1D_CLOS; topo.isSupportLevel0PcieMix = true;
     topo.requireAllMeshConnected = true; topo.topoCustomCheck = [](const TopoInfoWithNetLayerDetails* topo) -> bool {
         if (topo->level0Topo == Level0Shape::MESH_1D_CLOS) {
@@ -394,7 +394,7 @@ REGISTER_ALG_ATTRS(
 REGISTER_EXEC_V2(
     HcclCMDType::HCCL_CMD_REDUCE, CcuMSReduceSoleMesh, ReduceSoleExecutor, TopoMatchOneLevel, CcuTempReduceMesh1D);
 REGISTER_ALG_ATTRS(
-    CcuMSReduceSoleMesh, topo.maxTopoLevelNum = 1;
+    CcuMSReduceSoleMesh, topo.maxSupportRankSize = CCU_MS_INTERLEAVE; topo.maxTopoLevelNum = 1;
     topo.supportLevel0Topos = LEVEL0_TOPO_MESH_1D | LEVEL0_TOPO_MESH_1D_CLOS; topo.isSupportLevel0PcieMix = true;
     topo.requireAllMeshConnected = true; topo.topoCustomCheck = [](const TopoInfoWithNetLayerDetails* topo) -> bool {
         if (topo->level0Topo == Level0Shape::MESH_1D_CLOS) {

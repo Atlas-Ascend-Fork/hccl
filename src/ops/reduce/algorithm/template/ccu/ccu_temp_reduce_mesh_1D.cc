@@ -14,7 +14,7 @@
 #include "ccu_launch_dl.h"
 
 namespace ops_hccl {
-constexpr u32 MAX_RANK_SIZE_FOR_MESH_1D = 8;
+constexpr u32 MAX_RANK_SIZE_FOR_MESH_1D = static_cast<u32>(CCU_MS_INTERLEAVE);
 
 std::vector<CostModelParam> CcuTempReduceMesh1D::CalcCostCoeff(CalcCostCoeffParam param)
 {
@@ -61,6 +61,12 @@ HcclResult CcuTempReduceMesh1D::CalcRes(
     HcclComm comm, const OpParam& param, const TopoInfoWithNetLayerDetails* topoInfo,
     AlgResourceRequest& resourceRequest)
 {
+    CHK_PRT_RET(
+        templateRankSize_ > MAX_RANK_SIZE_FOR_MESH_1D,
+        HCCL_ERROR(
+            "[CcuTempReduceMesh1D::CalcRes] rankSize[%u] exceeds max[%u]", templateRankSize_,
+            MAX_RANK_SIZE_FOR_MESH_1D),
+        HcclResult::HCCL_E_NOT_SUPPORT);
     resourceRequest.notifyNumOnMainThread = 0;
     resourceRequest.slaveThreadNum = 0;
     resourceRequest.ccuKernelNum.push_back(1);
@@ -141,6 +147,12 @@ HcclResult CcuTempReduceMesh1D::KernelRun(
     const OpParam& param, const TemplateDataParams& templateDataParams, TemplateResource& templateResource)
 {
     (void)param;
+    CHK_PRT_RET(
+        templateRankSize_ > MAX_RANK_SIZE_FOR_MESH_1D,
+        HCCL_ERROR(
+            "[CcuTempReduceMesh1D::KernelRun] rankSize[%u] exceeds max[%u]", templateRankSize_,
+            MAX_RANK_SIZE_FOR_MESH_1D),
+        HcclResult::HCCL_E_NOT_SUPPORT);
     buffInfo_ = templateDataParams.buffInfo;
 
     uint64_t inputAddr = PointerToAddr(buffInfo_.inputPtr) + buffInfo_.inBuffBaseOff;

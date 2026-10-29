@@ -550,8 +550,9 @@ REGISTER_EXECUTOR_BY_TWO_TEMPS(
     HcclCMDType::HCCL_CMD_REDUCE, CcuSchedReduceConcurMeshNHR, InsV2ReduceConcurrentExecutor, TopoMatchConcurrentV2,
     CcuTempReduceMesh1DMem2Mem, CcuTempReduceNHR1DMem2Mem);
 REGISTER_ALG_ATTRS(
-    CcuSchedReduceConcurMeshNHR, topo.maxTopoLevelNum = 1; topo.supportLevel0Topos = LEVEL0_TOPO_MESH_1D_CLOS;
-    op.isSupportProd = false; op.unsupportedDataTypes = UNSUPPORTED_64BIT;
+    CcuSchedReduceConcurMeshNHR, topo.maxSupportRankSize = REDUCE_MESH_MEM2MEM_MAX_RANK_SIZE; topo.maxTopoLevelNum = 1;
+    topo.supportLevel0Topos = LEVEL0_TOPO_MESH_1D_CLOS; op.isSupportProd = false;
+    op.unsupportedDataTypes = UNSUPPORTED_64BIT;
     topo.topoCustomCheck = [](const TopoInfoWithNetLayerDetails* topo) -> bool {
         return AutoSelectorBase::IsLayerAllConnetedWithTopo(topo, 0, CommTopo::COMM_TOPO_1DMESH);
     });
@@ -561,8 +562,9 @@ REGISTER_EXECUTOR_BY_TWO_TEMPS(
     HcclCMDType::HCCL_CMD_REDUCE, CcuMSReduceConcurMeshNHR, InsV2ReduceConcurrentExecutor, TopoMatchConcurrentV2,
     CcuTempReduceMesh1D, CcuTempReduceNHR1DMem2Mem);
 REGISTER_ALG_ATTRS(
-    CcuMSReduceConcurMeshNHR, topo.maxTopoLevelNum = 1; topo.supportLevel0Topos = LEVEL0_TOPO_MESH_1D_CLOS;
-    op.isSupportProd = false; op.unsupportedDataTypes = UNSUPPORTED_64BIT;
+    CcuMSReduceConcurMeshNHR, topo.maxSupportRankSize = CCU_MS_INTERLEAVE; topo.maxTopoLevelNum = 1;
+    topo.supportLevel0Topos = LEVEL0_TOPO_MESH_1D_CLOS; op.isSupportProd = false;
+    op.unsupportedDataTypes = UNSUPPORTED_64BIT;
     topo.topoCustomCheck = [](const TopoInfoWithNetLayerDetails* topo) -> bool {
         return AutoSelectorBase::IsLayerAllConnetedWithTopo(topo, 0, CommTopo::COMM_TOPO_1DMESH);
     });

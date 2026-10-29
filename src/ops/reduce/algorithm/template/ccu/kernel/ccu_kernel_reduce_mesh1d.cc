@@ -128,6 +128,7 @@ static CcuResult DoRepeatReduce(ReduceMesh1DContext& ctx)
 
     dst.addr = ctx.output[arg->rankId];
     dst.token = ctx.token[arg->rankId];
+    // GroupReduce 将本卡输入放入 root 槽，远端输入按 rank 顺序占其余槽。
     uint32_t curId = 0;
     for (uint32_t rankIdx = 0; rankIdx < arg->rankSize; rankIdx++) {
         if (rankIdx != arg->rootId) {
@@ -140,6 +141,7 @@ static CcuResult DoRepeatReduce(ReduceMesh1DContext& ctx)
     }
     localSrc.addr = ctx.input[arg->rankId];
     localSrc.token = ctx.token[arg->rankId];
+    HCCL_DEBUG("[CcuKernelReduceMesh1D] localRankSlot[%u] equals rootId", arg->rootId);
 
     CCU_IF(ctx.flag != 0)
     {
@@ -149,9 +151,9 @@ static CcuResult DoRepeatReduce(ReduceMesh1DContext& ctx)
             s.addr += ctx.inputRepeatStride;
         }
     }
-    GroupReduce(
+    CCU_CHK_RET(GroupReduce(
         ctx, arg->channels, arg->channelCount, dst, remoteSrc, localSrc, ctx.groupOpSize, ctx.dataType,
-        ctx.outputDataType, ctx.reduceOp, GetCcuVersion());
+        ctx.outputDataType, ctx.reduceOp, GetCcuVersion(), arg->rootId));
 
     return CCU_SUCCESS;
 }

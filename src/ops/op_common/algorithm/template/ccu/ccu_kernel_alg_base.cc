@@ -1146,7 +1146,8 @@ CcuResult GroupLocalReduce(
 {
     const uint32_t size = scratchOrg.size();
 
-    GroupLocalReduceVar var;
+    // loop body 持有变量地址；重复执行时须复用 ctx 中的变量。
+    GroupLocalReduceVar& var = ctx.GetGlrVar();
     ccu::Variable tmp;
     ccu::Variable loopParam;
     ccu::Variable sliceSize;

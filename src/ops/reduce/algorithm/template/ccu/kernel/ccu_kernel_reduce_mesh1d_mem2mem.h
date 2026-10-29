@@ -17,8 +17,15 @@
 #include "ccu_kernel_alg_base.h"
 
 namespace ops_hccl {
-constexpr uint64_t LOCAL_COPY_MS = 8;
-constexpr uint64_t LOOP_NUM = 8;
+
+// KernelRun、LoadArgs 和 FastLaunch 共用的 taskArgs 头部索引。
+constexpr uint32_t TASKARG_INPUT_ADDR = 0;
+constexpr uint32_t TASKARG_OUTPUT_ADDR = 1;
+constexpr uint32_t TASKARG_SCRATCH_ADDR = 2;
+constexpr uint32_t TASKARG_TOKEN = 3;
+constexpr uint32_t TASKARG_HEAD_SIZE = TASKARG_TOKEN + 1;
+// FastLaunch 通过此索引读取缓存的 slice 大小。
+constexpr uint32_t TASKARG_NORMAL_SLICE_SIZE = TASKARG_HEAD_SIZE + 2;
 
 struct CcuKernelArgReduceMesh1DMem2Mem : CcuKernelArgBase {
     uint64_t rankSize;
@@ -26,12 +33,6 @@ struct CcuKernelArgReduceMesh1DMem2Mem : CcuKernelArgBase {
     uint32_t rootId;
     OpParam opParam;
     std::vector<std::vector<uint32_t>> subCommRanks;
-};
-
-struct GroupReduceMesh1DMem2MemVar {
-    ccu::LocalAddr src[2];
-    ccu::LocalAddr dst[2];
-    ccu::Variable len[2];
 };
 
 struct ReduceMesh1DMem2MemContext : CcuKernelCtxBase {
@@ -48,20 +49,22 @@ struct ReduceMesh1DMem2MemContext : CcuKernelCtxBase {
     ccu::Variable inputRepeatStride;
     ccu::Variable outputRepeatStride;
     ccu::Variable normalSliceSize;
-    ccu::Variable lastSliceSize;
     ccu::Variable repeatNumVar;
     ccu::Variable flag;
-    ccu::Variable isInputOutputEqual;
-    std::vector<ccu::Variable> chunkSize;
-    ccu::Variable chunkOffset;
-
+    ccu::Variable scratchAddr;
     ccu::Event event;
 
     ccu::LocalAddr myInputAddr;
     ccu::RemoteAddr remoteInputAddr;
     ccu::LocalAddr dstAddr;
+    ccu::LocalAddr scratchBase;
+    ccu::LocalAddr scratchSlot;
+    ccu::LocalAddr readDst;
 
-    GroupOpSizeVars localGoSize;
+    // 每个 rank 对应一个归约源；root 槽指向本卡 input。
+    std::vector<ccu::LocalAddr> reduceSrc;
+
+    GroupOpSizeVars reduceGoSize;
 };
 
 CcuResult CcuReduceMesh1DMem2MemKernel(CcuKernelArg arg);

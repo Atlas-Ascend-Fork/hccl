@@ -210,6 +210,16 @@ struct CcuKernelCtxBase {
         return *gcVarPtr;
     }
 
+    // loop body 引用此变量，生命周期须覆盖同一 ctx 的重复执行。
+    std::unique_ptr<GroupLocalReduceVar> glrVarPtr;
+    GroupLocalReduceVar& GetGlrVar()
+    {
+        if (!glrVarPtr) {
+            glrVarPtr.reset(new GroupLocalReduceVar());
+        }
+        return *glrVarPtr;
+    }
+
     void CreateLoopEntity(std::string loopStr) { loopMap.emplace(loopStr, CcuLoopEntity()); }
 
     bool IsLoopEntityRegistered(std::string loopStr) { return loopMap.count(loopStr) != 0; }

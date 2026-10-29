@@ -208,8 +208,14 @@ HcclResult ReduceMesh1D::GatherData(
 {
     const BuffInfo& buffInfo = dataParams.buffInfo;
 
-    // 主流将数据从inBuff拷贝到outBuff
-    if (buffInfo.inBuffType != buffInfo.outBuffType) {
+    // root 输入进入自身 rank 槽，使后续归约的槽位与 root 无关。
+    if (buffInfo.inBuffType == BufferType::INPUT && buffInfo.outBuffType == BufferType::OUTPUT
+        && templateRankSize_ > 1u) {
+        const DataSlice dstSlice(
+            buffInfo.hcclBuff.addr, buffInfo.hcclBuffBaseOff + processSize_ * myIdx_, processSize_);
+        const DataSlice srcSlice(buffInfo.inputPtr, buffInfo.inBuffBaseOff, processSize_);
+        CHK_RET(static_cast<HcclResult>(LocalCopy(threads.at(0), srcSlice, dstSlice)));
+    } else if (buffInfo.inBuffType != buffInfo.outBuffType) {
         const DataSlice dstSlice(buffInfo.outputPtr, buffInfo.outBuffBaseOff, processSize_);
         const DataSlice srcSlice(buffInfo.inputPtr, buffInfo.inBuffBaseOff, processSize_);
         CHK_RET(static_cast<HcclResult>(LocalCopy(threads.at(0), srcSlice, dstSlice)));
@@ -266,20 +272,26 @@ HcclResult ReduceMesh1D::ReduceData(const TemplateDataParams& dataParams, const 
 
     DataSlice dstSlice(buffInfo.outputPtr, buffInfo.outBuffBaseOff, processSize_, count_);
 
-    for (u32 idx = 0; idx < subCommRanks_.at(0).size(); ++idx) {
-        if (buffInfo.inBuffType == BufferType::INPUT && buffInfo.outBuffType == BufferType::OUTPUT) {
-            if (idx == myIdx_) {
-                continue;
-            }
-        } else {
+    if (buffInfo.inBuffType == BufferType::INPUT && buffInfo.outBuffType == BufferType::OUTPUT) {
+        // 以 rank 0 槽为基数，按 rank 顺序归约。
+        HCCL_DEBUG("[ReduceMesh1D] fixed base slot[0], root input staged in slot[%u]", myIdx_);
+        DataSlice baseSlice(buffInfo.hcclBuff.addr, buffInfo.hcclBuffBaseOff, processSize_, count_);
+        CHK_RET(static_cast<HcclResult>(LocalCopy(threads.at(0), baseSlice, dstSlice)));
+
+        for (u32 idx = 1; idx < subCommRanks_.at(0).size(); ++idx) {
+            DataSlice srcSlice(
+                buffInfo.hcclBuff.addr, buffInfo.hcclBuffBaseOff + processSize_ * idx, processSize_, count_);
+            CHK_RET(static_cast<HcclResult>(LocalReduce(threads.at(0), srcSlice, dstSlice, dataType_, reduceOp_)));
+        }
+    } else {
+        for (u32 idx = 0; idx < subCommRanks_.at(0).size(); ++idx) {
             if (idx == 0) {
                 continue;
             }
+            DataSlice srcSlice(
+                buffInfo.hcclBuff.addr, buffInfo.hcclBuffBaseOff + processSize_ * idx, processSize_, count_);
+            CHK_RET(static_cast<HcclResult>(LocalReduce(threads.at(0), srcSlice, dstSlice, dataType_, reduceOp_)));
         }
-
-        DataSlice srcSlice(buffInfo.hcclBuff.addr, buffInfo.hcclBuffBaseOff + processSize_ * idx, processSize_, count_);
-
-        CHK_RET(static_cast<HcclResult>(LocalReduce(threads.at(0), srcSlice, dstSlice, dataType_, reduceOp_)));
     }
 
     return HcclResult::HCCL_SUCCESS;

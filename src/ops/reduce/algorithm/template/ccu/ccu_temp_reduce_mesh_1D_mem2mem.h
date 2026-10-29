@@ -17,6 +17,9 @@
 
 namespace ops_hccl {
 
+// GroupLocalReduce reserves CCU_MS_INTERLEAVE buffers per loop for rank-ordered operands.
+constexpr u32 REDUCE_MESH_MEM2MEM_MAX_RANK_SIZE = static_cast<u32>(CCU_MS_INTERLEAVE);
+
 class CcuTempReduceMesh1DMem2Mem : public CcuAlgTemplateBase {
 public:
     CcuTempReduceMesh1DMem2Mem() = default;
@@ -48,6 +51,8 @@ public:
 
     HcclResult GetRes(AlgResourceRequest& resourceRequest) const override;
     u64 GetThreadNum() const override;
+
+    u64 CalcScratchMultiple(BufferType inBuffType, BufferType outBuffType) override;
 
 private:
     HcclResult SubmitKernelInfo(TemplateResource& templateResource, const std::vector<uint64_t>& taskArgs) const;
