@@ -10,11 +10,13 @@
 
 #include "selector_engine.h"
 
+#include <memory>
 #include <set>
 
 #include "alg_env_config.h"
 #include "alg_parse.h"
 #include "algo_name_mapper.h"
+#include "coll_alg_v2_exec_registry.h"
 #include "config_log.h"
 #include "cost_model.h"
 #include "cost_table.h"
@@ -108,59 +110,184 @@ static OpExecuteConfig GetOnlyModeDiagnoseEngine(OpExecuteConfig opExecuteConfig
     }
 }
 
-void SelectorEngine::LogOnlyModeNotMatch(
-    const OpParam& param, const TopoInfoWithNetLayerDetails* topoInfo, OpExecuteConfig engine)
-{
-    HCCL_ERROR(
-        "Failed to select %s algorithm while configured as %s. "
-        "Current topology: topoLevelNums=%u, level0Topo=%u, level0PcieMix=%d, level2UbRtp=%d, "
-        "Level1Nhr=%d, userRankSize=%u. opType=%d, dataType=%d, dataSize=%llu, reduceOp=%d.",
-        ENGINE_STR_MAP.at(engine), ENGINE_STR_MAP.at(param.opExecuteConfig), topoInfo->topoLevelNums,
-        static_cast<uint32_t>(topoInfo->level0Topo), static_cast<int>(topoInfo->level0PcieMix),
-        static_cast<int>(topoInfo->level2UbRtp), static_cast<int>(topoInfo->Level1Nhr), topoInfo->userRankSize,
-        static_cast<int>(param.opType), static_cast<int>(param.DataDes.dataType), param.inputSize,
-        static_cast<int>(param.reduceType));
-
-    // 回溯检查所有该引擎算法被过滤的原因
-    HCCL_ERROR("[SelectorEngine] %s algorithm filter details:", ENGINE_STR_MAP.at(engine));
-    const AllAlgos* allAlgos = GetAllAlgos();
-    if (allAlgos == nullptr) {
-        return;
-    }
-    for (int i = 0; i < allAlgos->count; ++i) {
-        const AlgElement& alg = allAlgos->algElements[i];
-        if (alg.opType != param.opType || alg.algName == nullptr) {
-            continue;
-        }
-        const AlgAttrs* attrs = AlgAttrsRegistry::Instance().Get(alg.algName);
-        if (attrs == nullptr || attrs->engine != engine) {
-            continue;
-        }
-        std::string algName = alg.algName;
-
-        // topo 层检查
-        auto topoResult = CheckAlgoMatchTopoWithReason(algName, topoInfo);
-        if (!topoResult.matched) {
-            HCCL_ERROR("[SelectorEngine] algName=%s filtered by topo: %s.", algName.c_str(), topoResult.reason.c_str());
-            continue;
-        }
-
-        // op 层检查
-        auto opResult = CheckAlgoMatchOpWithReason(*attrs, param, topoInfo);
-        if (!opResult.matched) {
-            HCCL_ERROR("[SelectorEngine] algName=%s filtered by op: %s.", algName.c_str(), opResult.reason.c_str());
-        } else {
-            HCCL_ERROR("[SelectorEngine] algName=%s passed all filters.", algName.c_str());
-        }
-    }
-}
-
 // costModel 按引擎分 tag 存储, Run(查找) 与 InitCostModel(创建) 共用
 static std::string MakeCostModelTag(OpExecuteConfig engine)
 {
     return std::string(COST_MODEL_TAG) + "_" + ENGINE_STR_MAP.at(engine);
 }
 
+// 从全量算法构建并按 HCCL_ALGO 配置标注优先级的临时 costModel(调用方负责释放);
+// ctx 里的 costModel 是管线压缩后的幸存集, 被 topo/executor 早期剔除的 preferred 算法查不到,
+// 回溯需与 MarkHcclAlgoPriority 同源重建, 避免对 preferred 算法套用其未经历的软策略检查;
+// 复刻管线 FilterByEngine 语义: 非候选引擎条目 count=0, 与管线打标时的模型形态一致
+static CostModel* BuildPriorityMarkedModel(
+    HcclComm comm, const std::vector<OpExecuteConfig>& candidateEngines,
+    const std::vector<std::string>& candidatePrefixes)
+{
+    auto* cm = new (std::nothrow) CostModel{nullptr, 0};
+    if (cm == nullptr) {
+        return nullptr;
+    }
+    // BuildAllAlgoModel 内部复用 InitModel; 随后复刻管线 FilterByEngine 语义(非候选引擎条目 count=0)
+    if (CostModelManager::BuildAllAlgoModel(*cm) != HCCL_SUCCESS) {
+        delete cm;
+        return nullptr;
+    }
+    std::set<OpExecuteConfig> candidateSet(candidateEngines.begin(), candidateEngines.end());
+    for (int i = 0; i < cm->count; ++i) {
+        const char* algName = cm->costAlgoParams[i].algName;
+        const AlgAttrs* attrs = (algName != nullptr) ? AlgAttrsRegistry::Instance().Get(algName) : nullptr;
+        if (attrs == nullptr || candidateSet.count(attrs->engine) == 0) {
+            cm->costAlgoParams[i].count = 0;
+        }
+    }
+    if (MarkHcclAlgoPriority(comm, *cm, candidatePrefixes) != HCCL_SUCCESS) {
+        CostModelManager::FreeCostModel(*cm);
+        delete cm;
+        return nullptr;
+    }
+    return cm;
+}
+
+static int GetHcclAlgoPriority(const CostModel* cm, const std::string& algName)
+{
+    if (cm == nullptr) {
+        return 0;
+    }
+    for (int i = 0; i < cm->count; ++i) {
+        if (cm->costAlgoParams[i].algName != nullptr && algName == cm->costAlgoParams[i].algName) {
+            return cm->costAlgoParams[i].hcclAlgoPriority;
+        }
+    }
+    return 0;
+}
+
+// 单算法过滤回溯的公共上下文(逐算法恒定项收敛, 避免长形参串)
+struct AlgoFilterCtx {
+    HcclComm comm;
+    const OpParam* param;
+    TopoInfoWithNetLayerDetails* topoInfo;
+    const std::set<OpExecuteConfig>* candidateSet;
+};
+
+// 单算法过滤回溯(引擎→topo→executor→op), 与选路管线 FilterByTopoAndCalibrate/OpFilterAndCalcCost 阶段一一对应
+static void
+LogAlgoFilterReason(const AlgoFilterCtx& ctx, const AlgElement& alg, const AlgAttrs& attrs, bool needSoftCheck)
+{
+    std::string algName = alg.algName;
+
+    // 引擎层: 非候选引擎(回退序见 GetEnginePriority)不参与本场景选路
+    if (ctx.candidateSet->count(attrs.engine) == 0) {
+        HCCL_ERROR(
+            "[SelectorEngine] algName=%s filtered by engine: engine=%s not in candidate engines.", algName.c_str(),
+            ENGINE_STR_MAP.at(attrs.engine));
+        return;
+    }
+
+    // topo 层检查(管线 FilterByTopoAndCalibrate)
+    auto topoResult = CheckAlgoMatchTopoWithReason(algName, ctx.topoInfo, needSoftCheck);
+    if (!topoResult.matched) {
+        HCCL_ERROR("[SelectorEngine] algName=%s filtered by topo: %s.", algName.c_str(), topoResult.reason.c_str());
+        return;
+    }
+
+    // executor 层检查(管线 topo 后立即现查): 未注册或 CalcCostCoeff 返回空(executor 内部 topo 匹配失败,
+    // 如匹配层链路降级)即被过滤
+    std::unique_ptr<InsCollAlgBase> exec = CollAlgExecRegistryV2::Instance().GetAlgExec(alg.opType, alg.algName);
+    if (exec == nullptr) {
+        HCCL_ERROR("[SelectorEngine] algName=%s filtered by executor: not registered.", algName.c_str());
+        return;
+    }
+    if (exec->CalcCostCoeff(ctx.comm, ctx.topoInfo, alg.algName, *ctx.param).empty()) {
+        HCCL_ERROR(
+            "[SelectorEngine] algName=%s filtered by executor: CalcCostCoeff returned empty (executor topo match "
+            "failed, e.g. matched layer link downgraded).",
+            algName.c_str());
+        return;
+    }
+
+    // op 层检查(管线 costtable Phase1 OpFilterAndCalcCost)
+    auto opResult = CheckAlgoMatchOpWithReason(attrs, *ctx.param, ctx.topoInfo, needSoftCheck);
+    if (!opResult.matched) {
+        HCCL_ERROR("[SelectorEngine] algName=%s filtered by op: %s.", algName.c_str(), opResult.reason.c_str());
+        return;
+    }
+
+    HCCL_ERROR(
+        "[SelectorEngine] algName=%s passed engine/topo/executor/op filters; if still unselected, check "
+        "opPriority/topoPriority/hcclAlgoPriority exclusion logs.",
+        algName.c_str());
+}
+
+void SelectorEngine::LogAlgoNotMatchDetails(HcclComm comm, const OpParam& param, TopoInfoWithNetLayerDetails* topoInfo)
+{
+    // only 模式(AIV_ONLY/CCU_MS_ONLY/CCU_SCHED_ONLY)保留专属报错前缀与明细标题契约(直接报错不回退);
+    // AIV_ONLY 前缀取自 auto_selector_base.h 常量单源, 其余场景打通用报错
+    const OpExecuteConfig diagnoseEngine = GetOnlyModeDiagnoseEngine(param.opExecuteConfig);
+    const bool isOnlyMode = (diagnoseEngine != param.opExecuteConfig);
+    std::string prefix;
+    std::string detailsTitle;
+    if (isOnlyMode) {
+        prefix = (param.opExecuteConfig == OpExecuteConfig::AIV_ONLY) ?
+                     std::string(AIV_ONLY_NOT_MATCH_PREFIX) :
+                     std::string("Failed to select ") + ENGINE_STR_MAP.at(diagnoseEngine)
+                         + " algorithm while configured as " + ENGINE_STR_MAP.at(param.opExecuteConfig) + ". ";
+        detailsTitle
+            = std::string("[SelectorEngine] ") + ENGINE_STR_MAP.at(diagnoseEngine) + " algorithm filter details:";
+    } else {
+        prefix = std::string("Failed to select algorithm with opExecuteConfig=")
+                 + ENGINE_STR_MAP.at(param.opExecuteConfig) + ". ";
+        detailsTitle = "[SelectorEngine] candidate algorithm filter details:";
+    }
+    HCCL_ERROR(
+        "%sCurrent topology: topoLevelNums=%u, level0Topo=%u, level0PcieMix=%d, level2UbRtp=%d, "
+        "Level1Nhr=%d, userRankSize=%u. opType=%d, dataType=%d, dataSize=%llu, reduceOp=%d.",
+        prefix.c_str(), topoInfo->topoLevelNums, static_cast<uint32_t>(topoInfo->level0Topo),
+        static_cast<int>(topoInfo->level0PcieMix), static_cast<int>(topoInfo->level2UbRtp),
+        static_cast<int>(topoInfo->Level1Nhr), topoInfo->userRankSize, static_cast<int>(param.opType),
+        static_cast<int>(param.DataDes.dataType), param.inputSize, static_cast<int>(param.reduceType));
+
+    // 回溯检查所有候选算法被过滤的原因(引擎→topo→executor→op, 与管线阶段一一对应);
+    // topoPriority/opPriority/hcclAlgoPriority 排他/收敛阶段恒保留至少一个候选(keep 集为空则不动作),
+    // 不会导致空表, 其逐算法剔除由管线 INFO 日志另行打点; 逐算法明细与头部同为 ERROR 级, 保证失败诊断默认可见
+    HCCL_ERROR("%s", detailsTitle.c_str());
+    const AllAlgos* allAlgos = GetAllAlgos();
+    if (allAlgos == nullptr) {
+        return;
+    }
+    // 软策略开关与管线同口径: tuner 接管或 HCCL_ALGO 正向指定(preferred)的算法跳过 customCheck
+    const bool tunerLoaded = HcclTunerIsLoaded();
+    const std::vector<OpExecuteConfig> candidateEngines = GetEnginePriority(param.opExecuteConfig);
+    const std::set<OpExecuteConfig> candidateSet(candidateEngines.begin(), candidateEngines.end());
+    const AlgoFilterCtx ctx{comm, &param, topoInfo, &candidateSet};
+    CostModel* markedCm
+        = BuildPriorityMarkedModel(comm, candidateEngines, CandidateEnginesToPrefixes(candidateEngines));
+    if (markedCm == nullptr) {
+        HCCL_WARNING("[SelectorEngine] build priority-marked model failed, soft-policy conclusions may be inaccurate.");
+    }
+
+    for (int i = 0; i < allAlgos->count; ++i) {
+        const AlgElement& alg = allAlgos->algElements[i];
+        if (alg.opType != param.opType || alg.algName == nullptr) {
+            continue;
+        }
+        const AlgAttrs* attrs = AlgAttrsRegistry::Instance().Get(alg.algName);
+        if (attrs == nullptr) {
+            // 与管线 FilterByEngine 同口径: 无 attrs 属注册异常, 亦为一种过滤原因
+            HCCL_ERROR("[SelectorEngine] algName=%s filtered by attrs: not registered.", alg.algName);
+            continue;
+        }
+        const bool needSoftCheck = !(tunerLoaded || GetHcclAlgoPriority(markedCm, alg.algName) > 0);
+        LogAlgoFilterReason(ctx, alg, *attrs, needSoftCheck);
+    }
+
+    if (markedCm != nullptr) {
+        CostModelManager::FreeCostModel(*markedCm);
+        delete markedCm;
+    }
+}
+
+// 按引擎 tag 创建/复用通信域级 costModel 并落 ctx
 HcclResult
 SelectorEngine::InitCostModel(HcclComm comm, TopoInfoWithNetLayerDetails* topoInfo, OpParam& param, CostModel*& cm)
 {
@@ -233,14 +360,14 @@ SelectorEngine::InitCostModel(HcclComm comm, TopoInfoWithNetLayerDetails* topoIn
     return HCCL_SUCCESS;
 }
 
-HcclResult SelectorEngine::TunerEnrichCostTable(HcclComm comm, CostTable& ct, const OpParam& param)
+HcclResult SelectorEngine::TunerEnrichCostTable(HcclComm comm, CostTable& ct, const OpParam& param, bool& tunerModified)
 {
+    tunerModified = false;
     if (ct.count <= 0 || !HcclTunerIsLoaded()) {
         return HCCL_SUCCESS;
     }
     // tuner: Enrich 填 3D 名 + 调用插件改 cost
     AlgoNameMapper::Global()->Enrich(ct.costs, ct.count);
-    bool tunerModified = false;
     // AllToAll(V/VC) 的 dataType 存在 all2AllVDataDes.sendType 中，而非 DataDes.dataType
     HcclDataType tunerDataType = param.DataDes.dataType;
     if (param.opType == HcclCMDType::HCCL_CMD_ALLTOALL || param.opType == HcclCMDType::HCCL_CMD_ALLTOALLV
@@ -311,17 +438,15 @@ SelectorEngine::Run(HcclComm comm, OpParam& param, TopoInfoWithNetLayerDetails* 
     CHK_RET(CostTableManager::Global()->GenerateCostTable(*cm, ct, topoInfo, param));
 
     // step 3: tuner 改 cost(未加载或空表跳过)
-    CHK_RET(TunerEnrichCostTable(comm, ct, param));
+    bool tunerModified = false;
+    CHK_RET(TunerEnrichCostTable(comm, ct, param, tunerModified));
 
     // step 4: min(ct)
-    HcclResult ret = SelectMinCost(ct, param, algName);
+    HcclResult ret = SelectMinCost(ct, param, tunerModified, algName);
 
     if (ret != HCCL_SUCCESS) {
         HCCL_ERROR("[SelectorEngine] Run failed, no algorithm selected.");
-        if (param.opExecuteConfig == OpExecuteConfig::AIV_ONLY || param.opExecuteConfig == OpExecuteConfig::CCU_MS_ONLY
-            || param.opExecuteConfig == OpExecuteConfig::CCU_SCHED_ONLY) {
-            LogOnlyModeNotMatch(param, topoInfo, GetOnlyModeDiagnoseEngine(param.opExecuteConfig));
-        }
+        LogAlgoNotMatchDetails(comm, param, topoInfo);
         return ret;
     }
 
@@ -444,12 +569,11 @@ std::string SelectorEngine::QueryExecutorName(const std::string& algName)
     return (alg != nullptr && alg->executorName != nullptr) ? alg->executorName : "";
 }
 
-HcclResult SelectorEngine::SelectMinCost(const CostTable& ct, OpParam& param, std::string& algName)
+HcclResult SelectorEngine::SelectMinCost(const CostTable& ct, OpParam& param, bool tunerModified, std::string& algName)
 {
     if (ct.count <= 0) {
-        HCCL_ERROR(
-            "[SelectorEngine] SelectMinCost: costTable is empty, opType=%d, dataSize=%llu.",
-            static_cast<int>(param.opType), param.inputSize);
+        // 拓扑与算子条件由随后的回溯头部统一打印, 此处不重复
+        HCCL_ERROR("[SelectorEngine] No support alg for current topoType/opInfo/externalConfig, please check.");
         return HCCL_E_NOT_SUPPORT;
     }
 
@@ -496,8 +620,17 @@ HcclResult SelectorEngine::SelectMinCost(const CostTable& ct, OpParam& param, st
 
     if (minIdx < 0) {
         HCCL_ERROR(
-            "[SelectorEngine] SelectMinCost: no valid algorithm found, expansionMode=%d, costTable count=%d.",
-            static_cast<int>(param.commOpExpansionMode), ct.count);
+            "[SelectorEngine] SelectMinCost: no valid algorithm found, expansionMode=%d, costTable count=%d, "
+            "tunerModified=%d.",
+            static_cast<int>(param.commOpExpansionMode), ct.count, static_cast<int>(tunerModified));
+        // 补充打印被跳过的无效条目(null 名或负 cost, 多为 tuner 标记), 避免与回溯 "passed all filters" 矛盾
+        for (int i = 0; i < ct.count; ++i) {
+            if (ct.costs[i].algName == nullptr || ct.costs[i].cost < 0.0f) {
+                HCCL_ERROR(
+                    "[SelectorEngine] SelectMinCost: skipped invalid entry [%d] algName=%s cost=%f.", i,
+                    ct.costs[i].algName != nullptr ? ct.costs[i].algName : "(null)", ct.costs[i].cost);
+            }
+        }
         return HCCL_E_NOT_SUPPORT;
     }
 

@@ -158,16 +158,20 @@ inline bool Is64BitDataType(const HcclDataType dataType)
 
 inline bool Is8BitDataType(const HcclDataType dataType) { return dataType == HcclDataType::HCCL_DATA_TYPE_INT8; }
 
+// AIV_ONLY 选路失败的对外报错前缀(契约文本, 日志采集/用例依赖逐字匹配, 勿改动)
+inline constexpr const char* AIV_ONLY_NOT_MATCH_PREFIX
+    = "Failed to select AIV algorithm while configured as AIV_ONLY. ";
+
 } // namespace ops_hccl
 
-// AIV_ONLY 额外打 ERROR（前缀 Failed to select AIV algorithm while configured as AIV_ONLY.，直接报错不回退，原因同
-// BASE_LOG）
-#define HCCL_AIV_NOT_MATCH_LOG(opParam, BASE_LOG, fmt, ...)                                                 \
-    do {                                                                                                    \
-        BASE_LOG(fmt, ##__VA_ARGS__);                                                                       \
-        if ((opParam).opExecuteConfig == OpExecuteConfig::AIV_ONLY) {                                       \
-            HCCL_ERROR("Failed to select AIV algorithm while configured as AIV_ONLY. " fmt, ##__VA_ARGS__); \
-        }                                                                                                   \
+// AIV_ONLY 额外打 ERROR（前缀见 ops_hccl::AIV_ONLY_NOT_MATCH_PREFIX，直接报错不回退，原因同 BASE_LOG）
+// 宏体内命名空间符号一律加 ops_hccl:: 限定, 保证宏在任意展开点自包含
+#define HCCL_AIV_NOT_MATCH_LOG(opParam, BASE_LOG, fmt, ...)                           \
+    do {                                                                              \
+        BASE_LOG(fmt, ##__VA_ARGS__);                                                 \
+        if ((opParam).opExecuteConfig == ops_hccl::OpExecuteConfig::AIV_ONLY) {       \
+            HCCL_ERROR("%s" fmt, ops_hccl::AIV_ONLY_NOT_MATCH_PREFIX, ##__VA_ARGS__); \
+        }                                                                             \
     } while (0)
 
 #endif

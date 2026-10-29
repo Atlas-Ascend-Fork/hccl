@@ -16,8 +16,11 @@
 #include <string>
 #include <vector>
 
+#include <memory>
+
 #include "alg_env_config.h"
 #include "alg_parse.h"
+#include "coll_alg_v2_exec_registry.h"
 #include "algo_name_mapper.h"
 #include "config_log.h"
 #include "cost_model.h"
@@ -188,6 +191,38 @@ HcclResult CostModelManager::GenerateCostModel(
 }
 
 void CostModelManager::FreeCostModel(CostModel& costModel) { (void)costModel; }
+
+// 失败回溯用: 按全量算法建工作模型。UT 不校验 HCCL_ALGO 优先级, 返回空模型即可
+// (调用方 GetHcclAlgoPriority 查不到条目时按 0/未配置处理, 与真实实现的退化路径一致)
+HcclResult CostModelManager::BuildAllAlgoModel(CostModel& cm)
+{
+    cm.costAlgoParams = nullptr;
+    cm.count = 0;
+    return HCCL_SUCCESS;
+}
+
+// HCCL_ALGO 优先级打标桩: UT 不覆盖配置解析, 不打标(全部按未配置处理)
+HcclResult MarkHcclAlgoPriority(HcclComm comm, CostModel& cm, const std::vector<std::string>& candidateEngineNames)
+{
+    (void)comm;
+    (void)cm;
+    (void)candidateEngineNames;
+    return HCCL_SUCCESS;
+}
+
+// executor 注册表桩: 回溯的 executor 层检查在 UT 中恒视为"未注册"(日志为空操作, 不影响断言)
+CollAlgExecRegistryV2& CollAlgExecRegistryV2::Instance()
+{
+    static CollAlgExecRegistryV2 instance;
+    return instance;
+}
+
+std::unique_ptr<InsCollAlgBase> CollAlgExecRegistryV2::GetAlgExec(const HcclCMDType type, const std::string& tag)
+{
+    (void)type;
+    (void)tag;
+    return nullptr;
+}
 
 CostTableManager* CostTableManager::Global()
 {

@@ -323,6 +323,8 @@ HcclResult CostModelManager::GenerateCostModel(
     return HcclResult::HCCL_SUCCESS;
 }
 
+HcclResult CostModelManager::BuildAllAlgoModel(CostModel& cm) { return InitModel(cm); }
+
 HcclResult CostModelManager::InitModel(CostModel& cm)
 {
     const AllAlgos& allAlgos = *GetAllAlgos();

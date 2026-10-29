@@ -28,6 +28,7 @@ AivTempAllGatherMesh1D::~AivTempAllGatherMesh1D() {}
 std::vector<CostModelParam> AivTempAllGatherMesh1D::CalcCostCoeff(CalcCostCoeffParam param)
 {
     int portNum = param.portNum[0];
+    // 规避: 非 pod 机型实测口径校准, 匹配层 portNum 参与带宽估计前减半, 避免带宽高估导致 AIV AG cost 被低估
     if (!param.isPod) {
         portNum = std::max(1, portNum / 2);
     }

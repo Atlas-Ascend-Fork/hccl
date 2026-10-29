@@ -113,12 +113,22 @@ export HCCL_ALGO="allgather:not(parallel{mesh,nhr})"
 
 ### 配置错误行为
 
-配置错误不会导致通信失败，最差情况下回退至自适应算法选择：
+配置错误不会导致通信失败，最差情况下回退至自适应算法选择。各类错误行为及其对应的代码打印关键字（日志级别均为WARNING）如下：
 
 - 配置格式错误：整个配置不生效，系统打印警告信息，不阻断通信流程，回退自适应算法选择。
+  - 打印关键字：`parse algo config failed, the config has not taken effect`
 - 按算子配置的算法组合未命中任何已注册算法：该子句不生效，系统打印警告信息，回退自适应算法选择。
+  - 打印关键字：单个子句未命中时打印`HCCL_ALGO clause for opType=<算子类型> matched no candidate algorithm`；整个配置均未命中时打印`HCCL_ALGO config matched no candidate algorithm under current engine candidates`。
 - 指定的算法与当前通信场景不匹配（如不满足拓扑、数据类型等硬性约束）：该算法不参与选路，系统打印警告信息，回退自适应算法选择。
+  - 打印关键字：拓扑约束不满足时打印`HCCL_ALGO configured algName=<算法名> skipped by topo filter, fallback to auto selection.`；数据类型等算子约束不满足时打印`HCCL_ALGO configured algName=<算法名> filtered: <过滤原因>, fallback to auto selection.`
 - 否定配置排除了当前场景的全部可用算法：系统打印警告信息，放开否定配置，在全部候选算法中自适应选择，保证通信正常执行。
+  - 打印关键字：`all survivors are hcclAlgo-negated, fallback to full candidates.`
+
+若回退后当前场景仍无任何可用算法（选路彻底失败），系统打印ERROR级别的失败诊断信息，主要日志关键字如下：
+
+- `No support alg for current topoType/opInfo/externalConfig, please check.`
+- `Failed to select algorithm with opExecuteConfig=<引擎>.`
+- `algName=<算法名> filtered by <engine|attrs|topo|executor|op>: <过滤原因>`
 <!-- end id2 -->
 
 <!-- npu="A3,910b,910" id3 -->

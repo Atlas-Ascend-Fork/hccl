@@ -36,14 +36,16 @@ private:
 
     HcclResult InitCostModel(HcclComm comm, TopoInfoWithNetLayerDetails* topoInfo, OpParam& param, CostModel*& cm);
 
-    // 调 tuner 改 cost: Enrich 填 3D 名 + 插件改 cost(未加载或空表跳过, 含 AllToAll(V/VC) dataType 特判)
-    HcclResult TunerEnrichCostTable(HcclComm comm, CostTable& ct, const OpParam& param);
+    // 调 tuner 改 cost: Enrich 填 3D 名 + 插件改 cost(未加载或空表跳过, 含 AllToAll(V/VC) dataType 特判);
+    // tunerModified 出参标识 cost 表是否被 tuner 改写, 供选路失败时区分死因
+    HcclResult TunerEnrichCostTable(HcclComm comm, CostTable& ct, const OpParam& param, bool& tunerModified);
 
-    HcclResult SelectMinCost(const CostTable& ct, OpParam& param, std::string& algName);
+    HcclResult SelectMinCost(const CostTable& ct, OpParam& param, bool tunerModified, std::string& algName);
 
-    // only 模式(AIV_ONLY/CCU_MS_ONLY/CCU_SCHED_ONLY)选不到对应引擎算法时打印 ERROR，包含当前拓扑条件
-    static void
-    LogOnlyModeNotMatch(const OpParam& param, const TopoInfoWithNetLayerDetails* topoInfo, OpExecuteConfig engine);
+    // 选不到算法时回溯打印所有候选算法被过滤的原因(引擎→topo→executor→op, 与管线阶段一一对应);
+    // only 模式(AIV_ONLY/CCU_MS_ONLY/CCU_SCHED_ONLY)额外保留专属报错前缀与明细标题契约(AIV_ONLY 见
+    // auto_selector_base.h 的 AIV_ONLY_NOT_MATCH_PREFIX)
+    static void LogAlgoNotMatchDetails(HcclComm comm, const OpParam& param, TopoInfoWithNetLayerDetails* topoInfo);
 
     static std::string QueryTemplateInfo(const std::string& algName);
 

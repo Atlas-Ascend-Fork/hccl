@@ -160,6 +160,8 @@ public:
     static int CalcTransTaskNum(u32 rankSize);
     // 计算主从流同步的task数, 返回2*(rankSize-1)
     static int CalcSyncTaskNum(u32 rankSize);
+    // 公共工厂: 按全量算法构建工作模型(内部复用 InitModel), 供失败回溯重建 HCCL_ALGO 优先级等场景复用
+    static HcclResult BuildAllAlgoModel(CostModel& cm);
 
 private:
     // step1: 分配并填充工作模型(条目 count=1, 与 allAlgos 对齐)
