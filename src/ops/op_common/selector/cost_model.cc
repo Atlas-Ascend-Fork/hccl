@@ -279,6 +279,15 @@ TopoMatchResult CheckAlgoMatchTopoWithReason(
         return result;
     }
 
+    // 硬前提：无条件执行，preferred/tuner 均不可绕过
+    if (t.topoPrecondCheck) {
+        if (!t.topoPrecondCheck(topoInfo)) {
+            result.matched = false;
+            result.reason = "topoPrecondCheck returned false (hard precondition)";
+            return result;
+        }
+    }
+
     if (needSoftPolicyCheck && t.topoCustomCheck) {
         if (!t.topoCustomCheck(topoInfo)) {
             result.matched = false;

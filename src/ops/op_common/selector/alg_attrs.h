@@ -60,6 +60,11 @@ struct TopoAttrs {
     // 定制拓扑过滤条件，由 costmodel 在通信域初始化时调用一次。
     // 返回 true：保留该算法参与后续选择；返回 false：过滤掉该算法。
     std::function<bool(const TopoInfoWithNetLayerDetails*)> topoCustomCheck = nullptr;
+    // 拓扑前提条件（硬检查）：与 topoCustomCheck 同签名，但无条件执行，
+    // 不受 HCCL_ALGO preferred / tuner 跳过。用于注册算法的物理运行前提
+    // （如 2Die 算法要求 channel 覆盖 2 个 die），违反前提的算法在选择期即被过滤，
+    // 而非运行期以 HCCL_E_INTERNAL 失败。
+    std::function<bool(const TopoInfoWithNetLayerDetails*)> topoPrecondCheck = nullptr;
     // 优先级拓扑条件，在过滤完成后从可运行算法中筛选。
     // 返回 true：该算法被优先选中（仅保留返回 true 的算法）；返回 false：正常参与 cost 竞争。
     std::function<bool(const TopoInfoWithNetLayerDetails*)> topoPriorityCheck = nullptr;
