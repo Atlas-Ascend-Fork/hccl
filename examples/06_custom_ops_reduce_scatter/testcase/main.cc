@@ -8,6 +8,9 @@
  * See LICENSE in the root of the software repository for the full text of the License.
  */
 
+#include <cstdio>
+#include <cstdlib>
+#include <algorithm>
 #include <iostream>
 #include <sstream>
 #include <fstream>
