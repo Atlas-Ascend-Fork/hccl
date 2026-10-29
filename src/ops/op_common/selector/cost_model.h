@@ -63,7 +63,24 @@ typedef struct {
     float B; // 用来描述本地传输的时间随DataSize变化的趋势，不受到UB带宽利用率的影响
     float C; // 用来描述一些基本时延的常数项
     float D;
+    // AICPU 规约总量折算为 dataSize 的份数(字节口径, 与 dtype 无关): 规约总字节 = reduceCopies×dataSize;
+    // 64bit/PROD 时由框架 per-call 按 count×1.2ns 折算进 B。存量 {A,B,C,D} 聚合初始化自动补 0
+    float reduceCopies = 0.0f;
 } CostModelParam;
+
+// host 内联标量规约实测斜率(1.2ns/count, fp64 1GB 0.162s / 128M count); 64bit/PROD 的 LocalReduce 走该路径
+constexpr float REDUCE_SEC_PER_COUNT = 1.2e-9f; // 取值为秒/count, 与 A/B/C/D 的秒口径一致
+
+// 64bit/PROD 时按 count×1.2ns 把 reduceCopies 折算为 B 的每字节斜率(不除 util, host 项与 B 口径一致):
+// Breduce×dataSize = 1.2ns × reduceCopies×dataSize/dts。INT64/UINT64/FP64 是仅有的 8 字节类型,
+// dataTypeSize==8 与 wrapper 的 64bit 路由条件等价(另加 PROD)
+inline float CalcHostReduceSlope(float reduceCopies, u32 dataTypeSize, HcclReduceOp reduceOp)
+{
+    bool hostPath = dataTypeSize == 8 || reduceOp == HcclReduceOp::HCCL_REDUCE_PROD;
+    return (hostPath && dataTypeSize > 0 && reduceCopies > 0.0f) ?
+               REDUCE_SEC_PER_COUNT * reduceCopies / static_cast<float>(dataTypeSize) :
+               0.0f;
+}
 
 enum class CostAggMode : int {
     SUM = 0, // 多组 cost 求和

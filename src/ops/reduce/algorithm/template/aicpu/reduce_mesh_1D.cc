@@ -35,11 +35,16 @@ std::vector<CostModelParam> ReduceMesh1D::CalcCostCoeff(CalcCostCoeffParam param
     }
     CostModelManager::Global()->CalcLocalReduceParams(n, EngineType::AICPU, B2);
     B = B1 + (param.rankSize - 1) * B2;
+    // AICPU 规约工作量: 64bit/PROD 时 root 对其余 (rankSize-1) 份全量逐个 LocalReduce
+    // (每份 dataRatio×rankSize×dataSize 字节, RunReduce 的 64bit/PROD 分支走 host 标量路径),
+    // 由框架 per-call 按 count×1.2ns 折算进 B; B2 项按 900G DMA 建模承接非 64bit dtype 的规约
+    const float reduceCopies
+        = static_cast<float>(param.rankSize - 1) * param.dataRatio * static_cast<float>(param.rankSize);
     CostModelManager::Global()->CalcLatencyParams(kernelNum, EngineType::AICPU, C);
     CostModelManager::Global()->CalcLaunchParams(taskNum, EngineType::AICPU, D);
 
     std::vector<CostModelParam> params;
-    params.push_back({A, B, C, D});
+    params.push_back({A, B, C, D, reduceCopies});
     HCCL_DEBUG("[ReduceMesh1D][%s] CalcCostCoeff A=%f B=%f C=%f D=%f.", __func__, A, B, C, D);
     return params;
 }

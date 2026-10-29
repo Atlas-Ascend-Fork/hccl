@@ -76,7 +76,7 @@ private:
     // 按 keepIndices 原地压缩 costs/hcclPrio
     static void CompactCostTable(CostTable& ct, std::vector<int>& hcclPrio, const std::vector<int>& keepIndices);
     float CalcAlgCost(
-        const std::string& algName, u64 dataSize, const CostAlgoParams& algoParams,
+        const std::string& algName, u64 dataSize, const OpParam& opParam, const CostAlgoParams& algoParams,
         HcclCMDType opType = HcclCMDType::HCCL_CMD_INVALID, const std::vector<AlgoType>& algoTypes = {},
         const AlgNetMeta& meta = {}, OpExecuteConfig engine = OpExecuteConfig::AICPU_TS) const;
 

@@ -18,6 +18,10 @@ add_subdirectory(common/ccu_resource_expansion)
 add_subdirectory(selector_engine)
 add_subdirectory(alltoall_hier)
 add_subdirectory(aicpu_task_cache)
+# reduce_scatter_seq64: RS/AR AicpuReduce 模板 cost 建模 + MeshNHRAicpuReduce attrs 注册准入。
+# 测 src/ 产品代码，与 alltoall_hier 同级无条件注册；注意 build.sh -u 的 UT 构建不传
+# ENABLE_EXPERIMENTAL，放入下方 if(ENABLE_EXPERIMENTAL) 分支将不被 -u 覆盖。
+add_subdirectory(reduce_scatter_seq64)
 # recursive_executor 测试仅在 --experimental 构建（ENABLE_EXPERIMENTAL=ON）时编译
 if(ENABLE_EXPERIMENTAL)
     add_subdirectory(reduce_scatter_birs)

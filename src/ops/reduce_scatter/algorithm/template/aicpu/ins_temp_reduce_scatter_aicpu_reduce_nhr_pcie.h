@@ -33,6 +33,9 @@ public:
         return info;
     }
 
+    // 静态 cost 建模: rankSize 轮 NHR AllGather + 本地 AICPU 规约; 传输/拷贝/时延/下发分别走 A/B/C/D 轨
+    static std::vector<CostModelParam> CalcCostCoeff(CalcCostCoeffParam param);
+
     HcclResult CalcRes(
         HcclComm comm, const OpParam& param, const TopoInfoWithNetLayerDetails* topoInfo,
         AlgResourceRequest& resourceRequest) override;

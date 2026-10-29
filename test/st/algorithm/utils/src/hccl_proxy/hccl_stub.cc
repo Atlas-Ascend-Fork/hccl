@@ -28,6 +28,7 @@
 #include "hcomm_diag.h"
 #include "hccl_comm.h"
 #include "hccl_res_expt.h"
+#include "op_common/algorithm/template/template_utils.h"
 
 using namespace ops_hccl;
 using namespace HcclSim;
@@ -1100,3 +1101,20 @@ bool HcommIsSupportHcommChannelNotifyWaitWithDefaultTimeout() { return false; }
 #ifdef __cplusplus
 }
 #endif // __cplusplus
+
+// ===== ST桩适配(64bit/PROD Reduce): 生产路径LocalReduce对64bit/PROD走AicpuReduce(host真算),
+// 仿真模型的DataSlice地址为非映射模拟地址(SimNpu::AllocMemory仅记账无真实内存), 原样真算必段错误;
+// 此处提供ST版LocalReduce(C++同名符号, 桩so先于libhccl.so加载使PLT优先解析), 全dtype统一经
+// HcommLocalReduceOnThread桩入图, 规约语义由语义校验器覆盖, 64bit/PROD数据正确性由NPU真机
+// 用例背书(st_reduce_aicpu 22条全过, 单机/两级/16M多loop/root均已验证) =====
+namespace ops_hccl {
+HcclResult LocalReduce(
+    const ThreadHandle& thread, const DataSlice& srcSlice, const DataSlice& dstSlice, const HcclDataType dataType,
+    const HcclReduceOp reduceOp)
+{
+    void* src = static_cast<u8*>(srcSlice.addr_) + srcSlice.offset_;
+    void* dst = static_cast<u8*>(dstSlice.addr_) + dstSlice.offset_;
+    return static_cast<HcclResult>(HcommLocalReduceOnThread(
+        thread, dst, src, srcSlice.count_, static_cast<HcommDataType>(dataType), static_cast<HcommReduceOp>(reduceOp)));
+}
+} // namespace ops_hccl

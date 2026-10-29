@@ -397,7 +397,12 @@ REGISTER_ALG_ATTRS(
             return !AutoSelectorBase::IsLayerAllConnetedWithTopo(topo, 0, CommTopo::COMM_TOPO_1DMESH);
         }
         return true;
-    });
+    };
+    // 准入: 64bit dtype 或 PROD(任意 dtype) 二者其一, 与 wrapper LocalReduce 走 host 标量路径的路由条件一致;
+    // 不能用 supportedDataTypes 白名单(纯 dtype 过滤会先挡掉非 64bit 的 PROD)
+    op.opCustomCheck = [](const OpParam& opParam, const TopoInfoWithNetLayerDetails* topo) -> bool {
+        return Is64BitDataType(opParam.DataDes.dataType) || opParam.reduceType == HcclReduceOp::HCCL_REDUCE_PROD;
+    };);
 REGISTER_EXEC_V2(
     HcclCMDType::HCCL_CMD_REDUCE_SCATTER, AicpuReduceScatterSoleNHRMultiLink, InsV2ReduceScatterSoleExecutor,
     TopoMatchOneLevel, InsTempReduceScatterNHR);

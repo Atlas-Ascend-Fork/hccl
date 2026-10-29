@@ -9,8 +9,68 @@
  */
 
 #include "ins_temp_reduce_scatter_aicpu_reduce_nhr_pcie.h"
+#include "cost_model.h"
 
 namespace ops_hccl {
+
+std::vector<CostModelParam> InsTempReduceScatterAicpuReduceNHRPcie::CalcCostCoeff(CalcCostCoeffParam param)
+{
+    // 口径: cost 乘子 dataSize 为 RS 单 rank 输出份额; dataRatio×rankSize=本段单 rank 输入全量占 dataSize 的份数
+    //   (sole 段 dataRatio=1.0, 两级框内段 dataRatio=框间 rank 数, 框间段 dataRatio=1.0, 以调用方 executor 传参为准)
+    //   A: rankSize 轮整域 NHR AllGather, 总发送 (rankSize-1)×dataRatio×rankSize 份
+    //   B: rankSize 轮入拷贝(输入全量, BufferType 相同跳过) + 本 rank 份额出拷贝
+    //   C: 每轮 (nSteps 收发 + 拷贝/规约折算 2 task) + 每轮一次强制同步(折算 SYNC_EQUIV_TASKS 个 2us task)
+    //   64bit/PROD 的规约吞吐由框架 per-call 按 count 折算进 B, 此处不建模
+    CommTopo netType = param.netType;
+    int portNum = 1;
+    if (!param.portNum.empty()) {
+        portNum = (param.netType == CommTopo::COMM_TOPO_CLOS && param.portNum.size() >= 2) ?
+                      (param.portNum[0] + param.portNum[1]) :
+                      param.portNum[0];
+    }
+    if (portNum <= 0) {
+        portNum = 1;
+    }
+    float A = 0.0f;
+    // RS 1dpod64 单 server pod 内 CLOS 无跨 pod 端口预留, 不做 isPod 端口减半(减半使 A 斜率高估 ~1.74x),
+    // 与 RS 家族 ins_temp_reduce_scatter_nhr.cc / ins_temp_reduce_scatter_hd.cc 同口径
+    CostModelManager::Global()->CalcNHRParams(
+        param.dataRatio * param.rankSize, netType, portNum, param.rankSize, A, param.isPod, false);
+
+    // B: 入拷贝(输入全量) + 出拷贝(本 rank 份额)
+    float B1 = 0.0f;
+    float B2 = 0.0f;
+    if (param.inputBuffer != param.scratchBuffer) {
+        CostModelManager::Global()->CalcLocalCopyParams(param.dataRatio * param.rankSize, EngineType::AICPU, B1);
+    }
+    if (param.outputBuffer != param.scratchBuffer) {
+        CostModelManager::Global()->CalcLocalCopyParams(param.dataRatio, EngineType::AICPU, B2);
+    }
+    const float B = B1 + B2;
+
+    // AICPU 规约工作量: myIdx 轮串行规约 (rankSize-1) 个 slice(每份 dataRatio×dataSize 字节),
+    // 64bit/PROD 时由框架 per-call 按 count×1.2ns 折算进 B
+    const float reduceCopies = static_cast<float>(param.rankSize - 1) * param.dataRatio;
+
+    constexpr int SYNC_EQUIV_TASKS = 50;
+    int rounds = static_cast<int>(param.rankSize);
+    int nSteps = static_cast<int>(GetNHRStepNum(param.rankSize));
+    int taskNum = rounds * (nSteps + 2 + SYNC_EQUIV_TASKS);
+    float C = 0.0f;
+    CostModelManager::Global()->CalcLatencyParams(taskNum, EngineType::AICPU, C);
+
+    // D: 任务下发固定项(不随数据量变化)
+    float D = 1e-6f * taskNum;
+
+    HCCL_INFO(
+        "[InsTempReduceScatterAicpuReduceNHRPcie][CalcCostCoeff] algName[%s] rankSize[%u] "
+        "A=%e B=%e(copy=%e) C=%e D=%e reduceCopies=%f.",
+        param.algName != nullptr ? param.algName : "(null)", param.rankSize, A, B, B1 + B2, C, D, reduceCopies);
+    std::vector<CostModelParam> params;
+    params.push_back({A, B, C, D, reduceCopies});
+    return params;
+}
+
 InsTempReduceScatterAicpuReduceNHRPcie::InsTempReduceScatterAicpuReduceNHRPcie(
     const OpParam& param, const u32 rankId, // 传通信域的u32，userRank
     const std::vector<std::vector<u32>>& subCommRanks)

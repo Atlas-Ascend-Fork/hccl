@@ -435,6 +435,11 @@ REGISTER_ALG_ATTRS(
             return !(isEqual && topo->userRankSize <= 4);
         }
         return true;
+    };
+    // 准入: 64bit dtype 或 PROD(任意 dtype) 二者其一, 与 wrapper LocalReduce 走 host 标量路径的路由条件一致;
+    // 不能用 supportedDataTypes 白名单(纯 dtype 过滤会先挡掉非 64bit 的 PROD)
+    op.opCustomCheck = [](const OpParam& opParam, const TopoInfoWithNetLayerDetails* topo) -> bool {
+        return Is64BitDataType(opParam.DataDes.dataType) || opParam.reduceType == HcclReduceOp::HCCL_REDUCE_PROD;
     });
 
 // HD（Halving-Doubling）全域算法：仅 HCCL_ALGO 显式指定时可选，2^N rank 数硬门控在 TopoMatchOneLevel。

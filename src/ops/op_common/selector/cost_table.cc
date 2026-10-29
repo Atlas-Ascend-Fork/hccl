@@ -264,8 +264,8 @@ void CostTableManager::OpFilterAndCalcCost(
             meta = exec->GetAlgNetMeta(topoInfo, opParam, name.c_str());
         }
 
-        float cost
-            = CalcAlgCost(name, dataSize, cm.costAlgoParams[i], opParam.opType, attrs->algoTypes, meta, attrs->engine);
+        float cost = CalcAlgCost(
+            name, dataSize, opParam, cm.costAlgoParams[i], opParam.opType, attrs->algoTypes, meta, attrs->engine);
         ct.costs[ct.count].algName = algName;
         ct.costs[ct.count].cost = cost;
         ++ct.count;
@@ -364,16 +364,20 @@ void CostTableManager::CompactCostTable(CostTable& ct, std::vector<int>& hcclPri
 }
 
 float CostTableManager::CalcAlgCost(
-    const std::string& algName, u64 dataSize, const CostAlgoParams& algoParams, HcclCMDType opType,
-    const std::vector<AlgoType>& algoTypes, const AlgNetMeta& meta, OpExecuteConfig engine) const
+    const std::string& algName, u64 dataSize, const OpParam& opParam, const CostAlgoParams& algoParams,
+    HcclCMDType opType, const std::vector<AlgoType>& algoTypes, const AlgNetMeta& meta, OpExecuteConfig engine) const
 {
     const CostModelParam* params = algoParams.param;
     std::vector<u32> groups = meta.groupSizes;
     if (groups.empty()) {
         groups.assign(static_cast<size_t>(algoParams.count), 1);
     }
+    // 64bit/PROD 的 host 规约项 per-call 现算(当次调用的 dtype/reduceOp), 不随通信域级标定固化
+    HcclDataType dataType = GetOpDataType(opParam);
+    const u32 dataTypeSize = (dataType == HcclDataType::HCCL_DATA_TYPE_RESERVED) ? 0 : DATATYPE_SIZE_TABLE[dataType];
 
     std::vector<float> utils(static_cast<size_t>(algoParams.count), 1.0f);
+    std::vector<float> bReduces(static_cast<size_t>(algoParams.count), 0.0f);
     float cost = 0.0f;
     float totalD = 0.0f;
     u32 idx = 0;
@@ -399,7 +403,9 @@ float CostTableManager::CalcAlgCost(
                 util = 1.0f;
             }
             utils[idx] = util;
-            float abCost = (params[idx].A / util + params[idx].B) * static_cast<float>(dataSize);
+            // host 规约项: 64bit/PROD 时按 1.2ns×count 折算进 B 的斜率(不除 util)
+            bReduces[idx] = CalcHostReduceSlope(params[idx].reduceCopies, dataTypeSize, opParam.reduceType);
+            float abCost = (params[idx].A / util + params[idx].B + bReduces[idx]) * static_cast<float>(dataSize);
             float segCost = abCost + params[idx].C;
             groupCost = (meta.intraGroupMode == CostAggMode::MAX) ? std::max(groupCost, segCost) : groupCost + segCost;
             totalD += params[idx].D;
@@ -425,10 +431,10 @@ float CostTableManager::CalcAlgCost(
             .c_str());
     for (int j = 0; j < algoParams.count; ++j) {
         HCCL_INFO(
-            "[CalcAlgCost]   seg[%d] A=%e B=%e A*ds=%e B*ds=%e C=%e D=%e util=%f segCost=%e.", j, params[j].A,
-            params[j].B, params[j].A / utils[j] * static_cast<float>(dataSize),
-            params[j].B * static_cast<float>(dataSize), params[j].C, params[j].D, utils[j],
-            (params[j].A / utils[j] + params[j].B) * static_cast<float>(dataSize) + params[j].C);
+            "[CalcAlgCost]   seg[%d] A=%e B=%e Bre=%e A*ds=%e B*ds=%e C=%e D=%e util=%f segCost=%e.", j, params[j].A,
+            params[j].B, bReduces[j], params[j].A / utils[j] * static_cast<float>(dataSize),
+            (params[j].B + bReduces[j]) * static_cast<float>(dataSize), params[j].C, params[j].D, utils[j],
+            (params[j].A / utils[j] + params[j].B + bReduces[j]) * static_cast<float>(dataSize) + params[j].C);
     }
     return cost;
 }

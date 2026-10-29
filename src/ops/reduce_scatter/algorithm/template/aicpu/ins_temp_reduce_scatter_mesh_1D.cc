@@ -49,11 +49,19 @@ std::vector<CostModelParam> InsTempReduceScatterMesh1D::CalcCostCoeff(CalcCostCo
     }
     CostModelManager::Global()->CalcLocalReduceParams(param.dataRatio, EngineType::AICPU, B3);
     B = B1 + B2 + (param.rankSize - 1) * B3;
+    // 规约工作量: PostCopy 对其余 (rankSize-1) 个 slice 逐个 LocalReduce(每份 dataRatio×dataSize 字节),
+    // 64bit/PROD 走 host 标量路径由框架 per-call 按 count×1.2ns 折算进 B; B3 项按 900G DMA 建模承接
+    // 非 64bit dtype 的规约(64bit 时 host 项为主, B3 约为 host 项的 1%, 双计可忽略)
+    const float reduceCopies = static_cast<float>(param.rankSize - 1) * param.dataRatio;
     CostModelManager::Global()->CalcLatencyParams(kernelNum, EngineType::AICPU, C);
     CostModelManager::Global()->CalcLaunchParams(taskNum, EngineType::AICPU, D);
 
+    HCCL_INFO(
+        "[InsTempReduceScatterMesh1D][CalcCostCoeff] algName[%s] rankSize[%u] "
+        "A=%e B=%e C=%e D=%e reduceCopies=%f.",
+        param.algName != nullptr ? param.algName : "(null)", param.rankSize, A, B, C, D, reduceCopies);
     std::vector<CostModelParam> params;
-    params.push_back({A, B, C, D});
+    params.push_back({A, B, C, D, reduceCopies});
     return params;
 }
 

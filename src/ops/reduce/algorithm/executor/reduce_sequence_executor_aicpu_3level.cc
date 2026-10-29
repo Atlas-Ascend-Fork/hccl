@@ -11,9 +11,12 @@
 #include "reduce_sequence_executor_aicpu_3level.h"
 #include "executor_common_ops.h"
 #include "alg_attrs_registry.h"
+#include "auto_selector_base.h"
 #include <algorithm>
 #include "ins_temp_reduce_scatter_mesh_1D_Z_axis_detour.h"
+#include "ins_temp_reduce_scatter_mesh_1D.h"
 #include "ins_temp_reduce_scatter_nhr.h"
+#include "ins_temp_reduce_scatter_aicpu_reduce_nhr_pcie.h"
 #include "ins_temp_all_gather_nhr.h"
 #include "ins_temp_all_gather_mesh_1D.h"
 #include "ins_temp_all_gather_mesh_1D_Z_axis_detour.h"
@@ -833,5 +836,17 @@ REGISTER_ALG_ATTRS(
     op.opCustomCheck = [](const OpParam& opParam, const TopoInfoWithNetLayerDetails* topo) -> bool {
         u64 perRankSize = opParam.DataDes.count * DATATYPE_SIZE_TABLE[opParam.DataDes.dataType];
         return perRankSize > 4ULL * 1024 * 1024 * 1024;
+    });
+REGISTER_EXEC_V2_MULTI(
+    HcclCMDType::HCCL_CMD_REDUCE, AicpuReduceSequenceNHRAicpuReduceNHR, ReduceSequenceExecutorAicpu3Level,
+    TopoMatchTwoLevel, InsTempReduceScatterMesh1D, InsTempReduceScatterAicpuReduceNHRPcie,
+    InsTempReduceScatterAicpuReduceNHRPcie, InsTempAllGatherNHR, InsTempAllGatherNHR, InsTempAllGatherMesh1D);
+REGISTER_ALG_ATTRS(
+    AicpuReduceSequenceNHRAicpuReduceNHR, topo.minTopoLevelNum = TOPO_LEVEL_NUM_2;
+    topo.maxTopoLevelNum = TOPO_LEVEL_NUM_2;
+    topo.supportLevel0Topos = LEVEL0_TOPO_MESH_1D | LEVEL0_TOPO_CLOS | LEVEL0_TOPO_MESH_1D_CLOS;
+    topo.isSupportLevel1Nhr = true; topo.isSupportLevel0PcieMix = false; op.isSupportInplace = false;
+    op.opCustomCheck = [](const OpParam& opParam, const TopoInfoWithNetLayerDetails* topo) -> bool {
+        return Is64BitDataType(opParam.DataDes.dataType) || opParam.reduceType == HcclReduceOp::HCCL_REDUCE_PROD;
     });
 } // namespace ops_hccl

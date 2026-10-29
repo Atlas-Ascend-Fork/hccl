@@ -10,6 +10,7 @@
 
 #include "ins_temp_all_reduce_aicpu_reduce_nhr.h"
 #include "alg_data_trans_wrapper.h"
+#include "cost_model.h"
 #include "template_utils.h"
 
 namespace ops_hccl {
@@ -22,15 +23,52 @@ InsTempAllReduceAicpuReduceNHR::InsTempAllReduceAicpuReduceNHR(
 
 std::vector<CostModelParam> InsTempAllReduceAicpuReduceNHR::CalcCostCoeff(CalcCostCoeffParam param)
 {
-    // 用aicpu做reduce，不参与性能排序，
-    float A = 10.0f;
-    float B = 0.0f;
-    float C = 0.0f;
-    float D = 0.0f;
+    // 口径: cost 乘子 dataSize 为单 rank 全量输入(sole 整域 dataRatio×rankSize=1.0)
+    //   A: 单轮整域 NHR AllGather 发送 (rankSize-1) 份全量; B: 入/出拷贝各 1 份全量(BufferType 相同跳过)
+    //   C: 4×nSteps 收发 + (拷贝 2 + 规约 rankSize-1) 任务 + 规约前一次强制同步(折算 SYNC_EQUIV_TASKS 个 2us task)
+    //   64bit/PROD 的规约吞吐由框架 per-call 按 count 折算进 B, 此处不建模
+    CommTopo netType = param.netType;
+    int portNum = 1;
+    if (!param.portNum.empty()) {
+        portNum = (param.netType == CommTopo::COMM_TOPO_CLOS && param.portNum.size() >= 2) ?
+                      (param.portNum[0] + param.portNum[1]) :
+                      param.portNum[0];
+    }
+    float A = 0.0f;
+    CostModelManager::Global()->CalcNHRParams(
+        param.dataRatio * param.rankSize, netType, portNum, param.rankSize, A, param.isPod);
 
+    // B: 入拷贝/出拷贝各 1 份全量
+    float B1 = 0.0f;
+    float B2 = 0.0f;
+    if (param.inputBuffer != param.scratchBuffer) {
+        CostModelManager::Global()->CalcLocalCopyParams(param.dataRatio * param.rankSize, EngineType::AICPU, B1);
+    }
+    if (param.outputBuffer != param.scratchBuffer) {
+        CostModelManager::Global()->CalcLocalCopyParams(param.dataRatio * param.rankSize, EngineType::AICPU, B2);
+    }
+    const float B = B1 + B2;
+
+    // AICPU 规约工作量: RunReduce 串行规约 (rankSize-1) 次全量(每份 dataRatio×rankSize×dataSize 字节),
+    // 64bit/PROD 时由框架 per-call 按 count×1.2ns 折算进 B
+    const float reduceCopies
+        = static_cast<float>(param.rankSize - 1) * param.dataRatio * static_cast<float>(param.rankSize);
+
+    constexpr int SYNC_EQUIV_TASKS = 50;
+    int nSteps = static_cast<int>(GetNHRStepNum(param.rankSize));
+    int taskNum = static_cast<int>(param.rankSize) - 1 + 4 * nSteps + 2;
+    float C = 0.0f;
+    CostModelManager::Global()->CalcLatencyParams(taskNum + SYNC_EQUIV_TASKS, EngineType::AICPU, C);
+
+    // D: 任务下发固定项(不随数据量变化)
+    float D = 1e-6f * taskNum;
+
+    HCCL_INFO(
+        "[InsTempAllReduceAicpuReduceNHR][CalcCostCoeff] algName[%s] rankSize[%u] "
+        "A=%e B=%e(copy=%e) C=%e D=%e reduceCopies=%f.",
+        param.algName != nullptr ? param.algName : "(null)", param.rankSize, A, B, B1 + B2, C, D, reduceCopies);
     std::vector<CostModelParam> params;
-    params.push_back({A, B, C, D});
-    HCCL_DEBUG("[InsTempAllReduceAicpuReduceNHR][%s][CalcCostCoeff] A=%f B=%f C=%f D=%f", __func__, A, B, C, D);
+    params.push_back({A, B, C, D, reduceCopies});
     return params;
 }
 

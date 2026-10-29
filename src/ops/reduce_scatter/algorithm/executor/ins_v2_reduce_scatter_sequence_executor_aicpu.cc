@@ -581,16 +581,24 @@ REGISTER_EXECUTOR_BY_TWO_TEMPS(
     InsV2ReduceScatterSequenceExecutorAicpu, TopoMatchTwoLevel, InsTempReduceScatterMesh1D,
     InsTempReduceScatterAicpuReduceNHRPcie);
 REGISTER_ALG_ATTRS(
-    AicpuReduceScatterSequenceMeshNHRAicpuReduce, topo.supportLevel0Topos = LEVEL0_TOPO_MESH_1D_CLOS;
+    AicpuReduceScatterSequenceMeshNHRAicpuReduce,
+    topo.supportLevel0Topos = LEVEL0_TOPO_MESH_1D_CLOS | LEVEL0_TOPO_MESH_1D;
     topo.isSupportLevel0PcieMix = true;
-    op.supportedDataTypes
-    = {HcclDataType::HCCL_DATA_TYPE_INT64, HcclDataType::HCCL_DATA_TYPE_UINT64, HcclDataType::HCCL_DATA_TYPE_FP64};
+    topo.isSupportLevel1Nhr = true; // 框间即 NHR 模板，L1 报 NHR 形态的拓扑（如分轨组网）不应被拦
     topo.topoCustomCheck = [](const TopoInfoWithNetLayerDetails* topo) -> bool {
         if (topo->level0PcieMix) {
             return !AutoSelectorBase::IsLayerAllConnetedWithTopo(topo, 0, CommTopo::COMM_TOPO_1DMESH);
         }
-        return false;
-    });
+        // 非 pcieMix：仅放行纯 MESH_1D 直连（分轨组网框内 mesh 场景，配合 supportLevel0Topos 放开的
+        // MESH_1D 位）；MESH_1D_CLOS 非 pcieMix 形态维持拒绝（无对应链路验证）
+        return topo->level0Topo == Level0Shape::MESH_1D;
+    };
+    // 准入: 64bit dtype 或 PROD(任意 dtype) 二者其一, 与 wrapper LocalReduce 走 host 标量路径的路由条件一致;
+    // 不能用 supportedDataTypes 白名单(纯 dtype 过滤会先挡掉非 64bit 的 PROD)
+    op.isSupportProd = true;
+    op.opCustomCheck = [](const OpParam& opParam, const TopoInfoWithNetLayerDetails* topo) -> bool {
+        return Is64BitDataType(opParam.DataDes.dataType) || opParam.reduceType == HcclReduceOp::HCCL_REDUCE_PROD;
+    };);
 #endif // CANN_VERSION_NUM >= CANN_VERSION(9, 0, 0)
 
 #ifndef AICPU_COMPILE
