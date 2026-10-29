@@ -51,6 +51,7 @@ public:
 private:
     uint32_t mySubCommRank_ = 0;
     uint32_t rootId_ = 0;
+    double dieSplitRatio_ = 1.0;
     // rank对应的channel，size为1-2
     std::map<u32, std::vector<HcclChannelDesc>> rankIdToChannelDesc_;
     HcclResult HandlePreSync(u32 kernelNum, TemplateResource& templateResource);

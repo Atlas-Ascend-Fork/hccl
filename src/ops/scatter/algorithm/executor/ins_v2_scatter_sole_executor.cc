@@ -177,6 +177,7 @@ HcclResult InsV2ScatterSoleExecutor<AlgTopoMatch, InsAlgTemplate>::OrchestrateLo
     }
     templateAlgRes.threads = resCtx.threads;
     templateAlgRes.aivCommInfoPtr = resCtx.aivCommInfoPtr;
+    templateAlgRes.dieSplitRatio = resCtx.dieSplitRatio;
 
     // 准备数据
     TemplateDataParams tempAlgParams;

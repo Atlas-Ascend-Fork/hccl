@@ -66,6 +66,7 @@ private:
     u32 mySubCommRank_ = 0;
     u32 subCommRootId_ = 0;
     u32 root_ = 0;
+    double dieSplitRatio_ = 1.0;
     std::map<u32, std::vector<HcclChannelDesc>> rankIdToChannelDesc_;
 };
 } // namespace ops_hccl

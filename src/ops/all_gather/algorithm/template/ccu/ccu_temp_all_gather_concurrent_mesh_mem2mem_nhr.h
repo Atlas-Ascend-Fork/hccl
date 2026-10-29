@@ -127,6 +127,7 @@ private:
 
     uint32_t mySubCommRank_ = 0;
     std::vector<uint64_t> nhrGoSize_[2];
+    double dieSplitRatio_ = 1.0; // NHR子模板2die切分比例(查询带宽系数得到)
 };
 
 } // namespace ops_hccl

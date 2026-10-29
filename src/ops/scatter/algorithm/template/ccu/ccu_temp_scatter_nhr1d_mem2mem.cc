@@ -233,6 +233,18 @@ HcclResult CcuTempScatterNHR1DMem2Mem::CalcRes(
         CHK_RET(ReverseChannelPerDieIfNeed(comm, myRank_, channelsPerDie));
     }
 
+    constexpr u32 DIE_NUM_2 = 2;
+    double ratio = 1.0;
+    if (enableDieNum == DIE_NUM_2) { // 查询两个die链路的带宽系数，按比例切分数据
+        uint32_t p0 = 0, p1 = 0;
+        CHK_RET(GetChannelBwCoeff(comm, myRank_, channelsPerDie[0][0], p0));
+        CHK_RET(GetChannelBwCoeff(comm, myRank_, channelsPerDie[1][0], p1));
+        if (p0 + p1 > 0) {
+            ratio = static_cast<double>(p0) / (p0 + p1);
+        }
+    }
+    resourceRequest.dieSplitRatio = ratio;
+
     CHK_RET(BuildKernelInfos(param, enableDieNum, stepInfoVector, rank2ChannelIdx, channelsPerDie, resourceRequest));
 
     HCCL_DEBUG(
@@ -243,23 +255,27 @@ HcclResult CcuTempScatterNHR1DMem2Mem::CalcRes(
 }
 
 HcclResult CcuTempScatterNHR1DMem2Mem::SplitDataFor2Dies(
-    const OpParam& param, const TemplateDataParams& templateDataParams, uint64_t& die0Size, uint64_t& die1Size) const
+    const OpParam& param, uint64_t dataSize, uint64_t& die0Size, uint64_t& die1Size) const
 {
     constexpr uint64_t MULTIPLIER = 4;
     uint64_t typeSize = DataTypeSizeGet(param.DataDes.dataType);
-    uint64_t dataCount = (templateDataParams.sliceSize / typeSize);
+    uint64_t dataCount = (dataSize / typeSize);
 
     if (dataCount <= templateRankSize_ * MULTIPLIER) { // 数据量极小，不划分die
         die0Size = dataCount * typeSize;
         die1Size = 0;
         return HcclResult::HCCL_SUCCESS;
     }
-    u8 die0PortGroupSize = 1;
-    u8 die1PortGroupSize = 1;
-
-    die0Size = (dataCount * die0PortGroupSize / (die0PortGroupSize + die1PortGroupSize)) * typeSize;
-    die1Size = templateDataParams.sliceSize - die0Size;
-    return HcclResult::HCCL_SUCCESS;
+    // die0Size 按 128 字节对齐, 保证 die1 起始地址对齐
+    die0Size = static_cast<uint64_t>(dataCount * dieSplitRatio_) * typeSize;
+    die0Size = CcuAlignDown(die0Size, CCU_2DIE_SPLIT_ALIGN_SIZE);
+    if (die0Size == 0) { // 对齐后为0, 数据量不足一个对齐粒度, 退化为不划分die
+        die0Size = dataCount * typeSize;
+        die1Size = 0;
+        return HCCL_SUCCESS;
+    }
+    die1Size = dataSize - die0Size;
+    return HCCL_SUCCESS;
 }
 
 HcclResult CcuTempScatterNHR1DMem2Mem::FastLaunch(const OpParam& param, const TemplateFastLaunchCtx& tempFastLaunchCtx)
@@ -316,7 +332,7 @@ HcclResult CcuTempScatterNHR1DMem2Mem::FastLaunch(const OpParam& param, const Te
 }
 
 void CcuTempScatterNHR1DMem2Mem::FillKernelRunTempArgs(
-    const TemplateDataParams& templateDataParams, KernelRunTempArgs& tempArgs) const
+    const OpParam& param, const TemplateDataParams& templateDataParams, KernelRunTempArgs& tempArgs) const
 {
     tempArgs.inputAddr = PointerToAddr(buffInfo_.inputPtr) + buffInfo_.inBuffBaseOff;
     tempArgs.outputAddr = PointerToAddr(buffInfo_.outputPtr) + buffInfo_.outBuffBaseOff;
@@ -333,8 +349,14 @@ void CcuTempScatterNHR1DMem2Mem::FillKernelRunTempArgs(
     tempArgs.isOutputScratch = (buffInfo_.outBuffType == BufferType::HCCL_BUFFER) ? 1 : 0;
     tempArgs.isInputOutputEqual = (tempArgs.inputAddr == tempArgs.outputAddr) ? 1 : 0;
 
-    tempArgs.die0TailSize = templateDataParams.tailSize / tempArgs.kernelNum;
-    tempArgs.die1TailSize = templateDataParams.tailSize - tempArgs.die0TailSize;
+    // 尾块与主片同比例切分并对齐，保证die1尾块起始地址128对齐；不依赖tailSize==sliceSize恒等
+    constexpr uint32_t MAX_DIE_NUM_2 = 2;
+    if (tempArgs.kernelNum == MAX_DIE_NUM_2) {
+        SplitDataFor2Dies(param, templateDataParams.tailSize, tempArgs.die0TailSize, tempArgs.die1TailSize);
+    } else {
+        tempArgs.die0TailSize = templateDataParams.tailSize;
+        tempArgs.die1TailSize = 0;
+    }
     tempArgs.isSliceSizeZero = (tempArgs.sliceSize == 0);
 
     return;
@@ -444,15 +466,18 @@ HcclResult CcuTempScatterNHR1DMem2Mem::KernelRun(
         HCCL_INFO("[CcuTempScatterNHR1DMem2Mem] sliceSize is 0, no need do, just success.");
         return HCCL_SUCCESS;
     }
+    if (templateResource.dieSplitRatio > 0.0) {
+        dieSplitRatio_ = templateResource.dieSplitRatio;
+    }
     tempArgs.die0Size = 0;
     tempArgs.die1Size = 0;
     constexpr uint32_t MAX_DIE_NUM_2 = 2;
     if (tempArgs.kernelNum == MAX_DIE_NUM_2) {
-        SplitDataFor2Dies(param, templateDataParams, tempArgs.die0Size, tempArgs.die1Size);
+        SplitDataFor2Dies(param, templateDataParams.sliceSize, tempArgs.die0Size, tempArgs.die1Size);
     } else {
         tempArgs.die0Size = templateDataParams.sliceSize;
     }
-    FillKernelRunTempArgs(templateDataParams, tempArgs);
+    FillKernelRunTempArgs(param, templateDataParams, tempArgs);
     CHK_RET(GetToken(buffInfo_, tempArgs.token));
     HCCL_INFO(
         "[CcuTempScatterNHR1DMem2Mem] dimSize[%llu], inputAddr[%llu], outputAddr[%llu], scratchAddr[%llu],"

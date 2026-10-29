@@ -306,6 +306,7 @@ HcclResult InsV2ScatterParallelExecutor<AlgTopoMatch, InsAlgTemplate0, InsAlgTem
             resourceRequest.ccuKernelInfos.end(), interResourceRequest.ccuKernelInfos.begin(),
             interResourceRequest.ccuKernelInfos.end());
         resourceRequest.ccuKernelNum.emplace_back(interResourceRequest.ccuKernelNum[0]);
+        resourceRequest.dieSplitRatio = interResourceRequest.dieSplitRatio; // inter(NHR)模板的2die切分比例
 #ifndef AICPU_COMPILE
         // CCU模式的资源上下文中没有ChannelInfo，此处采集端口信息，供执行阶段计算数据切分比例
         CHK_RET(CollectParallelPortInfoFromCcuKernels(
@@ -517,6 +518,7 @@ HcclResult InsV2ScatterParallelExecutor<AlgTopoMatch, InsAlgTemplate0, InsAlgTem
         interTemplateAlgRes.ccuKernels.insert(
             interTemplateAlgRes.ccuKernels.end(), resCtx.ccuKernels.begin() + resCtx.ccuKernelNum[0],
             resCtx.ccuKernels.begin() + resCtx.ccuKernelNum[0] + resCtx.ccuKernelNum[1]);
+        interTemplateAlgRes.dieSplitRatio = resCtx.dieSplitRatio;
     } else {
         intraTemplateAlgRes.channels = remoteRankToChannelInfo_[0];
         interTemplateAlgRes.channels = remoteRankToChannelInfo_[1];

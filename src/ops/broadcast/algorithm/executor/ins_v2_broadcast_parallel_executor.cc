@@ -204,6 +204,8 @@ InsBroadcastParallelExecutor<AlgTopoMatch, InsAlgTemplate0, InsAlgTemplate1, Ins
             resourceRequest.ccuKernelInfos.end(), interTempRequest0.ccuKernelInfos.begin(),
             interTempRequest0.ccuKernelInfos.end());
         resourceRequest.ccuKernelNum.emplace_back(interTempRequest0.ccuKernelNum[0]);
+        // 传递inter(NHR)模板的2die切分比例; 两个阶段的inter(NHR)模板同层建链, 比例一致
+        resourceRequest.dieSplitRatio = interTempRequest.dieSplitRatio;
 #ifndef AICPU_COMPILE
         // 切分公式按Scatter阶段配平，故采集第一组Scatter模板的端口信息，而非后续AllGather模板。
         CHK_RET(CollectParallelPortInfoFromCcuKernels(
@@ -628,6 +630,8 @@ InsBroadcastParallelExecutor<AlgTopoMatch, InsAlgTemplate0, InsAlgTemplate1, Ins
                 resCtx.ccuKernels.begin() + resCtx.ccuKernelNum[0] + resCtx.ccuKernelNum[1] + resCtx.ccuKernelNum[2]
                     + resCtx.ccuKernelNum[3]);
         }
+        // inter(NHR)模板下发2die切分比例, scatter/allgather两阶段共用
+        interTempAlgRes.dieSplitRatio = resCtx.dieSplitRatio;
     } else {
         intraTempAlgRes.channels = intraLinks_;
         interTempAlgRes.channels = interLinks_;

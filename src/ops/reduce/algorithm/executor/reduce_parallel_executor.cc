@@ -325,6 +325,8 @@ HcclResult ReduceParallelExecutor<AlgTopoMatch, AlgTemplate0, AlgTemplate1, AlgT
             resourceRequest.ccuKernelInfos.end(), allGatherInterTempRequest.ccuKernelInfos.begin(),
             allGatherInterTempRequest.ccuKernelInfos.end());
         resourceRequest.ccuKernelNum.emplace_back(allGatherInterTempRequest.ccuKernelNum[0]);
+        // 传递inter(NHR)模板的2die切分比例; 两个阶段的inter(NHR)模板同层建链, 比例一致
+        resourceRequest.dieSplitRatio = reduceScatterInterTempRequest.dieSplitRatio;
 #ifndef AICPU_COMPILE
         // CCU模式的资源上下文中没有ChannelInfo，此处采集端口信息，供执行阶段计算数据切分比例
         CHK_RET(CollectParallelPortInfoFromCcuKernels(
@@ -519,6 +521,8 @@ ReduceParallelExecutor<AlgTopoMatch, AlgTemplate0, AlgTemplate1, AlgTemplate2, A
                     resCtx_.ccuKernels.begin() + resCtx_.ccuKernelNum[0] + resCtx_.ccuKernelNum[1]
                         + resCtx_.ccuKernelNum[2] + resCtx_.ccuKernelNum[3]);
         }
+        // inter(NHR)模板下发2die切分比例, reduceScatter/allgather两阶段共用
+        tempAlgResArr_.at(stage * stageNum + 1).dieSplitRatio = resCtx_.dieSplitRatio;
     } else {
         tempAlgResArr_.at(stage * INT_2).channels = intraLinks_;
         tempAlgResArr_.at(stage * INT_2 + INT_1).channels = interLinks_;

@@ -172,6 +172,7 @@ HcclResult InsV2BroadcastSoleExecutor<AlgTopoMatch, InsAlgTemplate>::Orchestrate
     templateAlgRes.threads = resCtx.threads;
     templateAlgRes.ccuKernels = resCtx.ccuKernels;
     templateAlgRes.aivCommInfoPtr = resCtx.aivCommInfoPtr;
+    templateAlgRes.dieSplitRatio = resCtx.dieSplitRatio;
     // 准备数据
     TemplateDataParams tempAlgParams;
     tempAlgParams.buffInfo.inputPtr = param.inputPtr;
