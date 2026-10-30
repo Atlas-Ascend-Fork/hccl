@@ -1270,6 +1270,48 @@ class OptBuffsizeTest(unittest.TestCase):
         self.assertEqual(len(deduped), 2)
 
 
+class OptInputProtectionTest(unittest.TestCase):
+    def test_rejects_input_as_output_without_modifying_csv(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            src = os.path.join(tmp, "in.csv")
+            write_csv(src, [make_row()])
+            with open(src, "rb") as handle:
+                original = handle.read()
+            self.assertEqual(optimize_config.main(["--input", src, "--output", src]), 1)
+            with open(src, "rb") as handle:
+                self.assertEqual(handle.read(), original)
+
+    def test_rejects_output_hardlink_to_input(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            src = os.path.join(tmp, "in.csv")
+            dst = os.path.join(tmp, "out.json")
+            write_csv(src, [make_row()])
+            try:
+                os.link(src, dst)
+            except OSError as exc:
+                self.skipTest("hard links unavailable: {}".format(exc))
+            with open(src, "rb") as handle:
+                original = handle.read()
+            self.assertEqual(optimize_config.main(["--input", src, "--output", dst]), 1)
+            with open(src, "rb") as handle:
+                self.assertEqual(handle.read(), original)
+
+    def test_rejects_output_symlink_to_input(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            src = os.path.join(tmp, "in.csv")
+            dst = os.path.join(tmp, "out.json")
+            write_csv(src, [make_row()])
+            try:
+                os.symlink(src, dst)
+            except (OSError, NotImplementedError) as exc:
+                self.skipTest("symbolic links unavailable: {}".format(exc))
+            with open(src, "rb") as handle:
+                original = handle.read()
+            self.assertEqual(optimize_config.main(["--input", src, "--output", dst]), 1)
+            with open(src, "rb") as handle:
+                self.assertEqual(handle.read(), original)
+
+
 class ProfRunOneTimeoutTest(unittest.TestCase):
     """P04+ run_one 超时：挂死轮被杀、落失败、不阻塞采集。"""
 

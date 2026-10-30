@@ -148,6 +148,8 @@ For whitelist-style parameters (`--op-types` / `--data-types` / `--reduce-ops` /
 python3 optimize_config.py --input hccl_perf.csv --output hccl_tuner_config.json
 ```
 
+The input CSV and output JSON must be different files to avoid overwriting collected measurements.
+
 The script reads the CSV, groups by operator, data type, reduce type, buffsize, and
 topology dimensions, picks the highest-bandwidth algorithm at each data-size point
 (latency as tiebreaker), merges adjacent points with the same algorithm into

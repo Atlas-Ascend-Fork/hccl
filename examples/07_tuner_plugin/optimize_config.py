@@ -23,6 +23,7 @@ import argparse
 import csv
 import json
 import logging
+import os
 import sys
 from collections import OrderedDict
 
@@ -383,6 +384,15 @@ def main(argv=None):
     parser.add_argument("--input", required=True, help="采集 CSV 路径（perf_test.py 产物）")
     parser.add_argument("--output", required=True, help="输出 conf JSON 路径")
     args = parser.parse_args(argv)
+
+    same_path = os.path.normcase(os.path.realpath(args.input)) == os.path.normcase(os.path.realpath(args.output))
+    try:
+        same_path = same_path or os.path.samefile(args.input, args.output)
+    except OSError:
+        pass  # The output may not exist yet.
+    if same_path:
+        logger.error("[optimize_config] input CSV and output configuration must be different files")
+        return 1
 
     try:
         rows = read_rows(args.input)

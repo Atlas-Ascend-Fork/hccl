@@ -123,6 +123,8 @@ python3 perf_test.py --op-types allreduce,allgather --engines aicpu,ccusched --n
 python3 optimize_config.py --input hccl_perf.csv --output hccl_tuner_config.json
 ```
 
+输入 CSV 与输出 JSON 必须是不同的文件，以免覆盖采集数据。
+
 脚本读取 CSV，按算子、数据类型、reduce 类型、buffsize、拓扑维度分组，在每个数据量点上
 挑带宽最高的算法（带宽相同比时延），相邻点同算法的合并成区间，区间之间的缝隙
 划给右边的区间，最后输出插件格式的 JSON。
