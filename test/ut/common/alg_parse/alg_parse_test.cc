@@ -246,3 +246,72 @@ TEST_F(HcclAlgoParserTest, ParseMultipleNegatedAlgo)
     EXPECT_EQ(parser.executorList[0].algoList[2].algoType, "meshchunktwoshot");
     EXPECT_FALSE(parser.executorList[0].algoList[2].enable);
 }
+
+// 测试正确用例6：HD 算法词表解析——allgather:sole{hd} 单段（HD 模板显式启用 DSL）
+TEST_F(HcclAlgoParserTest, ParseHdAlgoCase1)
+{
+    HcclAlgoParser parser;
+    std::string input = "allgather:sole{hd}";
+
+    HcclResult ret = parser.Parser(input);
+    EXPECT_EQ(ret, HCCL_SUCCESS);
+    EXPECT_EQ(parser.executorList.size(), 1u);
+
+    EXPECT_EQ(parser.executorList[0].opType, "allgather");
+    EXPECT_EQ(parser.executorList[0].executorType, "sole");
+    EXPECT_EQ(parser.executorList[0].algoList.size(), 1u);
+    EXPECT_EQ(parser.executorList[0].algoList[0].algoType, "hd");
+    EXPECT_TRUE(parser.executorList[0].enable);
+}
+
+// 测试正确用例7：HD 算法词表解析——allgather:parallel{hd,hd} 两段（双槽位绑定 DSL）
+TEST_F(HcclAlgoParserTest, ParseHdAlgoCase2)
+{
+    HcclAlgoParser parser;
+    std::string input = "allgather:parallel{hd,hd}";
+
+    HcclResult ret = parser.Parser(input);
+    EXPECT_EQ(ret, HCCL_SUCCESS);
+    EXPECT_EQ(parser.executorList.size(), 1u);
+
+    EXPECT_EQ(parser.executorList[0].opType, "allgather");
+    EXPECT_EQ(parser.executorList[0].executorType, "parallel");
+    EXPECT_EQ(parser.executorList[0].algoList.size(), 2u);
+    EXPECT_EQ(parser.executorList[0].algoList[0].algoType, "hd");
+    EXPECT_EQ(parser.executorList[0].algoList[1].algoType, "hd");
+    EXPECT_TRUE(parser.executorList[0].enable);
+}
+
+// 测试正确用例8：HD 与既有算法混排——shorthand "hd"、sequence{mesh,hd}、not(parallel{hd,nhr})
+TEST_F(HcclAlgoParserTest, ParseHdAlgoCase3)
+{
+    HcclAlgoParser parser;
+    std::string input = "hd;allgather:sequence{mesh,hd};not(parallel{hd,nhr})";
+
+    HcclResult ret = parser.Parser(input);
+    EXPECT_EQ(ret, HCCL_SUCCESS);
+    EXPECT_EQ(parser.executorList.size(), 3u);
+
+    // 检查第一段：hd → sole{hd}
+    EXPECT_EQ(parser.executorList[0].opType, "");
+    EXPECT_EQ(parser.executorList[0].executorType, "sole");
+    EXPECT_EQ(parser.executorList[0].algoList.size(), 1u);
+    EXPECT_EQ(parser.executorList[0].algoList[0].algoType, "hd");
+    EXPECT_TRUE(parser.executorList[0].enable);
+
+    // 检查第二段：allgather:sequence{mesh,hd}
+    EXPECT_EQ(parser.executorList[1].opType, "allgather");
+    EXPECT_EQ(parser.executorList[1].executorType, "sequence");
+    EXPECT_EQ(parser.executorList[1].algoList.size(), 2u);
+    EXPECT_EQ(parser.executorList[1].algoList[0].algoType, "mesh");
+    EXPECT_EQ(parser.executorList[1].algoList[1].algoType, "hd");
+    EXPECT_TRUE(parser.executorList[1].enable);
+
+    // 检查第三段：not(parallel{hd,nhr})
+    EXPECT_EQ(parser.executorList[2].opType, "");
+    EXPECT_EQ(parser.executorList[2].executorType, "parallel");
+    EXPECT_EQ(parser.executorList[2].algoList.size(), 2u);
+    EXPECT_EQ(parser.executorList[2].algoList[0].algoType, "hd");
+    EXPECT_EQ(parser.executorList[2].algoList[1].algoType, "nhr");
+    EXPECT_FALSE(parser.executorList[2].enable);
+}

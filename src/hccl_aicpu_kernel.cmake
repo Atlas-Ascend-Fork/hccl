@@ -110,6 +110,7 @@ add_library(hccl_aicpu_kernel SHARED
     ${CMAKE_CURRENT_SOURCE_DIR}/ops/all_gather/algorithm/template/aicpu/ins_temp_all_gather_mesh_1D.cc
     ${CMAKE_CURRENT_SOURCE_DIR}/ops/all_gather/algorithm/template/aicpu/ins_temp_all_gather_mesh_1D_Z_axis_detour.cc
     ${CMAKE_CURRENT_SOURCE_DIR}/ops/all_gather/algorithm/template/aicpu/ins_temp_all_gather_nhr.cc
+    ${CMAKE_CURRENT_SOURCE_DIR}/ops/all_gather/algorithm/template/aicpu/ins_temp_all_gather_hd_op.cc
     ${CMAKE_CURRENT_SOURCE_DIR}/ops/all_reduce/algorithm/template/aicpu/ins_temp_all_gather_hd.cc
     ${CMAKE_CURRENT_SOURCE_DIR}/ops/all_gather/algorithm/template/aicpu/ins_temp_all_gather_omnipipe_mesh_1D.cc
     ${CMAKE_CURRENT_SOURCE_DIR}/ops/all_gather/algorithm/template/aicpu/ins_temp_all_gather_omnipipe_nhr_dpu.cc
