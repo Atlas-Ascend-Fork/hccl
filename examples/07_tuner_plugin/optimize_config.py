@@ -36,6 +36,10 @@ from tuner_common import (
 
 DPU_ENGINE = "dpu"
 
+# Keep these limits in sync with plugin.cpp's configuration parser.
+MAX_TOTAL_RULES = 5000
+MAX_RULES_PER_OP = 2000
+
 # plugin 支持的 dtype（含 float16/float32 等别名）
 PLUGIN_DATA_TYPES = frozenset((
     "int8", "int16", "int32", "int64", "uint8", "uint16", "uint32", "uint64",
@@ -371,6 +375,13 @@ def build_conf(rows):
         if count:
             logger.info("[optimize_config] whitelist: dropped {} winner(s) by reason '{}'".format(
                 count, reason))
+    for op_type, rules in op_rules.items():
+        if len(rules) > MAX_RULES_PER_OP:
+            raise OptimizeConfigError("{} has {} rules; plugin limit is {} per operator".format(
+                op_type, len(rules), MAX_RULES_PER_OP))
+    if total_rules > MAX_TOTAL_RULES:
+        raise OptimizeConfigError("configuration has {} rules; plugin limit is {} total".format(
+            total_rules, MAX_TOTAL_RULES))
     conf = {"version": 1, "op_types": OrderedDict()}
     for op_type in sorted(op_rules):
         conf["op_types"][op_type] = {"rules": op_rules[op_type]}
@@ -403,7 +414,11 @@ def main(argv=None):
         logger.error("[optimize_config] input CSV is empty: {}".format(args.input))
         return 1
 
-    conf, total_rules = build_conf(rows)
+    try:
+        conf, total_rules = build_conf(rows)
+    except OptimizeConfigError as err:
+        logger.error("[optimize_config] cannot generate usable configuration: {}".format(err))
+        return 1
     with open(args.output, "w", encoding="utf-8") as handle:
         json.dump(conf, handle, indent=2, ensure_ascii=False)
         handle.write("\n")

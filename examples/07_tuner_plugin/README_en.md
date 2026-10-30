@@ -156,6 +156,8 @@ topology dimensions, picks the highest-bandwidth algorithm at each data-size poi
 intervals, and assigns gaps between intervals to the right-hand interval. The
 output is the plugin-format JSON.
 
+The plugin supports at most 2000 rules per operator and 5000 rules in total. For an operator exceeding its limit, the plugin retains the first 2000 rules in JSON array order and skips the rest; exceeding the total limit makes the entire plugin configuration inactive. To avoid generating a partially effective configuration, the generator rejects both cases, preserves any existing output file, and does not truncate rules automatically. Reduce the operator, data-type, topology, or buffsize combinations, or the data-size samples, and generate again. The plugin loads one configuration file; splitting the generated output cannot bypass these limits.
+
 A few conversions and bindings to be aware of:
 
 - **Allgather-family per-rank conversion**: the size collected by hccl_test is the

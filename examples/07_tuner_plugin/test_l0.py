@@ -21,6 +21,7 @@ preflight 自检、去重 / 分组 / 选优 / 区间合并 / 补缝 / 白名单�
 
 import json
 import os
+import re
 import sys
 import tempfile
 import unittest
@@ -1231,6 +1232,47 @@ class OptConfStructureTest(unittest.TestCase):
             self.assertEqual(conf["version"], 1)
             rules = conf["op_types"]["allreduce"]["rules"]
             self.assertEqual(rules[0]["engine"], "aiv")
+
+
+class OptRuleLimitTest(unittest.TestCase):
+    def test_limits_match_plugin_defines(self):
+        path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "plugin.cpp")
+        with open(path, encoding="utf-8") as handle:
+            source = handle.read()
+        for name in ("MAX_RULES_PER_OP", "MAX_TOTAL_RULES"):
+            with self.subTest(name=name):
+                match = re.search(r"^#define\s+" + name + r"\s+(\d+)\s*$", source, re.MULTILINE)
+                self.assertIsNotNone(match, name)
+                self.assertEqual(getattr(optimize_config, name), int(match.group(1)))
+
+    def test_per_operator_limit_and_boundary(self):
+        rows = [make_row(), make_row(**{"HCCL_BUFFSIZE": "1024"})]
+        with mock.patch.object(optimize_config, "MAX_RULES_PER_OP", 2):
+            self.assertEqual(optimize_config.build_conf(rows)[1], 2)
+        with mock.patch.object(optimize_config, "MAX_RULES_PER_OP", 1):
+            with self.assertRaisesRegex(optimize_config.OptimizeConfigError, "per operator"):
+                optimize_config.build_conf(rows)
+
+    def test_total_limit_and_boundary(self):
+        rows = [make_row(), make_row(op_type="reduce")]
+        with mock.patch.object(optimize_config, "MAX_TOTAL_RULES", 2):
+            self.assertEqual(optimize_config.build_conf(rows)[1], 2)
+        with mock.patch.object(optimize_config, "MAX_TOTAL_RULES", 1):
+            with self.assertRaisesRegex(optimize_config.OptimizeConfigError, "total"):
+                optimize_config.build_conf(rows)
+
+    def test_limit_error_does_not_overwrite_existing_output(self):
+        rows = [make_row(), make_row(**{"HCCL_BUFFSIZE": "1024"})]
+        with tempfile.TemporaryDirectory() as tmp:
+            src = os.path.join(tmp, "in.csv")
+            dst = os.path.join(tmp, "out.json")
+            write_csv(src, rows)
+            with open(dst, "w", encoding="utf-8") as handle:
+                handle.write("existing configuration")
+            with mock.patch.object(optimize_config, "MAX_RULES_PER_OP", 1):
+                self.assertEqual(optimize_config.main(["--input", src, "--output", dst]), 1)
+            with open(dst, encoding="utf-8") as handle:
+                self.assertEqual(handle.read(), "existing configuration")
 
 
 class OptBuffsizeTest(unittest.TestCase):
