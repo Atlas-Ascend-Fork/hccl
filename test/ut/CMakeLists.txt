@@ -17,6 +17,7 @@ add_subdirectory(common/channel_process_link)
 add_subdirectory(common/ccu_resource_expansion)
 add_subdirectory(selector_engine)
 add_subdirectory(alltoall_hier)
+add_subdirectory(hccl_gen_task_superkernel)
 add_subdirectory(aicpu_task_cache)
 # reduce_scatter_seq64: RS/AR AicpuReduce 模板 cost 建模 + MeshNHRAicpuReduce attrs 注册准入。
 # 测 src/ 产品代码，与 alltoall_hier 同级无条件注册；注意 build.sh -u 的 UT 构建不传

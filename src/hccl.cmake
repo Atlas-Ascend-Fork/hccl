@@ -165,10 +165,80 @@ set(OP_PROTO_INCLUDE
     ${ASCEND_CANN_PACKAGE_PATH}/include/exe_graph
 )
 
+# 通过编译期特性探测判断 GE 是否已开放 HCCL SuperKernel GenTask 接口
+include(CheckCXXSourceCompiles)
+set(_hccl_sk_probe_saved_includes "${CMAKE_REQUIRED_INCLUDES}")
+set(_hccl_sk_probe_saved_flags "${CMAKE_REQUIRED_FLAGS}")
+set(_hccl_sk_probe_saved_try_type "${CMAKE_TRY_COMPILE_TARGET_TYPE}")
+set(CMAKE_REQUIRED_INCLUDES
+    ${ASCEND_CANN_PACKAGE_PATH}/include
+    ${ASCEND_CANN_PACKAGE_PATH}/include/exe_graph
+)
+set(CMAKE_REQUIRED_FLAGS "-std=c++17")
+# 仅做编译探测，不参与链接，避免被 GE 库的传递依赖（protobuf/platform 等）干扰
+set(CMAKE_TRY_COMPILE_TARGET_TYPE STATIC_LIBRARY)
+unset(HCCL_HAS_GE_SUPERKERNEL_GENTASK CACHE)
+check_cxx_source_compiles([=[
+#include <vector>
+#include "exe_graph/runtime/task_def_builder.h"
+#include "graph/arg_desc_info.h"
+int main()
+{
+    gert::TaskDefBuilder task;
+    task.SetStreamId(1U).SetType(0U);
+    task.GetKernelBuilder().SetBlockDim(1U).GetContextBuilder().SetArgsFormat(ge::AscendString("{i0*}"));
+    std::vector<ge::ArgDescInfo> args;
+    args.emplace_back(ge::ArgDescInfo(ge::ArgDescType::kIrInput, 0));
+    args.insert(args.begin(), ge::ArgDescInfo::CreateHiddenInput(ge::HiddenInputSubType::kHcclSuperKernel));
+    (void)ge::ArgsFormatSerializer::Serialize(args);
+    return 0;
+}
+]=] HCCL_HAS_GE_SUPERKERNEL_GENTASK)
+set(CMAKE_REQUIRED_INCLUDES "${_hccl_sk_probe_saved_includes}")
+set(CMAKE_REQUIRED_FLAGS "${_hccl_sk_probe_saved_flags}")
+set(CMAKE_TRY_COMPILE_TARGET_TYPE "${_hccl_sk_probe_saved_try_type}")
+
+set(HCCL_SUPERKERNEL_GENTASK_ENABLED OFF)
+if(HCCL_HAS_GE_SUPERKERNEL_GENTASK)
+    # 接口存在即启用，不依赖 CANN 版本号
+    set(HCCL_SUPERKERNEL_GENTASK_ENABLED ON)
+    message(STATUS "HCCL SuperKernel GenTask enabled (GE TaskDefBuilder/kHcclSuperKernel found).")
+else()
+    # 探测不到接口：降级（不注册 GenerateTask），不中断构建。
+    # GE FE 的 gen_task==nullptr 分支优雅回退；旧版本 CANN 上由 canndev 旧实现提供该回调。
+    # 注意：接口是否随 CANN 包发布与版本号不严格绑定。
+    message(WARNING
+        "HCCL SuperKernel GenTask is disabled: GE TaskDefBuilder/kHcclSuperKernel interface "
+        "not found in this CANN package (CANN_VERSION_NUM=${HCCL_CANN_VERSION_NUM}). "
+        "Build proceeds without superkernel gen_task. "
+        "If superkernel gen_task is expected, please check whether the CANN package "
+        "provides the GE TaskDefBuilder/kHcclSuperKernel interface.")
+endif()
+
+set(_opgraph_hccl_superkernel_libs)
+
 add_library(opgraph_hccl SHARED
     ${CMAKE_CURRENT_SOURCE_DIR}/common/log.cc
     ${CMAKE_CURRENT_SOURCE_DIR}/common/op_graph/hcom_vinputvec_set_pass.cc
 )
+
+if(HCCL_SUPERKERNEL_GENTASK_ENABLED)
+    # nlohmann/json：CANN 框架自动下载并提供 nlohmann=ascend_nlohmann 命名空间重映射
+    # 防御：cann-cmake 未提供 add_cann_third_party 或 json 目标未创建时降级，不中断构建
+    if(COMMAND add_cann_third_party)
+        add_cann_third_party(json)
+    endif()
+    if(NOT TARGET json)
+        message(WARNING
+            "HCCL SuperKernel GenTask is disabled: nlohmann/json third-party target not available. "
+            "Build proceeds without superkernel gen_task.")
+    else()
+        target_sources(opgraph_hccl PRIVATE
+            ${CMAKE_CURRENT_SOURCE_DIR}/common/op_graph/hccl_gen_task_superkernel.cc
+        )
+        list(APPEND _opgraph_hccl_superkernel_libs platform json)
+    endif()
+endif()
 
 if(NOT ENABLE_TEST)
     set(OPGRAPH_HCCL_EXPORT_MAP
@@ -213,6 +283,7 @@ target_link_libraries(opgraph_hccl PRIVATE
     rt2_registry
     -Wl,--no-whole-archive
     ge_common
+    ${_opgraph_hccl_superkernel_libs}
     -Wl,-Bsymbolic
     -Wl,-z,relro
     -Wl,-z,now
