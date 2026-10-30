@@ -21,7 +21,13 @@ export HCCL_RDMA_QPS_PER_CONNECTION=4
 - 该环境变量仅支持单算子调用方式，不支持静态图模式。
 - QP相关配置的优先级如下：
 
-    管理面多QP配置（通过hccn_tool工具的`-s multi_qp`参数配置） > NSLB的QP配置（通过hccn_tool工具的`-t nslb-dp`参数配置）> 环境变量HCCL_RDMA_QP_PORT_CONFIG_PATH >  环境变量HCCL_RDMA_QPS_PER_CONNECTION。
+    环境变量HCCL_RDMA_QP_PORT_CONFIG_PATH \> 环境变量HCCL_RDMA_QPS_PER_CONNECTION。
+
+<!-- npu="A3,910b" id6 -->
+- 针对Atlas A3系列产品与Atlas A2系列产品，QP相关配置还可以通过hccn_tool工具设置，hccn_tool工具配置与该环境变量的优先级如下：
+
+    管理面多QP配置（通过hccn_tool工具的“-s multi_qp”参数配置） \> NSLB的QP配置（通过hccn_tool工具的“-t nslb-dp”参数配置）\> 环境变量HCCL_RDMA_QP_PORT_CONFIG_PATH \> 环境变量HCCL_RDMA_QPS_PER_CONNECTION。
+<!-- end id6 -->
 
 ## 产品支持情况
 
