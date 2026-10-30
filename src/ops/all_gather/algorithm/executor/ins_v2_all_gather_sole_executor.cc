@@ -424,7 +424,8 @@ REGISTER_ALG_ATTRS(
 REGISTER_EXEC_V2(
     HcclCMDType::HCCL_CMD_ALLGATHER, AicpuAllGatherSoleNHRMultiLink, InsV2AllGatherSoleExecutor, TopoMatchOneLevel,
     InsTempAllGatherNHR);
-REGISTER_ALG_ATTRS(AicpuAllGatherSoleNHRMultiLink, topo.supportLevel0Topos = LEVEL0_TOPO_CLOS;);
+REGISTER_ALG_ATTRS(AicpuAllGatherSoleNHRMultiLink, topo.supportLevel0Topos = LEVEL0_TOPO_CLOS;
+                   topo.isSupportLevel1Nhr = true;);
 
 REGISTER_EXEC_V2(
     HcclCMDType::HCCL_CMD_ALLGATHER, AicpuAllGatherSoleHD, InsV2AllGatherSoleExecutor, TopoMatchOneLevel,

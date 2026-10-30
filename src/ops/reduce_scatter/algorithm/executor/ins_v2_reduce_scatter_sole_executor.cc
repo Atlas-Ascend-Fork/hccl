@@ -407,8 +407,8 @@ REGISTER_EXEC_V2(
     HcclCMDType::HCCL_CMD_REDUCE_SCATTER, AicpuReduceScatterSoleNHRMultiLink, InsV2ReduceScatterSoleExecutor,
     TopoMatchOneLevel, InsTempReduceScatterNHR);
 REGISTER_ALG_ATTRS(AicpuReduceScatterSoleNHRMultiLink, topo.supportLevel0Topos = LEVEL0_TOPO_CLOS;
-
-                   op.isSupportProd = false; op.unsupportedDataTypes = UNSUPPORTED_64BIT);
+                   topo.isSupportLevel1Nhr = true; op.isSupportProd = false;
+                   op.unsupportedDataTypes = UNSUPPORTED_64BIT);
 REGISTER_EXEC_V2(
     HcclCMDType::HCCL_CMD_REDUCE_SCATTER, AicpuReduceScatterSoleMeshConcur, InsV2ReduceScatterSoleExecutor,
     TopoMatchOneLevel, InsTempReduceScatterMesh1DZAxisDetour);
