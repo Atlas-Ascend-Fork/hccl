@@ -35,13 +35,15 @@ using namespace std;
 using namespace ops_hccl;
 
 extern "C" {
-// aclrtExceptionInfoCallbackRegister 为新接口，部分旧版 cann 可能不存在，保留 weak 声明做运行时 nullptr 判断。
-aclError aclrtExceptionInfoCallbackRegister(void (*callback)(aclrtExceptionInfo*)) __attribute__((weak));
+// 以下可选 acl/rt 符号仅部分版本 CANN 提供，统一用 dlsym_common.h 的 DECL_WEAK_FUNC 做 weak 声明，
+// 符号缺失时引用解析为 nullptr、不阻塞动态库加载，运行时通过 nullptr 判断做兼容性回退：
+// aclrtExceptionInfoCallbackRegister 不可用时回退 rtRegTaskFailCallbackByModule；
+// aclrtGetThreadLastTaskIdAndStreamId 不可用时回退 rtGetTaskIdAndStreamID。
+DECL_WEAK_FUNC(aclError, aclrtExceptionInfoCallbackRegister, void (*callback)(aclrtExceptionInfo*));
+DECL_WEAK_FUNC(aclError, aclrtGetThreadLastTaskIdAndStreamId, uint32_t* taskId, uint32_t* streamId);
+DECL_WEAK_FUNC(rtError_t, rtGetTaskIdAndStreamID, uint32_t* taskId, uint32_t* streamId);
+DECL_WEAK_FUNC(rtError_t, rtRegTaskFailCallbackByModule, const char_t* moduleName, rtTaskFailCallback callback);
 }
-
-// 兼容性处理，aclrtExceptionInfoCallbackRegister不可用时回退到 rtRegTaskFailCallbackByModule
-extern "C" rtError_t rtRegTaskFailCallbackByModule(const char_t* moduleName, rtTaskFailCallback callback)
-    __attribute__((weak));
 
 #ifdef HCCL_STATIC_MODE
 // 静态库模式下，AIV kernel `.o` 已通过 `ld -r -b binary` 内嵌进 libhccl_static.a。
@@ -263,10 +265,23 @@ static HcclResult SaveAivDfxTaskInfo(const AivOpArgs& opArgs)
 {
     u32 taskId = 0;
     u32 streamId = 0;
-    rtError_t rtRet = rtGetTaskIdAndStreamID(&taskId, &streamId);
-    CHK_PRT_RET(
-        rtRet != RT_ERROR_NONE, HCCL_ERROR("[AIV][SaveAivDfxTaskInfo] rtGetTaskIdAndStreamID failed, ret[%d].", rtRet),
-        HCCL_E_RUNTIME);
+    // 兼容性处理：优先使用 aclrtGetThreadLastTaskIdAndStreamId 公开接口，旧版 CANN 不支持时
+    // 回退到 rtGetTaskIdAndStreamID。两接口语义一致，均返回当前线程最后下发 task 的 taskId 与 streamId。
+    if (aclrtGetThreadLastTaskIdAndStreamId != nullptr) {
+        aclError aclRet = aclrtGetThreadLastTaskIdAndStreamId(&taskId, &streamId);
+        CHK_PRT_RET(
+            aclRet != ACL_SUCCESS,
+            HCCL_ERROR("[AIV][SaveAivDfxTaskInfo] aclrtGetThreadLastTaskIdAndStreamId failed, ret[%d].", aclRet),
+            HCCL_E_RUNTIME);
+    } else if (rtGetTaskIdAndStreamID != nullptr) {
+        rtError_t rtRet = rtGetTaskIdAndStreamID(&taskId, &streamId);
+        CHK_PRT_RET(
+            rtRet != RT_ERROR_NONE,
+            HCCL_ERROR("[AIV][SaveAivDfxTaskInfo] rtGetTaskIdAndStreamID failed, ret[%d].", rtRet), HCCL_E_RUNTIME);
+    } else {
+        HCCL_ERROR("[AIV][SaveAivDfxTaskInfo] no available interface to get taskId and streamId.");
+        return HCCL_E_RUNTIME;
+    }
 
     TaskParamAiv taskInfo;
     taskInfo.taskId = taskId;
@@ -795,6 +810,14 @@ HcclResult RegisterKernel()
     registry.initialized = true;
 
     RegisterAivExceptionCallback();
+
+    if (GetExternalInputTaskExceptionEnable()) {
+        // taskId/streamId 获取接口的可观测性：weak 符号在加载时绑定后整个生命周期不变，
+        // 每 device 打印一次，便于线上 DFX 排障判别实际走 acl 新接口还是 rt 回退接口。
+        HCCL_INFO(
+            "[AIV][RegisterKernel] task exception dfx enabled, use aclrt interface: %d.",
+            aclrtGetThreadLastTaskIdAndStreamId != nullptr);
+    }
 
     return HCCL_SUCCESS;
 }

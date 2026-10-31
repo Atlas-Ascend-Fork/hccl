@@ -537,6 +537,16 @@ rtError_t rtGetTaskIdAndStreamID(uint32_t* taskId, uint32_t* streamId)
     return RT_ERROR_NONE;
 }
 
+aclError aclrtGetThreadLastTaskIdAndStreamId(uint32_t* taskId, uint32_t* streamId)
+{
+    if (taskId == nullptr || streamId == nullptr) {
+        return ACL_ERROR_INVALID_PARAM;
+    }
+    *taskId = 0;
+    *streamId = 0;
+    return ACL_SUCCESS;
+}
+
 aclError aclrtCreateEventExWithFlag(aclrtEvent* event, uint32_t flag)
 {
     if (event == nullptr) {
