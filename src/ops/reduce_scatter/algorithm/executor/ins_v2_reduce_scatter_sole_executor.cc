@@ -32,9 +32,14 @@
 #include "alg_attrs_registry.h"
 #include "auto_selector_base.h"
 #include "hccl_aiv_utils.h"
+#include "order_preserved_common.h"
+#include "reduce_scatter_selector_utils.h"
 namespace ops_hccl {
 constexpr u32 DEVICE_NUM_PER_MODULE_8 = 8;
 constexpr u32 MAX_RANK_NUM_FOR_CONCURRENT_ALGO = 4;
+// 与 reduce_scatter_selector_utils.h 的 MAX_RANK_NUM_FOR_CCU_MS_REDUCE_SCATTER_STRICT、
+// reduce_scatter_auto_selector.cc 的 MAX_RANK_NUM_FOR_CCU_MS_REDUCE_SCATTER 同源于内核
+// msInterleave 约束（size = channelCount + 1 须不超过 CCU_MS_INTERLEAVE），须同步调整。
 constexpr u32 MAX_RANK_NUM_FOR_REDUCE_MS_ALGO = 8;
 constexpr u64 RS_AICPU_1D_MAX_DATA_SIZE = 16 * 1024 * 1024;
 constexpr u32 RS_CCU_2DIE_RANK_SIZE = 16;
@@ -485,17 +490,22 @@ REGISTER_EXEC_V2(
 REGISTER_ALG_ATTRS(
     CcuMSReduceScatterSoleMesh, topo.supportLevel0Topos = LEVEL0_TOPO_MESH_1D | LEVEL0_TOPO_MESH_1D_CLOS;
     topo.maxTopoLevelNum = 1; op.isSupportProd = false; op.unsupportedDataTypes = UNSUPPORTED_INT8_AND_64BIT;
-    op.isSupportInplace = false; topo.isSupportLevel0PcieMix = true;
+    op.isSupportInplace = false; op.isSupportFloatOrderPreserved = true; topo.isSupportLevel0PcieMix = true;
+    op.opCustomCheck = [](const OpParam& opParam, const TopoInfoWithNetLayerDetails* topo) -> bool {
+        return !IsNeedStrictModeForOrderPreserved(opParam, topo->userRankSize)
+               || CanSelectBatchInvariantCcuMsReduceScatter(opParam, topo);
+    };
+    op.opPriorityCheck = [](const OpParam& opParam, const TopoInfoWithNetLayerDetails* topo) -> bool {
+        return IsNeedStrictModeForOrderPreserved(opParam, topo->userRankSize)
+               && CanSelectBatchInvariantCcuMsReduceScatter(opParam, topo);
+    };
     topo.topoCustomCheck = [](const TopoInfoWithNetLayerDetails* topo) -> bool {
         if (topo->level0Topo == Level0Shape::MESH_1D_CLOS) {
             if (topo->level0PcieMix
                 && !AutoSelectorBase::IsLayerAllConnetedWithTopo(topo, 0, CommTopo::COMM_TOPO_1DMESH)) {
                 return false;
             }
-            bool isEqual = false;
-            AutoSelectorBase::CheckMeshNumEqualToClosNum(topo, isEqual);
-            return (isEqual && topo->userRankSize <= MAX_RANK_NUM_FOR_CONCURRENT_ALGO)
-                   || (topo->userRankSize <= MAX_RANK_NUM_FOR_REDUCE_MS_ALGO);
+            return topo->userRankSize <= MAX_RANK_NUM_FOR_REDUCE_MS_ALGO;
         }
         return true;
     });

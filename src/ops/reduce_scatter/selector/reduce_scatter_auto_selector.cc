@@ -13,10 +13,14 @@
 #include "hccl_aiv_utils.h"
 #include "ins_v2_reduce_scatter_order_preserved_executor.h"
 #include "order_preserved_common.h"
+#include "reduce_scatter_selector_utils.h"
 
 namespace ops_hccl {
 constexpr u32 MAX_RANK_NUM_FOR_CONCURRENT_ALGO = 4;
-constexpr u32 MAX_RANK_NUM_FOR_REDUCE_MS_ALGO = 8;
+// 与 reduce_scatter_selector_utils.h 的 MAX_RANK_NUM_FOR_CCU_MS_REDUCE_SCATTER_STRICT、
+// ins_v2_reduce_scatter_sole_executor.cc 的 MAX_RANK_NUM_FOR_REDUCE_MS_ALGO 同源于内核
+// msInterleave 约束（size = channelCount + 1 须不超过 CCU_MS_INTERLEAVE），须同步调整。
+constexpr u32 MAX_RANK_NUM_FOR_CCU_MS_REDUCE_SCATTER = 8;
 constexpr u64 RS_AICPU_1D_MAX_DATA_SIZE = 16 * 1024 * 1024;
 constexpr u64 RS_FLATTEN_MAX_DATA_SIZE = 512 * 1024;
 constexpr u64 RS_AICPU_1D_MIN_DATA_SIZE = 4 * 1024 * 1024;
@@ -40,13 +44,6 @@ SelectorStatus ReduceScatterAutoSelector::SelectCcuMsAlgo(
 {
     HCCL_DEBUG("[ReduceScatterAutoSelector][%s] start, topoInfo levelNum[%u]", __func__, topoInfo->topoLevelNums);
     (void)configAlgMap;
-
-    // 保序模式不支持CCU_MS，需要回退到AICPU
-    CHK_PRT_RET(
-        IsNeedStrictModeForOrderPreserved(opParam, topoInfo->userRankSize),
-        HCCL_DEBUG(
-            "[ReduceScatterAutoSelector] DETERMINISTIC_STRICT mode not supported for CCU_MS, fallback to AICPU."),
-        SelectorStatus::NOT_MATCH);
 
     if (topoInfo->topoLevelNums > 1) {
         HCCL_WARNING("[ReduceScatterAutoSelector] layerNum > 1 is not supported yet for ccu_ms mode.");
@@ -83,6 +80,18 @@ SelectorStatus ReduceScatterAutoSelector::SelectCcuMsAlgo(
         return SelectorStatus::NOT_MATCH;
     }
 
+    if (IsNeedStrictModeForOrderPreserved(opParam, topoInfo->userRankSize)) {
+        if (!CanSelectBatchInvariantCcuMsReduceScatter(opParam, topoInfo)) {
+            HCCL_INFO("[ReduceScatterAutoSelector] CcuMSReduceScatterSoleMesh is not applicable in "
+                      "DETERMINISTIC_STRICT mode, fallback to AICPU.");
+            return SelectorStatus::NOT_MATCH;
+        }
+        HCCL_INFO("[ReduceScatterAutoSelector] DETERMINISTIC_STRICT mode selected batch-invariant CCU algorithm");
+        selectAlgName = CCU_MS_RS_SOLE_MESH_ALG_NAME;
+        HCCL_INFO("[ReduceScatterAutoSelector][%s] Algo match [%s]", __func__, selectAlgName.c_str());
+        return SelectorStatus::MATCH;
+    }
+
     SelectorStatus ret = SelectMeshAlgoCcums(topoInfo, opParam, selectAlgName);
     if (ret == SelectorStatus::MATCH) {
         HCCL_INFO("[ReduceScatterAutoSelector][%s] Algo match [%s]", __func__, selectAlgName.c_str());
@@ -109,7 +118,7 @@ SelectorStatus ReduceScatterAutoSelector::SelectMeshAlgoCcums(
                 && (dataSize * topoInfo->userRankSize > SMALL_COUNT_16M && IsTwoLevelNetLayer(topoInfo, opParam))) {
                 selectAlgName = "CcuMSReduceScatterSoleMeshConcur";
             } else {
-                selectAlgName = "CcuMSReduceScatterSoleMesh";
+                selectAlgName = CCU_MS_RS_SOLE_MESH_ALG_NAME;
             }
         }
     } else if (
@@ -130,7 +139,7 @@ SelectorStatus ReduceScatterAutoSelector::SelectMeshAlgoCcums(
             HCCL_ERROR("[ReduceScatterAutoSelector] CheckClosNumMultipleOfMeshNum failed."), SelectorStatus::NOT_MATCH);
         if (isMeshNumEqualToClosNum && topoInfo->userRankSize <= MAX_RANK_NUM_FOR_CONCURRENT_ALGO) { // 4P mesh
             if (IsSmallData(dataSize)) { // 小数据量，用1d mesh算法
-                selectAlgName = "CcuMSReduceScatterSoleMesh";
+                selectAlgName = CCU_MS_RS_SOLE_MESH_ALG_NAME;
             } else { // 大数据量，用mesh+clos并行算法
                 selectAlgName = "CcuMSReduceScatterConcurMeshNHRMultiLink";
             }
@@ -141,8 +150,8 @@ SelectorStatus ReduceScatterAutoSelector::SelectMeshAlgoCcums(
             } else {
                 selectAlgName = "CcuMSReduceScatterPipeLineMeshNHR";
             }
-        } else if (topoInfo->userRankSize <= MAX_RANK_NUM_FOR_REDUCE_MS_ALGO) {
-            selectAlgName = "CcuMSReduceScatterSoleMesh";
+        } else if (topoInfo->userRankSize <= MAX_RANK_NUM_FOR_CCU_MS_REDUCE_SCATTER) {
+            selectAlgName = CCU_MS_RS_SOLE_MESH_ALG_NAME;
         } else {
             HCCL_DEBUG("[ReduceScatterAutoSelector] level0Topo[%u] is not supported mesh yet.", topoInfo->level0Topo);
             return SelectorStatus::NOT_MATCH;

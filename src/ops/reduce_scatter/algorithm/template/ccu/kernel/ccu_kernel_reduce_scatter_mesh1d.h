@@ -21,6 +21,7 @@ namespace ops_hccl {
 struct CcuKernelArgReduceScatterMesh1D : CcuKernelArgBase {
     uint64_t rankSize;
     uint32_t rankId;
+    bool orderPreserved = false;
     OpParam opParam;
     std::vector<std::vector<uint32_t>> subCommRanks;
 };

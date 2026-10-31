@@ -12,6 +12,8 @@
 #include "ccu_kernel_reduce_scatter_mesh1d.h"
 #include "ccu_temp_reduce_scatter_mesh_1D.h"
 #include "ccu_launch_dl.h"
+#include "order_preserved_common.h"
+#include "reduce_scatter_batch_invariant.h"
 
 namespace ops_hccl {
 
@@ -61,6 +63,30 @@ HcclResult CcuTempReduceScatterMesh1D::CalcRes(
         "slaveThreadNum[%u]",
         resourceRequest.notifyNumOnMainThread, resourceRequest.slaveThreadNum);
 
+    const bool strictMode = IsNeedStrictModeForOrderPreserved(param, topoInfo->userRankSize);
+    const bool sameRankSize = subCommRanks_[0].size() == topoInfo->userRankSize;
+    const bool orderPreserved = strictMode && sameRankSize && IsCcuMsReduceScatterSoleMeshAlg(param.algName)
+                                && CanSelectBatchInvariantCcuMsReduceScatter(param, topoInfo);
+    if (strictMode && !orderPreserved) {
+        if (!IsCcuMsReduceScatterSoleMeshAlg(param.algName)) {
+            HCCL_ERROR(
+                "[CcuTempReduceScatterMesh1D::CalcRes] strict mode is supported only for [%s], got algName[%s]",
+                CCU_MS_RS_SOLE_MESH_ALG_NAME, param.algName);
+        } else if (!sameRankSize) {
+            HCCL_ERROR(
+                "[CcuTempReduceScatterMesh1D::CalcRes] strict mode rank mismatch: userRankSize[%u], meshRankSize[%zu]",
+                topoInfo->userRankSize, subCommRanks_[0].size());
+        } else {
+            HCCL_ERROR(
+                "[CcuTempReduceScatterMesh1D::CalcRes] strict batch-invariant constraints not met: algName[%s] "
+                "userRankSize[%u] dataType[%d] reduceType[%d] level0Topo[%d] opExecuteConfig[%d]",
+                param.algName, topoInfo->userRankSize, static_cast<int>(param.DataDes.dataType),
+                static_cast<int>(param.reduceType), static_cast<int>(topoInfo->level0Topo),
+                static_cast<int>(param.opExecuteConfig));
+        }
+        return HCCL_E_NOT_SUPPORT;
+    }
+
     // 创建每个kernel的ctxArg，放入kernelInfo, 然后将kernelinfo放入resourceRequest.ccuKernelInfos
     CcuKernelInfo kernelInfo;
     CHK_SAFETY_FUNC_RET(
@@ -80,6 +106,7 @@ HcclResult CcuTempReduceScatterMesh1D::CalcRes(
     auto kernelArg = std::make_shared<CcuKernelArgReduceScatterMesh1D>();
     kernelArg->rankSize = subCommRanks_[0].size();
     kernelArg->rankId = mySubCommRank_;
+    kernelArg->orderPreserved = orderPreserved;
     kernelArg->opParam = param;
     kernelArg->subCommRanks = subCommRanks_;
     kernelInfo.setKernelArg(kernelArg);

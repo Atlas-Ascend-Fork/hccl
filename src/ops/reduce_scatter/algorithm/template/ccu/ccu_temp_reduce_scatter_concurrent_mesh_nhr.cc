@@ -12,6 +12,7 @@
 #include "alg_data_trans_wrapper.h"
 #include "ccu_launch_dl.h"
 #include "ccu_temp_reduce_scatter_concurrent_mesh_nhr.h"
+#include "order_preserved_common.h"
 
 namespace ops_hccl {
 
@@ -133,6 +134,12 @@ HcclResult CcuTempReduceScatterConcurrentMeshNHR::GetRes(AlgResourceRequest& res
 HcclResult CcuTempReduceScatterConcurrentMeshNHR::CalcMeshRes(
     HcclComm comm, const OpParam& param, const TopoInfoWithNetLayerDetails* topoInfo, CcuKernelInfo& meshKernelInfo)
 {
+    if (IsNeedStrictModeForOrderPreserved(param, topoInfo->userRankSize)) {
+        HCCL_ERROR(
+            "[CcuTempReduceScatterConcurrentMeshNHR][CalcMeshRes] strict mode is not supported by concurrent mesh+NHR");
+        return HCCL_E_NOT_SUPPORT;
+    }
+
     std::vector<HcclChannelDesc> myChannelDescs;
     CHK_RET(CalcChannelRequestMesh1DWithPriorityTopo(
         comm, param, topoInfo, std::vector<std::vector<u32>>{meshGroup_}, myChannelDescs, CommTopo::COMM_TOPO_1DMESH));
@@ -148,6 +155,7 @@ HcclResult CcuTempReduceScatterConcurrentMeshNHR::CalcMeshRes(
     auto kernelArg = std::make_shared<CcuKernelArgReduceScatterMesh1D>();
     kernelArg->rankSize = meshGroup_.size();
     kernelArg->rankId = myMeshRank_;
+    kernelArg->orderPreserved = false;
     kernelArg->opParam = param;
     kernelArg->subCommRanks = std::vector<std::vector<u32>>{meshGroup_};
     meshKernelInfo.setKernelArg(kernelArg);

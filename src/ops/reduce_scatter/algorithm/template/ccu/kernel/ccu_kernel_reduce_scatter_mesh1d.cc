@@ -10,6 +10,8 @@
 
 #include "ccu_kernel_reduce_scatter_mesh1d.h"
 
+#include "reduce_scatter_operand_order.h"
+
 namespace ops_hccl {
 
 constexpr int INPUT_XN_ID = 0;
@@ -44,6 +46,10 @@ static CcuResult InitResource(ReduceScatterMesh1DContext& ctx)
             "[CcuKernelReduceScatterMesh1D] rankSize[%llu] and channelCount[%u] mismatch.", arg->rankSize,
             arg->channelCount);
         return CcuResult::CCU_E_INTERNAL;
+    }
+    if (arg->rankId >= arg->rankSize) {
+        HCCL_ERROR("[CcuKernelReduceScatterMesh1D] invalid rankSize[%llu] or rankId[%u]", arg->rankSize, arg->rankId);
+        return CcuResult::CCU_E_PARA;
     }
 
     // 按照rank号从小到大遍历channels，遇到本rank就填充本地资源，否则依次取远端资源，要求算法返回的Link同样是按顺序排列的
@@ -110,29 +116,34 @@ static void PostSync(ReduceScatterMesh1DContext& ctx)
 static CcuResult DoReduceScatter(ReduceScatterMesh1DContext& ctx)
 {
     const auto* arg = ctx.arg;
+    const bool orderPreserved = arg->orderPreserved;
+    const ReduceScatterOperandPlan plan = BuildReduceScatterOperandPlan(arg->rankSize, arg->rankId, orderPreserved);
+
     std::vector<ccu::RemoteAddr> src;
     ccu::LocalAddr localSrc;
-    src.resize(arg->rankSize);
+    src.resize(plan.remoteRanks.size());
     ccu::LocalAddr dst;
     dst.addr = ctx.output;
     dst.token = ctx.token[arg->rankId];
-    uint32_t curId = 0;
-    for (uint32_t rankIdx = 0; rankIdx < arg->rankSize; rankIdx++) {
-        if (rankIdx != arg->rankId) {
-            src[curId].addr = ctx.input[rankIdx];
-            src[curId].addr += ctx.offset;
-            src[curId].token = ctx.token[rankIdx];
-            curId++;
-        } else {
-            localSrc.addr = ctx.input[rankIdx];
-            localSrc.addr += ctx.offset;
-            localSrc.token = ctx.token[rankIdx];
-        }
+    for (uint32_t i = 0; i < plan.remoteRanks.size(); i++) {
+        const uint32_t rankIdx = plan.remoteRanks[i];
+        src[i].addr = ctx.input[rankIdx];
+        src[i].addr += ctx.offset;
+        src[i].token = ctx.token[rankIdx];
     }
+    localSrc.addr = ctx.input[arg->rankId];
+    localSrc.addr += ctx.offset;
+    localSrc.token = ctx.token[arg->rankId];
 
-    GroupReduce(
-        ctx, arg->channels, arg->channelCount, dst, src, localSrc, ctx.goSize, ctx.dataType, ctx.outputDataType,
-        ctx.reduceOp, GetCcuVersion());
+    if (orderPreserved) {
+        CCU_CHK_RET(GroupReduce(
+            ctx, arg->channels, arg->channelCount, dst, src, localSrc, ctx.goSize, ctx.dataType, ctx.outputDataType,
+            ctx.reduceOp, GetCcuVersion(), plan.localRankSlot));
+    } else {
+        CCU_CHK_RET(GroupReduce(
+            ctx, arg->channels, arg->channelCount, dst, src, localSrc, ctx.goSize, ctx.dataType, ctx.outputDataType,
+            ctx.reduceOp, GetCcuVersion()));
+    }
 
     return CCU_SUCCESS;
 }
