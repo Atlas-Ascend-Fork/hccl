@@ -857,7 +857,7 @@ REGISTER_EXEC_V2_MULTI(
 REGISTER_ALG_ATTRS(
     CcuSchedReducePipeLineMeshNHR, topo.maxSupportRankSize = CCU_SCHED_MAX_RANK_SIZE;
     topo.supportLevel0Topos = LEVEL0_TOPO_MESH_1D_CLOS; topo.maxTopoLevelNum = 1; op.isSupportProd = false;
-    op.unsupportedDataTypes = UNSUPPORTED_INT8_AND_64BIT;
+    op.isSupportInplace = true; op.unsupportedDataTypes = UNSUPPORTED_INT8_AND_64BIT;
     topo.topoCustomCheck = [](const TopoInfoWithNetLayerDetails* topo) -> bool {
         return !AutoSelectorBase::IsLayerAllConnetedWithTopo(topo, 0, CommTopo::COMM_TOPO_1DMESH);
     };);
@@ -870,7 +870,8 @@ REGISTER_EXEC_V2_MULTI(
     CcuTempGatherOmniPipeNHR1DMem2Mem);
 REGISTER_ALG_ATTRS(
     CcuMSReducePipeLineMeshNHR, topo.supportLevel0Topos = LEVEL0_TOPO_MESH_1D_CLOS; topo.maxTopoLevelNum = 1;
-    topo.isSupportLevel0PcieMix = true; op.isSupportProd = false; op.unsupportedDataTypes = UNSUPPORTED_INT8_AND_64BIT;
+    topo.isSupportLevel0PcieMix = true; op.isSupportProd = false; op.isSupportInplace = true;
+    op.unsupportedDataTypes = UNSUPPORTED_INT8_AND_64BIT;
     // 非全连接UBX场景在通信域初始化时过滤，不满足时该算法不参与选择
     topo.topoCustomCheck = [](const TopoInfoWithNetLayerDetails* topo) -> bool {
         return !AutoSelectorBase::IsLayerAllConnetedWithTopo(topo, 0, CommTopo::COMM_TOPO_1DMESH);

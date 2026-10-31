@@ -483,6 +483,7 @@ CcuTempAllReduceConcurrentMeshNHR::FastLaunch(const OpParam& param, const Templa
         uint64_t* args = const_cast<uint64_t*>(submitInfos[1].cachedArgs);
         args[0] = PointerToAddr(tempFastLaunchCtx.buffInfo.inputPtr) + args[10];
         args[1] = PointerToAddr(tempFastLaunchCtx.buffInfo.outputPtr) + args[11];
+        args[3] = (args[0] == args[1]) ? 1 : 0;
         CcuResult ret = HcommCcuKernelLaunch(nhrMain, submitInfos[1].kernelHandle, reinterpret_cast<void*>(args), 10);
         CHK_PRT_RET(
             ret != CCU_SUCCESS,

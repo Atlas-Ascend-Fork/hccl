@@ -115,6 +115,7 @@ HcclResult CcuTempAllReduceMesh1DMem2Mem2DieOneShot::KernelRun(
     CHK_RET(GetToken(buffInfo_, token));
     uint64_t scratchAddr = PointerToAddr(buffInfo_.hcclBuff.addr) + buffInfo_.hcclBuffBaseOff;
     uint64_t normalSliceSize = templateDataParams.sliceSize;
+    const uint64_t isInplace = (inputAddr == outputAddr) ? 1 : 0;
 
     uint32_t dataTypeSize = DataTypeSizeGet(param.DataDes.dataType);
     uint64_t localRedcueSize0 = (normalSliceSize / dataTypeSize) / DIE_NUM * dataTypeSize;
@@ -123,8 +124,15 @@ HcclResult CcuTempAllReduceMesh1DMem2Mem2DieOneShot::KernelRun(
     uint64_t localReduceSliceOffset0 = 0;
     uint64_t localReduceSliceOffset1 = localRedcueSize0;
 
-    std::vector<uint64_t> taskArgs = {
-        inputAddr, outputAddr, token, scratchAddr, normalSliceSize, localReduceSliceOffset0, localReduceSliceOffset1};
+    std::vector<uint64_t> taskArgs
+        = {inputAddr,
+           outputAddr,
+           token,
+           scratchAddr,
+           isInplace,
+           normalSliceSize,
+           localReduceSliceOffset0,
+           localReduceSliceOffset1};
 
     LoopGroupConfig config{};
     constexpr uint32_t LOOP_NUM = 16;

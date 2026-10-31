@@ -240,6 +240,7 @@ CcuTempAllReduceNHRMem2Mem1D::FastLaunch(const OpParam& param, const TemplateFas
     uint64_t* args = const_cast<uint64_t*>(tempFastLaunchCtx.ccuKernelSubmitInfos[0].cachedArgs);
     constexpr u32 inputIdx = 0;
     constexpr u32 outputIdx = 1;
+    constexpr u32 isInputOutputEqualIdx = 3;
     constexpr u32 inputOffsetIdx = 10;
     constexpr u32 outputOffsetIdx = 11;
     uint64_t argSize = 10;
@@ -253,8 +254,12 @@ CcuTempAllReduceNHRMem2Mem1D::FastLaunch(const OpParam& param, const TemplateFas
 
     for (u32 kernelIdx = 0; kernelIdx < kernelNum; kernelIdx++) {
         // 更新地址参数
-        args[inputIdx] = PointerToAddr(buffInfo_.inputPtr) + args[inputOffsetIdx];
-        args[outputIdx] = PointerToAddr(buffInfo_.outputPtr) + args[outputOffsetIdx];
+        const uint64_t inputAddr = PointerToAddr(buffInfo_.inputPtr) + args[inputOffsetIdx];
+        const uint64_t outputAddr = PointerToAddr(buffInfo_.outputPtr) + args[outputOffsetIdx];
+        args[inputIdx] = inputAddr;
+        args[outputIdx] = outputAddr;
+        // 动态刷新 isInputOutputEqual，保证同 tag 连续 inplace/非 inplace 混调时标志正确
+        args[isInputOutputEqualIdx] = (inputAddr == outputAddr) ? 1 : 0;
 
         void* taskArgs = reinterpret_cast<void*>(args);
         CcuResult launchRet = HcommCcuKernelLaunch(

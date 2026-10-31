@@ -110,6 +110,7 @@ HcclResult HcclAllReduce(void *sendBuf, void *recvBuf, uint64_t count, HcclDataT
   - int16、float16、bfp16按照2 Byte地址对齐。
   - int32、float32按照4 Byte地址对齐。
   - int64、uint64、float64按照8 Byte地址对齐。
+- 支持inplace操作，即sendBuf与recvBuf指向同一地址，AllReduce结果直接写回输入buffer。当前CCU/AIV引擎算法支持inplace。
 - 多个通信域下的所有通信算子在每个Device上需要保证串行下发，不允许乱序、多线程并发下发，也不支持线程重入。
 - 在同一Device上，同一通信域内的所有通信算子的下发线程需要使用相同的Context。
 - 当通信域注册了对称内存时，sendBuf指向的输入buffer会被作为对称窗口参与远端rank的直接读写，AllReduce过程中部分算法会在sendBuf上就地完成归约（read+reduce），导致sendBuf中的数据被修改（污染）。因此用户需保证：

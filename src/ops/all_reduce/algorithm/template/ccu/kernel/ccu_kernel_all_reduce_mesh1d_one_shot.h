@@ -38,6 +38,10 @@ struct AllReduceMesh1DOneShotContext : CcuKernelCtxBase {
     std::vector<ccu::Variable> input;
     ccu::Variable output;
     std::vector<ccu::Variable> token;
+    ccu::Variable scratchAddr;
+    ccu::Variable isInplace;
+    ccu::Variable sliceSize;
+    ccu::Event localCopyEvent;
     GroupOpSizeVars groupOpSize;
 };
 

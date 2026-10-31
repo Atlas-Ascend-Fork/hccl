@@ -350,7 +350,7 @@ REGISTER_ALG_ATTRS(CcuMSAllReduceSequenceMesh2Die, topo.maxTopoLevelNum = 1;
                    op.isSupportProd = false; op.unsupportedDataTypes
                                              = {HcclDataType::HCCL_DATA_TYPE_INT8, HcclDataType::HCCL_DATA_TYPE_INT64,
                                                 HcclDataType::HCCL_DATA_TYPE_UINT64, HcclDataType::HCCL_DATA_TYPE_FP64};
-                   op.isSupportInplace = false);
+                   op.isSupportInplace = true);
 #endif // CANN_VERSION_NUM >= CANN_VERSION(9, 0, 0)
 #if CANN_VERSION_NUM >= CANN_VERSION(9, 0, 0)
 REGISTER_EXECUTOR_BY_TWO_TEMPS(
@@ -364,7 +364,7 @@ REGISTER_ALG_ATTRS(CcuSchedAllReduceSequenceMesh2Die, topo.maxTopoLevelNum = 1;
                    op.unsupportedDataTypes
                    = {HcclDataType::HCCL_DATA_TYPE_INT8, HcclDataType::HCCL_DATA_TYPE_INT64,
                       HcclDataType::HCCL_DATA_TYPE_UINT64, HcclDataType::HCCL_DATA_TYPE_FP64};
-                   op.isSupportInplace = false);
+                   op.isSupportInplace = true);
 #endif // CANN_VERSION_NUM >= CANN_VERSION(9, 0, 0)
 #endif
 } // namespace ops_hccl

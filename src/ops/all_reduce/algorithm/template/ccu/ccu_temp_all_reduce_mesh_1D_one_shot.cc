@@ -114,6 +114,8 @@ HcclResult CcuTempAllReduceMesh1DOneShot::KernelRun(
     uint64_t token;
     CHK_RET(GetToken(buffInfo_, token));
     uint64_t sliceSize = templateDataParams.sliceSize;
+    const uint64_t isInplace = (inputAddr == outputAddr) ? 1 : 0;
+    uint64_t scratchAddr = PointerToAddr(buffInfo_.hcclBuff.addr) + buffInfo_.hcclBuffBaseOff;
 
     LoopGroupConfig config{};
     config.msInterleave = CCU_MS_INTERLEAVE;
@@ -121,7 +123,8 @@ HcclResult CcuTempAllReduceMesh1DOneShot::KernelRun(
     config.memSlice = CCU_MS_SIZE;
     auto goSize = CalGoSize(sliceSize, config, GetCcuVersion());
 
-    std::vector<uint64_t> taskArgs = {inputAddr, outputAddr, token, goSize[0], goSize[1], goSize[2], goSize[3]};
+    std::vector<uint64_t> taskArgs
+        = {inputAddr, outputAddr, token, scratchAddr, isInplace, sliceSize, goSize[0], goSize[1], goSize[2], goSize[3]};
     uint32_t argSize = static_cast<uint32_t>(taskArgs.size());
     CcuResult launchRet
         = HcommCcuKernelLaunch(templateResource.threads[0], templateResource.ccuKernels[0], taskArgs.data(), argSize);
@@ -133,8 +136,8 @@ HcclResult CcuTempAllReduceMesh1DOneShot::KernelRun(
     CcuKernelSubmitInfo submitInfo;
     submitInfo.kernelHandle = templateResource.ccuKernels[0];
     CHK_RET(FillCachedArgs(
-        submitInfo, inputAddr, outputAddr, token, goSize[0], goSize[1], goSize[2], goSize[3], buffInfo_.inBuffBaseOff,
-        buffInfo_.outBuffBaseOff));
+        submitInfo, inputAddr, outputAddr, token, scratchAddr, isInplace, sliceSize, goSize[0], goSize[1], goSize[2],
+        goSize[3], buffInfo_.inBuffBaseOff, buffInfo_.outBuffBaseOff, buffInfo_.hcclBuffBaseOff));
     templateResource.submitInfos.push_back(submitInfo);
 
     HCCL_DEBUG("[CcuTempAllReduceMesh1DOneShot::KernelRun] end");
@@ -154,11 +157,19 @@ CcuTempAllReduceMesh1DOneShot::FastLaunch(const OpParam& param, const TemplateFa
     uint64_t* args = const_cast<uint64_t*>(tempFastLaunchCtx.ccuKernelSubmitInfos[0].cachedArgs);
     constexpr u32 inputIdx = 0;
     constexpr u32 outputIdx = 1;
-    constexpr u32 inputOffsetIdx = 7;
-    constexpr u32 outputOffsetIdx = 8;
-    constexpr uint32_t argSize = 7;
-    args[inputIdx] = PointerToAddr(tempFastLaunchCtx.buffInfo.inputPtr) + args[inputOffsetIdx];
-    args[outputIdx] = PointerToAddr(tempFastLaunchCtx.buffInfo.outputPtr) + args[outputOffsetIdx];
+    constexpr u32 scratchIdx = 3;
+    constexpr u32 isInplaceIdx = 4;
+    constexpr u32 inputOffsetIdx = 10;
+    constexpr u32 outputOffsetIdx = 11;
+    constexpr u32 scratchOffsetIdx = 12;
+    constexpr uint32_t argSize = 10;
+    const uint64_t inputAddr = PointerToAddr(tempFastLaunchCtx.buffInfo.inputPtr) + args[inputOffsetIdx];
+    const uint64_t outputAddr = PointerToAddr(tempFastLaunchCtx.buffInfo.outputPtr) + args[outputOffsetIdx];
+    args[inputIdx] = inputAddr;
+    args[outputIdx] = outputAddr;
+    // 动态刷新 scratch（ccl 副本）地址与 isInplace，保证同 tag 连续 inplace/非 inplace 混调时标志正确
+    args[scratchIdx] = PointerToAddr(tempFastLaunchCtx.buffInfo.hcclBuff.addr) + args[scratchOffsetIdx];
+    args[isInplaceIdx] = (inputAddr == outputAddr) ? 1 : 0;
 
     CcuResult launchRet = HcommCcuKernelLaunch(
         tempFastLaunchCtx.threads[0], tempFastLaunchCtx.ccuKernelSubmitInfos[0].kernelHandle,

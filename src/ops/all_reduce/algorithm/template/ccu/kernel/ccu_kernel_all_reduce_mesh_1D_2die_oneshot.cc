@@ -18,6 +18,7 @@ constexpr int TOKEN_XN_ID = 1;
 constexpr int POST_SYNC_ID = 3;
 constexpr int MISSION_SYNC_ID_0 = 4;
 constexpr int MISSION_SYNC_ID_1 = 5;
+constexpr int INPLACE_SYNC_ID = 6;
 
 constexpr int CKE_IDX_0 = 0;
 constexpr int CKE_IDX_1 = 1;
@@ -101,6 +102,7 @@ static CcuResult LoadArgs(AllreduceMesh1D2DieOneShotContext& ctx)
     CCU_CHK_RET(ccu::LoadArg(ctx.myOutput, argId++));
     CCU_CHK_RET(ccu::LoadArg(ctx.myToken, argId++));
     CCU_CHK_RET(ccu::LoadArg(ctx.myScratch, argId++));
+    CCU_CHK_RET(ccu::LoadArg(ctx.isInplace, argId++));
     CCU_CHK_RET(ccu::LoadArg(ctx.scratchBaseOffset0, argId++));
     CCU_CHK_RET(ccu::LoadArg(ctx.scratchBaseOffset1, argId++));
 
@@ -401,6 +403,22 @@ static CcuResult MissionSync(AllreduceMesh1D2DieOneShotContext& ctx, uint32_t ma
     return CCU_SUCCESS;
 }
 
+static CcuResult InplaceCrossRankSync(AllreduceMesh1D2DieOneShotContext& ctx)
+{
+    const auto* arg = ctx.arg;
+    // inplace 时 Step1 全部读完成后跨 rank Notify，Step2 写前 Wait 全体对端
+    CCU_IF(ctx.isInplace != 0)
+    {
+        for (uint32_t i = 0; i < arg->channelCount; i++) {
+            ccu::NotifyRecord(arg->channels[i], CKE_IDX_1, 1 << INPLACE_SYNC_ID);
+        }
+        for (uint32_t i = 0; i < arg->channelCount; i++) {
+            ccu::NotifyWait(arg->channels[i], CKE_IDX_1, 1 << INPLACE_SYNC_ID);
+        }
+    }
+    return CCU_SUCCESS;
+}
+
 CcuResult CcuAllreduceMesh1D2DieOneShotKernel(CcuKernelArg arg)
 {
     auto* kernelArg = static_cast<CcuKernelArgAllreduceMesh1D2DieOneShot*>(arg);
@@ -429,6 +447,8 @@ CcuResult CcuAllreduceMesh1D2DieOneShotKernel(CcuKernelArg arg)
     CCU_CHK_RET(PostSync(ctx, POST_SYNC_ID));
 
     CCU_CHK_RET(MissionSync(ctx, 0));
+
+    CCU_CHK_RET(InplaceCrossRankSync(ctx));
 
     HCCL_INFO("[CcuKernelAllreduceMesh1D2DieOneShot] Algorithm second step localreduce begins.");
 

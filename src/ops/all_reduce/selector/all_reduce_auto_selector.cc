@@ -139,9 +139,6 @@ SelectorStatus AllReduceAutoSelector::SelectMeshAlgo(
         return SelectorStatus::NOT_MATCH;
     }
     if (topoInfo->level0Topo == Level0Shape::MESH_1D) {
-        if (IsInputOutputOverlap(opParam) == true) { // 不支持 in-place 场景
-            return SelectorStatus::NOT_MATCH;
-        }
         if (topoInfo->level0MeshType == Level0MeshType::TWO_DIE_REGULAR) {
             if (IsSmallData(dataSize)) {
                 selectAlgName = "CcuMSAllReduceSoleMesh2Die";
@@ -161,10 +158,6 @@ SelectorStatus AllReduceAutoSelector::SelectMeshAlgo(
             }
         }
     } else if (topoInfo->level0Topo == Level0Shape::MESH_1D_CLOS) {
-        if (IsInputOutputOverlap(opParam) == true) {
-            // 不支持 in-place 场景
-            return SelectorStatus::NOT_MATCH;
-        }
         return SelectMeshUBXAlgo(topoInfo, selectAlgName, dataSize);
     } else {
         HCCL_DEBUG("[AllReduceAutoSelector] level0Topo[%u] is not supported yet.", topoInfo->level0Topo);
@@ -218,10 +211,6 @@ SelectorStatus AllReduceAutoSelector::SelectCcuScheduleAlgo(
 
     if (topoInfo->topoLevelNums > 1) {
         if (topoInfo->level0Topo == Level0Shape::MESH_1D) {
-            CHK_PRT_RET(
-                IsInputOutputOverlap(opParam) == true,
-                HCCL_WARNING("[Algo][AllReduceAutoSelector] ccu_sched does not support in-place allreduce."),
-                SelectorStatus::NOT_MATCH);
             // Level1Nhr 已在 CalcTopoShape 中设置（GCD==1 时为 true）
             if (topoInfo->Level1Nhr) {
                 selectAlgName = "CcuSchedAllReduceSoleNHR";
@@ -241,7 +230,7 @@ SelectorStatus AllReduceAutoSelector::SelectCcuScheduleAlgo(
                 return SelectorStatus::MATCH;
             } else if (
                 dataSize <= AR_FLATTEN_MAX_DATA_SIZE && topoInfo->userRankSize <= ccuSize
-                && (!IsInputOutputOverlap(opParam)) && !Is8BitDataType(opParam.DataDes.dataType)) {
+                && !Is8BitDataType(opParam.DataDes.dataType)) {
                 selectAlgName = "CcuSchedAllReduceSoleMesh";
                 return SelectorStatus::MATCH;
             } else if (
@@ -263,7 +252,7 @@ SelectorStatus AllReduceAutoSelector::SelectCcuScheduleAlgo(
             } else {
                 return SelectorStatus::NOT_MATCH; // 64M以上切为aicpu
             }
-        } else if (topoInfo->level0Topo == Level0Shape::CLOS && (!IsInputOutputOverlap(opParam))) {
+        } else if (topoInfo->level0Topo == Level0Shape::CLOS) {
             if (dataSize < AR_CCU_CLOS_1D_SMALL_DATA_SIZE) {
                 selectAlgName = "CcuSchedAllReduceSoleNHR";
                 return SelectorStatus::MATCH;
@@ -364,11 +353,6 @@ SelectorStatus AllReduceAutoSelector::SelectCcuScheduleLevel0Algo(
     const TopoInfoWithNetLayerDetails* topoInfo, const OpParam& opParam, std::string& selectAlgName,
     const u64 dataSize) const
 {
-    // ccu 模式不支持 in-place 场景
-    CHK_PRT_RET(
-        IsInputOutputOverlap(opParam) == true,
-        HCCL_WARNING("[Algo][AllReduceAutoSelector] ccu_sched does not support in-place allreduce."),
-        SelectorStatus::NOT_MATCH);
     if (topoInfo->level0Topo == Level0Shape::MESH_1D) {
         return SelectCcuScheduleLevel0AlgoMesh1D(topoInfo, opParam, selectAlgName, dataSize);
     } else if (topoInfo->level0Topo == Level0Shape::MESH_1D_CLOS) {

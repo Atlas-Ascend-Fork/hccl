@@ -467,7 +467,8 @@ REGISTER_ALG_ATTRS(
     topo.topoCustomCheck = [](const TopoInfoWithNetLayerDetails* topo) -> bool {
         return !topo->topLevelUboe;
     };
-    op.isSupportProd = false; op.isSupportFloatOrderPreserved = true; op.unsupportedDataTypes = UNSUPPORTED_UINT64_FP64;
+    op.isSupportProd = false; op.isSupportInplace = true; op.isSupportFloatOrderPreserved = true;
+    op.unsupportedDataTypes = UNSUPPORTED_UINT64_FP64;
     op.opCustomCheck = [](const OpParam& opParam, const TopoInfoWithNetLayerDetails* topo) -> bool {
         // 非 AIV_ONLY 且保序场景下，每卡数据量/rankSize 超过 2M 时不选 Aiv（回退 aicpu）
         if (opParam.opExecuteConfig != OpExecuteConfig::AIV_ONLY
@@ -491,7 +492,8 @@ REGISTER_ALG_ATTRS(
     topo.topoCustomCheck = [](const TopoInfoWithNetLayerDetails* topo) -> bool {
         return !topo->topLevelUboe;
     };
-    op.isSupportProd = false; op.isSupportFloatOrderPreserved = true; op.unsupportedDataTypes = UNSUPPORTED_UINT64_FP64;
+    op.isSupportProd = false; op.isSupportInplace = true; op.isSupportFloatOrderPreserved = true;
+    op.unsupportedDataTypes = UNSUPPORTED_UINT64_FP64;
     op.opCustomCheck = [](const OpParam& opParam, const TopoInfoWithNetLayerDetails* topo) -> bool {
         // 非 AIV_ONLY 且保序场景下，每卡数据量/rankSize 超过 2M 时不选 Aiv（回退 aicpu）
         if (opParam.opExecuteConfig != OpExecuteConfig::AIV_ONLY
@@ -517,7 +519,7 @@ REGISTER_ALG_ATTRS(
     };
     op.unsupportedDataTypes
     = {HcclDataType::HCCL_DATA_TYPE_INT64, HcclDataType::HCCL_DATA_TYPE_UINT64, HcclDataType::HCCL_DATA_TYPE_FP64};
-    op.isSupportInplace = false);
+    op.isSupportInplace = true);
 #endif // CANN_VERSION_NUM >= CANN_VERSION(9, 0, 0)
 
 #if CANN_VERSION_NUM >= CANN_VERSION(9, 0, 0)
@@ -532,7 +534,7 @@ REGISTER_ALG_ATTRS(
     op.unsupportedDataTypes
     = {HcclDataType::HCCL_DATA_TYPE_INT8, HcclDataType::HCCL_DATA_TYPE_INT64, HcclDataType::HCCL_DATA_TYPE_UINT64,
        HcclDataType::HCCL_DATA_TYPE_FP64};
-    op.isSupportInplace = false; topo.topoCustomCheck = [](const TopoInfoWithNetLayerDetails* topo) -> bool {
+    op.isSupportInplace = true; topo.topoCustomCheck = [](const TopoInfoWithNetLayerDetails* topo) -> bool {
         if (topo->level0Topo == Level0Shape::MESH_1D_CLOS) {
             if (topo->level0PcieMix) {
                 return AutoSelectorBase::IsLayerAllConnetedWithTopo(topo, 0, CommTopo::COMM_TOPO_1DMESH);
@@ -554,7 +556,7 @@ REGISTER_ALG_ATTRS(
     op.isSupportProd = false; op.unsupportedDataTypes
                               = {HcclDataType::HCCL_DATA_TYPE_INT8, HcclDataType::HCCL_DATA_TYPE_INT64,
                                  HcclDataType::HCCL_DATA_TYPE_UINT64, HcclDataType::HCCL_DATA_TYPE_FP64};
-    op.isSupportInplace = false; topo.topoCustomCheck = [](const TopoInfoWithNetLayerDetails* topo) -> bool {
+    op.isSupportInplace = true; topo.topoCustomCheck = [](const TopoInfoWithNetLayerDetails* topo) -> bool {
         if (topo->level0Topo == Level0Shape::MESH_1D_CLOS) {
             bool isEqual = false;
             AutoSelectorBase::CheckMeshNumEqualToClosNum(topo, isEqual);
@@ -573,7 +575,7 @@ REGISTER_ALG_ATTRS(CcuMSAllReduceSoleMesh2Die, topo.maxTopoLevelNum = 1; topo.su
                    op.isSupportProd = false; op.unsupportedDataTypes
                                              = {HcclDataType::HCCL_DATA_TYPE_INT8, HcclDataType::HCCL_DATA_TYPE_INT64,
                                                 HcclDataType::HCCL_DATA_TYPE_UINT64, HcclDataType::HCCL_DATA_TYPE_FP64};
-                   op.isSupportInplace = false);
+                   op.isSupportInplace = true);
 #endif // CANN_VERSION_NUM >= CANN_VERSION(9, 0, 0)
 #if CANN_VERSION_NUM >= CANN_VERSION(9, 0, 0)
 REGISTER_EXEC_V2(
@@ -586,7 +588,7 @@ REGISTER_ALG_ATTRS(
     op.unsupportedDataTypes
     = {HcclDataType::HCCL_DATA_TYPE_INT8, HcclDataType::HCCL_DATA_TYPE_INT64, HcclDataType::HCCL_DATA_TYPE_UINT64,
        HcclDataType::HCCL_DATA_TYPE_FP64};
-    op.isSupportInplace = false; topo.topoCustomCheck = [](const TopoInfoWithNetLayerDetails* topo) -> bool {
+    op.isSupportInplace = true; topo.topoCustomCheck = [](const TopoInfoWithNetLayerDetails* topo) -> bool {
         if (topo->level0Topo == Level0Shape::MESH_1D_CLOS) {
             bool isEqual = false;
             AutoSelectorBase::CheckMeshNumEqualToClosNum(topo, isEqual);
@@ -606,7 +608,7 @@ REGISTER_ALG_ATTRS(CcuSchedAllReduceSoleMesh2Die, topo.maxSupportRankSize = CCU_
                    op.unsupportedDataTypes
                    = {HcclDataType::HCCL_DATA_TYPE_INT8, HcclDataType::HCCL_DATA_TYPE_INT64,
                       HcclDataType::HCCL_DATA_TYPE_UINT64, HcclDataType::HCCL_DATA_TYPE_FP64};
-                   op.isSupportInplace = false);
+                   op.isSupportInplace = true);
 #endif // CANN_VERSION_NUM >= CANN_VERSION(9, 0, 0)
 #if CANN_VERSION_NUM >= CANN_VERSION(9, 0, 0)
 REGISTER_EXEC_V2(
@@ -618,11 +620,11 @@ REGISTER_ALG_ATTRS(
     op.unsupportedDataTypes
     = {HcclDataType::HCCL_DATA_TYPE_INT8, HcclDataType::HCCL_DATA_TYPE_INT64, HcclDataType::HCCL_DATA_TYPE_UINT64,
        HcclDataType::HCCL_DATA_TYPE_FP64};
-    op.isSupportInplace = false; topo.topoCustomCheck = [](const TopoInfoWithNetLayerDetails* topo) -> bool {
+    op.isSupportInplace = true; topo.topoCustomCheck = [](const TopoInfoWithNetLayerDetails* topo) -> bool {
         bool isEqual = false;
         AutoSelectorBase::CheckMeshNumEqualToClosNum(topo, isEqual);
         return !(isEqual && topo->userRankSize <= MAX_RANK_NUM_FOR_CONCURRENT_ALGO);
-    };);
+    });
 
 #endif /* CANN_VERSION_NUM >= CANN_VERSION(9, 0, 0) */
 #if CANN_VERSION_NUM >= CANN_VERSION(9, 0, 0)
@@ -631,7 +633,7 @@ REGISTER_EXEC_V2(
     CcuTempAllReduceConcurrentMeshNHR);
 REGISTER_ALG_ATTRS(CcuMSAllReduceSoleMeshConcur, topo.maxTopoLevelNum = 1;
                    topo.supportDevTypes = {HcclDevType::DEV_TYPE_960}; op.isSupportProd = false;
-                   op.unsupportedDataTypes = UNSUPPORTED_INT8_AND_64BIT; op.isSupportInplace = false);
+                   op.unsupportedDataTypes = UNSUPPORTED_INT8_AND_64BIT; op.isSupportInplace = true);
 #endif /* CANN_VERSION_NUM >= CANN_VERSION(9, 0, 0) */
 #endif
 } // namespace ops_hccl

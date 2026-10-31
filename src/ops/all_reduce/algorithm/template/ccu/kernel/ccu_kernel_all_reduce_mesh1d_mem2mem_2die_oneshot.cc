@@ -16,6 +16,7 @@ namespace ops_hccl {
 constexpr int INPUT_XN_ID = 0;
 constexpr int TOKEN_XN_ID = 1;
 constexpr int POST_SYNC_ID = 3;
+constexpr int INPLACE_SYNC_ID = 6;
 
 constexpr int CKE_IDX_0 = 0;
 constexpr int CKE_IDX_1 = 1;
@@ -86,6 +87,7 @@ static CcuResult LoadArgs(AllReduceMesh1DMem2Mem2DieOneShotContext& ctx)
     CCU_CHK_RET(ccu::LoadArg(ctx.myOutput, argId++));
     CCU_CHK_RET(ccu::LoadArg(ctx.myToken, argId++));
     CCU_CHK_RET(ccu::LoadArg(ctx.myScratch, argId++));
+    CCU_CHK_RET(ccu::LoadArg(ctx.isInplace, argId++));
 
     CCU_CHK_RET(ccu::LoadArg(ctx.normalSliceSize, argId++));
 
@@ -331,7 +333,14 @@ static CcuResult RmtReduce(AllReduceMesh1DMem2Mem2DieOneShotContext& ctx)
     uint32_t channelId = 0;
     for (uint32_t rankIdx = 0; rankIdx < ctx.rmtReduceRankNum; rankIdx++) {
         if (ctx.rmtReduceWithMyRank && rankIdx == ctx.rankId % ctx.rmtReduceRankNum) {
-            ccu::EventRecord(ctx.event, 1 << rankIdx);
+            CCU_IF(ctx.isInplace != 0)
+            {
+                ccu::LocalAddr localInput;
+                localInput.addr = ctx.myInput;
+                localInput.token = ctx.myToken;
+                ccu::LocalCopy(scratchDst[rankIdx], localInput, ctx.normalSliceSize, ctx.event, 1 << rankIdx);
+            }
+            CCU_ELSE { ccu::EventRecord(ctx.event, 1 << rankIdx); }
         } else {
             ccu::Read(
                 arg->channels[channelId], scratchDst[rankIdx], remoteInput[rankIdx], ctx.normalSliceSize, ctx.event,
@@ -343,14 +352,23 @@ static CcuResult RmtReduce(AllReduceMesh1DMem2Mem2DieOneShotContext& ctx)
     ccu::EventWait(ctx.event, (1 << ctx.rmtReduceRankNum) - 1);
 
     if (ctx.rmtReduceWithMyRank) {
-        ccu::LocalAddr output;
-        output.token = ctx.myToken;
-        output.addr = ctx.myOutput;
-        scratchDst[ctx.rankId % ctx.rmtReduceRankNum].addr = ctx.myInput;
-        scratchDst[ctx.rankId % ctx.rmtReduceRankNum].token = ctx.myToken;
-        CCU_CHK_RET(ReduceLoopGroup(
-            ctx, output, scratchDst, ctx.localReduceGoSize, ctx.dataType, ctx.outputDataType, ctx.reduceOp,
-            "all_reduce_2die_withmyrank_localreduce1"));
+        CCU_IF(ctx.isInplace != 0)
+        {
+            CCU_CHK_RET(ReduceLoopGroup(
+                ctx, scratchDst[0], scratchDst, ctx.localReduceGoSize, ctx.dataType, ctx.outputDataType, ctx.reduceOp,
+                "all_reduce_2die_withmyrank_localreduce1_inplace"));
+        }
+        CCU_ELSE
+        {
+            scratchDst[ctx.rankId % ctx.rmtReduceRankNum].addr = ctx.myInput;
+            scratchDst[ctx.rankId % ctx.rmtReduceRankNum].token = ctx.myToken;
+            ccu::LocalAddr output;
+            output.token = ctx.myToken;
+            output.addr = ctx.myOutput;
+            CCU_CHK_RET(ReduceLoopGroup(
+                ctx, output, scratchDst, ctx.localReduceGoSize, ctx.dataType, ctx.outputDataType, ctx.reduceOp,
+                "all_reduce_2die_withmyrank_localreduce1"));
+        }
     } else {
         CCU_CHK_RET(ReduceLoopGroup(
             ctx, scratchDst[0], scratchDst, ctx.localReduceGoSize, ctx.dataType, ctx.outputDataType, ctx.reduceOp,
@@ -366,7 +384,12 @@ static CcuResult DoLocalReduce(AllReduceMesh1DMem2Mem2DieOneShotContext& ctx)
     src.resize(MISSION_NUM);
     for (uint32_t i = 0; i < MISSION_NUM; i++) {
         src[i].token = ctx.myToken;
-        src[i].addr = (i == 0 ? ctx.myOutput : ctx.myScratch);
+        if (i == 0) {
+            CCU_IF(ctx.isInplace != 0) { src[i].addr = ctx.myScratch; }
+            CCU_ELSE { src[i].addr = ctx.myOutput; }
+        } else {
+            src[i].addr = ctx.myScratch;
+        }
         src[i].addr = src[i].addr + (i == 0 ? ctx.scratchBaseOffset0 : ctx.scratchBaseOffset1);
         src[i].addr
             = src[i].addr + (ctx.rmtReduceWithMyRank ? ctx.localReduceSliceOffset0 : ctx.localReduceSliceOffset1);
@@ -400,6 +423,23 @@ static CcuResult MissionSync(AllReduceMesh1DMem2Mem2DieOneShotContext& ctx, uint
     return CCU_SUCCESS;
 }
 
+static CcuResult InplaceCrossRankSync(AllReduceMesh1DMem2Mem2DieOneShotContext& ctx)
+{
+    const auto* arg = ctx.arg;
+    // inplace 时 Step1 全部读完成后跨 rank Notify，Step2 写前 Wait 全体对端
+    // 与 ccu_kernel_all_reduce_mesh_1D_2die_oneshot.cc 保持一致，统一用 CKE_IDX_1 + INPLACE_SYNC_ID bit
+    CCU_IF(ctx.isInplace != 0)
+    {
+        for (uint32_t i = 0; i < arg->channelCount; i++) {
+            ccu::NotifyRecord(arg->channels[i], CKE_IDX_1, 1 << INPLACE_SYNC_ID);
+        }
+        for (uint32_t i = 0; i < arg->channelCount; i++) {
+            ccu::NotifyWait(arg->channels[i], CKE_IDX_1, 1 << INPLACE_SYNC_ID);
+        }
+    }
+    return CCU_SUCCESS;
+}
+
 CcuResult CcuAllReduceMesh1DMem2Mem2DieOneShotKernel(CcuKernelArg arg)
 {
     auto* kernelArg = static_cast<CcuKernelArgAllReduceMesh1DMem2Mem2DieOneShot*>(arg);
@@ -425,6 +465,9 @@ CcuResult CcuAllReduceMesh1DMem2Mem2DieOneShotKernel(CcuKernelArg arg)
     CCU_CHK_RET(PostSync(ctx));
 
     CCU_CHK_RET(MissionSync(ctx, 0));
+
+    CCU_CHK_RET(InplaceCrossRankSync(ctx));
+
     CCU_CHK_RET(DoLocalReduce(ctx));
     CCU_CHK_RET(MissionSync(ctx, 1));
 

@@ -374,7 +374,7 @@ REGISTER_ALG_ATTRS(
         }
         return true;
     };
-    op.isSupportProd = false; op.unsupportedDataTypes = UNSUPPORTED_UINT64_FP64);
+    op.isSupportInplace = true; op.isSupportProd = false; op.unsupportedDataTypes = UNSUPPORTED_UINT64_FP64);
 #if CANN_VERSION_NUM >= CANN_VERSION(9, 0, 0)
 REGISTER_EXEC_V2(
     HcclCMDType::HCCL_CMD_REDUCE, CcuSchedReduceSoleMesh, ReduceSoleExecutor, TopoMatchOneLevel,
@@ -388,7 +388,7 @@ REGISTER_ALG_ATTRS(
         }
         return true;
     };
-    op.unsupportedDataTypes = UNSUPPORTED_INT8_AND_64BIT; op.isSupportInplace = false; op.isSupportProd = false;);
+    op.unsupportedDataTypes = UNSUPPORTED_INT8_AND_64BIT; op.isSupportInplace = true; op.isSupportProd = false;);
 #endif // CANN_VERSION_NUM >= CANN_VERSION(9, 0, 0)
 #if CANN_VERSION_NUM >= CANN_VERSION(9, 0, 0)
 REGISTER_EXEC_V2(
@@ -402,7 +402,7 @@ REGISTER_ALG_ATTRS(
         }
         return true;
     };
-    op.unsupportedDataTypes = UNSUPPORTED_INT8_AND_64BIT; op.isSupportInplace = false; op.isSupportProd = false;);
+    op.unsupportedDataTypes = UNSUPPORTED_INT8_AND_64BIT; op.isSupportInplace = true; op.isSupportProd = false;);
 #endif // CANN_VERSION_NUM >= CANN_VERSION(9, 0, 0)
 #if CANN_VERSION_NUM >= CANN_VERSION(9, 0, 0)
 REGISTER_EXEC_V2(
@@ -415,7 +415,7 @@ REGISTER_ALG_ATTRS(
     topo.topoCustomCheck = [](const TopoInfoWithNetLayerDetails* topo) -> bool {
         return !(topo->topoLevelNums == 1 && topo->level0Topo == Level0Shape::MESH_1D);
     };
-    op.isSupportInplace = __bool_true_false_are_defined; op.isSupportProd = false;);
+    op.isSupportInplace = true; op.isSupportProd = false;);
 #endif // CANN_VERSION_NUM >= CANN_VERSION(9, 0, 0)
 #if CANN_VERSION_NUM >= CANN_VERSION(9, 0, 0)
 REGISTER_EXEC_V2(
@@ -423,7 +423,7 @@ REGISTER_EXEC_V2(
     CcuTempReduceMesh1DTwoShotMem2Mem);
 REGISTER_ALG_ATTRS(CcuSchedReduceSoleMeshTwoShot, topo.maxSupportRankSize = CCU_SCHED_MAX_RANK_SIZE;
                    topo.maxTopoLevelNum = 1; topo.supportLevel0Topos = LEVEL0_TOPO_MESH_1D; op.isSupportProd = false;
-                   op.unsupportedDataTypes = UNSUPPORTED_INT8_AND_64BIT; op.isSupportInplace = false);
+                   op.unsupportedDataTypes = UNSUPPORTED_INT8_AND_64BIT; op.isSupportInplace = true);
 #endif // CANN_VERSION_NUM >= CANN_VERSION(9, 0, 0)
 #endif
 } // namespace ops_hccl

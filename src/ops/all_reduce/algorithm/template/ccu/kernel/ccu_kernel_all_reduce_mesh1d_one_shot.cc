@@ -75,6 +75,9 @@ static CcuResult LoadArgs(AllReduceMesh1DOneShotContext& ctx)
     CCU_CHK_RET(ccu::LoadArg(ctx.input[arg->rankId], argId++));
     CCU_CHK_RET(ccu::LoadArg(ctx.output, argId++));
     CCU_CHK_RET(ccu::LoadArg(ctx.token[arg->rankId], argId++));
+    CCU_CHK_RET(ccu::LoadArg(ctx.scratchAddr, argId++));
+    CCU_CHK_RET(ccu::LoadArg(ctx.isInplace, argId++));
+    CCU_CHK_RET(ccu::LoadArg(ctx.sliceSize, argId++));
     CCU_CHK_RET(ccu::LoadArg(ctx.groupOpSize.addrOffset, argId++));
     CCU_CHK_RET(ccu::LoadArg(ctx.groupOpSize.loopParam, argId++));
     CCU_CHK_RET(ccu::LoadArg(ctx.groupOpSize.parallelParam, argId++));
@@ -82,14 +85,44 @@ static CcuResult LoadArgs(AllReduceMesh1DOneShotContext& ctx)
     return CCU_SUCCESS;
 }
 
+static CcuResult PreCopy(AllReduceMesh1DOneShotContext& ctx)
+{
+    CCU_IF(ctx.isInplace != 0)
+    {
+        const auto* arg = ctx.arg;
+        ccu::LocalAddr src;
+        src.addr = ctx.input[arg->rankId];
+        src.token = ctx.token[arg->rankId];
+        ccu::LocalAddr dst;
+        dst.addr = ctx.scratchAddr;
+        dst.token = ctx.token[arg->rankId];
+        ccu::LocalCopy(dst, src, ctx.sliceSize, ctx.localCopyEvent, 1);
+        ccu::EventWait(ctx.localCopyEvent, 1);
+    }
+    return CCU_SUCCESS;
+}
+
 static void PreSync(AllReduceMesh1DOneShotContext& ctx)
 {
     const auto* arg = ctx.arg;
-    for (uint32_t i = 0; i < arg->channelCount; i++) {
-        ccu::WriteVariableWithNotify(
-            arg->channels[i], ctx.input[arg->rankId], INPUT_XN_ID, PRE_SYNC_CKE_IDX, 1 << INPUT_XN_ID);
-        ccu::WriteVariableWithNotify(
-            arg->channels[i], ctx.token[arg->rankId], TOKEN_XN_ID, PRE_SYNC_CKE_IDX, 1 << TOKEN_XN_ID);
+    // inplace 时 INPUT XN 指向 ccl 副本（PreCopy 目标），非 inplace 指向 userIn
+    CCU_IF(ctx.isInplace != 0)
+    {
+        for (uint32_t i = 0; i < arg->channelCount; i++) {
+            ccu::WriteVariableWithNotify(
+                arg->channels[i], ctx.scratchAddr, INPUT_XN_ID, PRE_SYNC_CKE_IDX, 1 << INPUT_XN_ID);
+            ccu::WriteVariableWithNotify(
+                arg->channels[i], ctx.token[arg->rankId], TOKEN_XN_ID, PRE_SYNC_CKE_IDX, 1 << TOKEN_XN_ID);
+        }
+    }
+    CCU_ELSE
+    {
+        for (uint32_t i = 0; i < arg->channelCount; i++) {
+            ccu::WriteVariableWithNotify(
+                arg->channels[i], ctx.input[arg->rankId], INPUT_XN_ID, PRE_SYNC_CKE_IDX, 1 << INPUT_XN_ID);
+            ccu::WriteVariableWithNotify(
+                arg->channels[i], ctx.token[arg->rankId], TOKEN_XN_ID, PRE_SYNC_CKE_IDX, 1 << TOKEN_XN_ID);
+        }
     }
 
     uint32_t allBit = (1 << INPUT_XN_ID) | (1 << TOKEN_XN_ID);
@@ -119,7 +152,9 @@ static CcuResult DoGroupReduce(AllReduceMesh1DOneShotContext& ctx)
 
     reduceDst.addr = ctx.output;
     reduceDst.token = ctx.token[arg->rankId];
-    localSrc.addr = ctx.input[arg->rankId];
+    // inplace 时本端规约源指 ccl 副本（PreCopy 目标），非 inplace 指 userIn
+    CCU_IF(ctx.isInplace != 0) { localSrc.addr = ctx.scratchAddr; }
+    CCU_ELSE { localSrc.addr = ctx.input[arg->rankId]; }
     localSrc.token = ctx.token[arg->rankId];
 
     uint32_t srcIdx = 0;
@@ -169,6 +204,7 @@ CcuResult CcuAllReduceMesh1DOneShotKernel(CcuKernelArg arg)
     CCU_CHK_RET(InitResource(ctx));
     CCU_CHK_RET(LoadArgs(ctx));
 
+    CCU_CHK_RET(PreCopy(ctx));
     PreSync(ctx);
     CCU_CHK_RET(DoGroupReduce(ctx));
     PostSync(ctx);

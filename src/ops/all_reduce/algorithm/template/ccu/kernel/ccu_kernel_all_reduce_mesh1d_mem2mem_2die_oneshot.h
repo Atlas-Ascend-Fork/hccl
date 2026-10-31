@@ -50,6 +50,7 @@ struct AllReduceMesh1DMem2Mem2DieOneShotContext : CcuKernelCtxBase {
     ccu::Variable myOutput;
     ccu::Variable myScratch;
     ccu::Variable myToken;
+    ccu::Variable isInplace;
     std::vector<ccu::Variable> peerToken;
 
     ccu::Variable scratchBaseOffset0;

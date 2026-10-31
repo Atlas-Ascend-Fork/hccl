@@ -551,7 +551,7 @@ REGISTER_EXECUTOR_BY_TWO_TEMPS(
     CcuTempReduceMesh1DMem2Mem, CcuTempReduceNHR1DMem2Mem);
 REGISTER_ALG_ATTRS(
     CcuSchedReduceConcurMeshNHR, topo.maxSupportRankSize = REDUCE_MESH_MEM2MEM_MAX_RANK_SIZE; topo.maxTopoLevelNum = 1;
-    topo.supportLevel0Topos = LEVEL0_TOPO_MESH_1D_CLOS; op.isSupportProd = false;
+    topo.supportLevel0Topos = LEVEL0_TOPO_MESH_1D_CLOS; op.isSupportProd = false; op.isSupportInplace = true;
     op.unsupportedDataTypes = UNSUPPORTED_64BIT;
     topo.topoCustomCheck = [](const TopoInfoWithNetLayerDetails* topo) -> bool {
         return AutoSelectorBase::IsLayerAllConnetedWithTopo(topo, 0, CommTopo::COMM_TOPO_1DMESH);
@@ -563,7 +563,7 @@ REGISTER_EXECUTOR_BY_TWO_TEMPS(
     CcuTempReduceMesh1D, CcuTempReduceNHR1DMem2Mem);
 REGISTER_ALG_ATTRS(
     CcuMSReduceConcurMeshNHR, topo.maxSupportRankSize = CCU_MS_INTERLEAVE; topo.maxTopoLevelNum = 1;
-    topo.supportLevel0Topos = LEVEL0_TOPO_MESH_1D_CLOS; op.isSupportProd = false;
+    topo.supportLevel0Topos = LEVEL0_TOPO_MESH_1D_CLOS; op.isSupportProd = false; op.isSupportInplace = true;
     op.unsupportedDataTypes = UNSUPPORTED_64BIT;
     topo.topoCustomCheck = [](const TopoInfoWithNetLayerDetails* topo) -> bool {
         return AutoSelectorBase::IsLayerAllConnetedWithTopo(topo, 0, CommTopo::COMM_TOPO_1DMESH);

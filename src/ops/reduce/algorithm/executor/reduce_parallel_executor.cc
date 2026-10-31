@@ -1026,7 +1026,7 @@ REGISTER_EXECUTOR_BY_FOUR_TEMPS(
     CcuTempAllGatherNHR1DMem2Mem);
 REGISTER_ALG_ATTRS(CcuSchedReduceParallelMeshNHR, topo.minTopoLevelNum = TOPO_LEVEL_NUM_2;
                    topo.maxTopoLevelNum = TOPO_LEVEL_NUM_2; op.isSupportProd = false;
-                   op.unsupportedDataTypes = UNSUPPORTED_INT8_AND_64BIT; op.isSupportInplace = false);
+                   op.unsupportedDataTypes = UNSUPPORTED_INT8_AND_64BIT; op.isSupportInplace = true);
 REGISTER_EXECUTOR_BY_FOUR_TEMPS(
     HcclCMDType::HCCL_CMD_REDUCE, CcuSchedReduceParallelMeshNHRMultiJetty, ReduceParallelExecutor, TopoMatchTwoLevel,
     CcuTempReduceScatterMesh1DMem2Mem, CcuTempReduceScatterNHR1DMem2Mem, CcuTempAllGatherMesh1DMem2Mem,
@@ -1034,7 +1034,7 @@ REGISTER_EXECUTOR_BY_FOUR_TEMPS(
 REGISTER_ALG_ATTRS(
     CcuSchedReduceParallelMeshNHRMultiJetty, topo.maxSupportRankSize = CCU_SCHED_MAX_RANK_SIZE;
     topo.supportLevel0Topos = LEVEL0_TOPO_MESH_1D_CLOS; topo.maxTopoLevelNum = 1; op.isSupportProd = false;
-    op.unsupportedDataTypes = UNSUPPORTED_INT8_AND_64BIT;
+    op.isSupportInplace = true; op.unsupportedDataTypes = UNSUPPORTED_INT8_AND_64BIT;
     topo.topoCustomCheck = [](const TopoInfoWithNetLayerDetails* topo) -> bool {
         return !AutoSelectorBase::IsLayerAllConnetedWithTopo(topo, 0, CommTopo::COMM_TOPO_1DMESH);
     });

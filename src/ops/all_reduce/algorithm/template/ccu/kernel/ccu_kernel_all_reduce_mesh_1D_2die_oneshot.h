@@ -54,6 +54,7 @@ struct AllreduceMesh1D2DieOneShotContext : CcuKernelCtxBase {
     ccu::Variable myOutput;
     ccu::Variable myScratch;
     ccu::Variable myToken;
+    ccu::Variable isInplace;
 
     std::vector<ccu::Variable> input;
     std::vector<ccu::Variable> remoteToken;

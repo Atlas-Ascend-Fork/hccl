@@ -1586,7 +1586,7 @@ REGISTER_ALG_ATTRS(CcuSchedAllReduceParallelMeshNHR, topo.maxSupportRankSize = C
                    op.unsupportedDataTypes
                    = {HcclDataType::HCCL_DATA_TYPE_INT8, HcclDataType::HCCL_DATA_TYPE_INT64,
                       HcclDataType::HCCL_DATA_TYPE_UINT64, HcclDataType::HCCL_DATA_TYPE_FP64};
-                   op.isSupportInplace = false);
+                   op.isSupportInplace = true);
 REGISTER_EXECUTOR_BY_FOUR_TEMPS(
     HcclCMDType::HCCL_CMD_ALLREDUCE, CcuSchedAllReduceParallelMeshNHRMultiJetty, InsAllReduceParallelExecutor,
     TopoMatchTwoLevel, CcuTempReduceScatterMesh1DMem2Mem, CcuTempReduceScatterNHR1DMem2Mem,
@@ -1597,7 +1597,7 @@ REGISTER_ALG_ATTRS(
     op.unsupportedDataTypes
     = {HcclDataType::HCCL_DATA_TYPE_INT8, HcclDataType::HCCL_DATA_TYPE_INT64, HcclDataType::HCCL_DATA_TYPE_UINT64,
        HcclDataType::HCCL_DATA_TYPE_FP64};
-    op.isSupportInplace = false;
+    op.isSupportInplace = true;
     op.opCustomCheck = [](const OpParam& opParam, const TopoInfoWithNetLayerDetails* topo) -> bool {
         bool isMultiple = false;
         bool isEqual = false;

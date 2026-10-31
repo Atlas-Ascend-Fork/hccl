@@ -101,6 +101,7 @@ HcclResult HcclAllReduce(void *sendBuf, void *recvBuf, uint64_t count, HcclDataT
   - int16, float16, and bfp16: 2-byte address alignment.
   - int32 and float32: 4-byte address alignment.
   - int64, uint64, and float64: 8-byte address alignment.
+- Inplace operation is supported. That is, sendBuf and recvBuf can point to the same address, and the AllReduce result is directly written back to the input buffer. Currently, CCU/AIV engine algorithms support inplace.
 - Must serialize the calls to all communication operators in multiple communicators on each device. Out-of-order/multi-threaded concurrent calls and thread reentrancy are not allowed.
 - On the same device, the threads that dispatch all collective communication operators in the same communicator must use the same context.
 - When symmetric memory is registered in a communicator, the input buffer pointed to by sendBuf is used as a symmetric window for directly reading from and writing into remote ranks. During ReduceScatter, some algorithms perform in-place reduction (read+reduce) on sendBuf, causing the data in sendBuf to be modified (corrupted). Therefore, ensure that:
