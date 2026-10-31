@@ -195,6 +195,43 @@ bash build.sh --cann_3rd_lib_path={your_3rd_party_path}
 
 其中`<version>`表示软件版本号，`<arch>`表示操作系统架构，取值包括“x86_64”与“aarch64”。
 
+### 构建选项
+
+`build.sh`的常用构建选项如下表所示，可按需组合使用。
+
+| 选项 | 说明 |
+| --- | --- |
+| `--pkg` | 编译host包（默认构建目标）。 |
+| `--full` | 编译host + device包，即在host包基础上追加AICPU等device侧组件。 |
+| `--aicpu` | 与`--full`相同，编译host + device包。 |
+| `--static` | 静态库构建模式，产出`libhccl_static.a`并打包为`cann-hccl-static_<version>_linux-<arch>.tar.gz`。 |
+| `--experimental` | 编译`experimental/`目录下的试验性特性（默认关闭）。 |
+| `--custom_ops_path=<PATH>` | 指定自定义算子工程路径，编译自定义算子包。配合`--ops=<OPS>`、`--vendor=<VENDOR>`使用。 |
+| `--build_aarch` | 交叉编译aarch64架构，使用CANN工具链中的aarch64编译器。 |
+| `--asan` | 启用AddressSanitizer，用于内存越界、泄漏等问题定位。 |
+| `-u`/`--ut` | 编译并执行单元测试（UT）。 |
+| `-s`/`--st` | 编译并执行系统测试（ST）。 |
+| `--cann_3rd_lib_path=<PATH>` | 指定第三方依赖包存放路径，默认`./third_party`。 |
+| `-j<N>` | 指定并行编译线程数，默认为CPU核数的2倍。 |
+
+示例：
+
+```shell
+# 静态库构建
+bash build.sh --pkg --static
+# 编译并运行UT
+bash build.sh --pkg --ut
+# 交叉编译aarch64，并编译host + device包
+bash build.sh --pkg --full --build_aarch
+# 启用ASAN并运行ST
+bash build.sh --pkg --st --asan
+# 指定自定义算子工程
+bash build.sh --pkg --custom_ops_path={your_custom_ops_path}
+```
+
+> [!NOTE]说明
+> 未在上表列出的其他选项，可通过`bash build.sh --help`查看。
+
 ### 安装
 
 安装编译生成的HCCL软件包：

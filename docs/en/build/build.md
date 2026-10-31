@@ -195,6 +195,43 @@ After build, the `cann-hccl_<version>_linux-<arch>.run` software package is gene
 
 Here, `<version>` indicates the software version number, and `<arch>` indicates the OS architecture, with values including `x86_64` and `aarch64`.
 
+### Build Options
+
+The following table lists the common build options supported by `build.sh`. You can combine them as required.
+
+| Option | Description |
+| --- | --- |
+| `--pkg` | Build the host package (default build target). |
+| `--full` | Build the host + device packages, that is, build the host package together with device-side components such as the AICPU kernel. |
+| `--aicpu` | Same as `--full`, builds the host + device packages. |
+| `--static` | Enable static library build mode. Produces `libhccl_static.a` and packages it as `cann-hccl-static_<version>_linux-<arch>.tar.gz`. |
+| `--experimental` | Build the experimental features in the `experimental/` directory (disabled by default). |
+| `--custom_ops_path=<PATH>` | Specify the path of the custom operator project to build a custom operator package. Used together with `--ops=<OPS>` and `--vendor=<VENDOR>`. |
+| `--build_aarch` | Cross-compile for the aarch64 architecture using the aarch64 compiler in the CANN toolchain. |
+| `--asan` | Enable AddressSanitizer to locate issues such as memory out-of-bounds access and leaks. |
+| `-u`/`--ut` | Build and run unit tests (UTs). |
+| `-s`/`--st` | Build and run system tests (STs). |
+| `--cann_3rd_lib_path=<PATH>` | Specify the storage path of third-party dependency packages. Default: `./third_party`. |
+| `-j<N>` | Set the number of parallel build threads. The default is twice the number of CPU cores. |
+
+Examples:
+
+```shell
+# Static library build.
+bash build.sh --pkg --static
+# Build and run UTs.
+bash build.sh --pkg --ut
+# Cross-compile for aarch64 and build the host + device packages.
+bash build.sh --pkg --full --build_aarch
+# Enable ASAN and run STs.
+bash build.sh --pkg --st --asan
+# Specify a custom operator project.
+bash build.sh --pkg --custom_ops_path={your_custom_ops_path}
+```
+
+> [!NOTE]
+> To view options not listed in the preceding table, run `bash build.sh --help`.
+
 ### Installation
 
 Install the built HCCL software package:
