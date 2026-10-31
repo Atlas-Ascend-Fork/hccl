@@ -14,6 +14,7 @@
 #include <gtest/gtest.h>
 
 #include "auto_selector_base.h"
+#include "cost_table.h"
 #include "selector_deps_stub.h"
 #include "selector_engine.h"
 
@@ -214,4 +215,13 @@ TEST(SelectorEngineRunTest, CcuSchedOnlyModeSelectsCcuSchedAlgo)
     EXPECT_EQ(hccl_ut::LastCandidateEngines(), EngineList({OpExecuteConfig::CCU_SCHED}));
     EXPECT_EQ(hccl_ut::LastCandidatePrefixes(), std::vector<std::string>({"CcuSched"}));
     EXPECT_EQ(param.opExecuteConfig, OpExecuteConfig::CCU_SCHED_ONLY);
+}
+
+// ---------- GetOpDataType: 按算子类型读union对应成员(取错成员即日志失真根因) ----------
+TEST(GetOpDataTypeTest, VOpReadsVDataDesUnionMember)
+{
+    OpParam param{};
+    param.vDataDes.dataType = HCCL_DATA_TYPE_FP16; // union偏移16, 与DataDes.dataType(偏移8)不同
+    param.opType = HcclCMDType::HCCL_CMD_ALLGATHER_V;
+    EXPECT_EQ(ops_hccl::GetOpDataType(param), HCCL_DATA_TYPE_FP16);
 }
