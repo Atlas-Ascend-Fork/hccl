@@ -58,7 +58,8 @@
 
     此模式不支持inplace场景。
 
-    当CCU资源不足时，系统会自动切换为AI_CPU模式。
+    HCCL算子在CCU资源不足时，会先尝试从CCU_MS模式回退到CCU_SCHED模式下发；若CCU_SCHED模式仍无法满足运行条件，再回退到AI CPU展开模式下发。
+
     该配置项仅支持Broadcast、Reduce、AllReduce、ReduceScatter、AllGather算子，当前仅支持单机场景。
     针对Reduce、AllReduce、ReduceScatter算子，数据类型仅支持int16、int32、float16、float32、bfp16。其他通信算子支持的数据类型可参见对应的集合通信接口参考。
 
@@ -72,19 +73,19 @@
 
     该配置项支持Broadcast、AllGather、ReduceScatter、AllReduce、Reduce、Scatter、AlltoAll、AlltoAllV、AlltoAllVC、AllGatherV、ReduceScatterV算子。针对AllReduce、ReduceScatter、Reduce算子，数据类型仅支持int8、int16、int32、float16、float32、bfp16。针对ReduceScatterV算子，数据类型仅支持int16、int32、float16、float32、bfp16。其他通信算子支持的数据类型可参见对应的集合通信接口参考。
 
-    针对单机通信场景的AllReduce、ReduceScatter、Reduce算子，当数据量超过一定值时，为防止性能下降，系统会自动切换为AI_CPU模式（该阈值并非固定，会根据算子运行模式及网络规模等因素有所调整）。
+    HCCL的AllReduce、ReduceScatter和Reduce算子在单机通信场景中，当数据量超过一定阈值时，会自动回退到AI CPU展开模式下发，以避免性能下降。该阈值并非固定，会根据算子运行模式及网络规模等因素调整。
 
     此模式下，ReduceScatterV、AllGatherV算子仅支持单Server场景。
 
     AlltoAllV使用CCU调度算法执行时，若通信域已有CCU实例的容量不能满足其资源需求，HCCL会在设备剩余资源允许的情况下自动申请一份额外CCU实例，并使用该实例执行算子，无需额外配置。
 
     - 每个通信域最多创建一份额外CCU实例。原实例和额外实例分别承载完整的算子资源需求，容量不叠加使用。
-    - 同一通信域内，后续CCU算子在需要申请资源时优先复用已有的额外实例；额外实例容量不足时，不再继续扩容，也不退查原实例。
+    - 后续HCCL算子在同一通信域内申请CCU资源时，会优先复用已有的额外实例；若额外实例容量不足，则不再扩容，也不再检查原实例的容量，而是按既有流程回退。
     - 支持单算子流程和图模式的资源申请，图回放不重复创建额外实例。
     - 额外实例由HCCL管理，在调用[HcclCommDestroy](https://gitcode.com/cann/hcomm/blob/master/docs/zh/api_ref/comm_mgr_c/HcclCommDestroy.md)销毁通信域时通过回调释放，业务无需单独释放。
     - 扩容需使用配套版本的HCOMM库。需要创建额外实例但HCOMM不支持所需销毁回调能力时，不创建额外实例，沿用回退流程。
 
-    在无法获得满足需求的CCU资源时，系统会自动切换为AI_CPU模式。
+    HCCL算子无法获得满足需求的CCU资源时，会自动回退到AI CPU展开模式下发。
   <!-- end id2 -->
 
   <!-- npu="A3" id3 -->
@@ -115,7 +116,8 @@
       - 针对ReduceScatter算子，数据类型支持int8、int16、int32、float16、float32、bfp16，reduce的操作类型仅支持sum、max、min，仅支持超节点内的单机/多机通信，不支持跨超节点间通信。
       - 针对AllGather、AlltoAll、AlltoAllV、AlltoAllVC算子，数据类型支持int8、uint8、int16、uint16、int32、uint32、float16、float32、bfp16、int64、uint64、float64, 仅支持超节点内的单机/多机通信，不支持跨超节点间通信。
 
-    - 针对Broadcast、AllReduce、ReduceScatter、AllGather、AlltoAll（单机通信场景）算子，当数据量超过一定值时，为防止性能下降，系统会自动切换为AI_CPU模式（该阈值并非固定，会根据算子运行模式、是否启动确定性计算及网络规模等因素有所调整）；针对AlltoAllV、AlltoAllVC、AlltoAll（多机通信场景）算子，当配置为AIV模式时，系统不会自动切换为AI_CPU模式，为避免性能劣化，当任意两个rank之间的最大通信数据量不超过1MB时，建议配置为AIV模式，否则请采用AI_CPU模式。
+    - HCCL的Broadcast、AllReduce、ReduceScatter、AllGather和AlltoAll（单机通信场景）算子在数据量超过一定阈值时，会自动回退到AI CPU展开模式下发，以避免性能下降。该阈值并非固定，会根据算子运行模式、是否开启确定性计算及网络规模等因素调整。
+    - HCCL的AlltoAllV、AlltoAllVC和AlltoAll（多机通信场景）算子在配置为AIV模式时，不会自动回退到AI CPU展开模式下发。为避免性能劣化，当任意两个rank之间的最大通信数据量不超过1MB时，建议配置为AIV模式，否则请采用AI_CPU模式。
     - 该配置项下，集合通信支持控核能力，建议业务根据实际使用场景中计算算子与通信算子的并发情况进行Vector Core核数的配置。
 
       - 针对Broadcast算子，建议至少分配ranksize个vector核。
