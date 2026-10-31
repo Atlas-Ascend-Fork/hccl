@@ -55,6 +55,19 @@ TEST_F(TopoMatchOneLevelTest, NhrNonPowerOfTwoRanks)
     ASSERT_EQ(info.infos[0][0], Range(6));
 }
 
+TEST(TopoInfoSerializationTest, Level0PcieMixSurvivesCacheRoundTrip)
+{
+    TopoInfoWithNetLayerDetails topo{};
+    topo.userRank = 2;
+    topo.userRankSize = 3;
+    topo.level0PcieMix = true;
+    TopoInfoWithNetLayerDetails restored{};
+    auto serialized = topo.Serialize();
+    restored.DeSerialize(serialized);
+    EXPECT_TRUE(restored.level0PcieMix);
+    EXPECT_EQ(restored.userRank, 2u);
+}
+
 // O1: 非 hostdpu 单层满 localRanks
 TEST_F(TopoMatchOneLevelTest, NonHostdpuSingleLevelFullLocalRanks)
 {
@@ -68,6 +81,21 @@ TEST_F(TopoMatchOneLevelTest, NonHostdpuSingleLevelFullLocalRanks)
     ASSERT_EQ(info.physicalIdxForAlgoLevels.size(), 1u);
     ASSERT_EQ(info.physicalIdxForAlgoLevels[0].size(), 1u);
     ASSERT_EQ(info.physicalIdxForAlgoLevels[0][0], PhysicalLevelIndex::PHYSICAL_LEVEL_IDX_0);
+}
+
+TEST_F(TopoMatchOneLevelTest, AivMeshSingleLevelFullLocalRanks)
+{
+    auto topo = MakeTopoInfo(3, 8, {MakeLevel(Range(8), PhysicalLevelView::GLOBAL, {8})});
+    AlgAttrs profile = MakeProfile({AlgoType::MESH}, OpExecuteConfig::AIV);
+    AlgHierarchyInfoForAllLevel info;
+
+    ASSERT_EQ(matcher_.MatchTopo(&topo, info, profile), HcclResult::HCCL_SUCCESS);
+    ASSERT_EQ(info.infos.size(), 1u);
+    ASSERT_EQ(info.infos[0].size(), 1u);
+    EXPECT_EQ(info.infos[0][0], Range(8));
+    ASSERT_EQ(info.physicalIdxForAlgoLevels.size(), 1u);
+    ASSERT_EQ(info.physicalIdxForAlgoLevels[0].size(), 1u);
+    EXPECT_EQ(info.physicalIdxForAlgoLevels[0][0], PhysicalLevelIndex::PHYSICAL_LEVEL_IDX_0);
 }
 
 // O2: 非 hostdpu 多层中取 localRanks==userRankSize 的层

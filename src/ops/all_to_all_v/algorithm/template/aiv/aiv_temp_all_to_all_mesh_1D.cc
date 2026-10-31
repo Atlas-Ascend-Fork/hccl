@@ -150,6 +150,8 @@ HcclResult AivTempAlltoAllMesh1D::KernelRun(
     dataType_ = param.all2AllVDataDes.sendType;
     AivOpArgs aivAlltoAllArgs;
     aivAlltoAllArgs.cmdType = HcclCMDType::HCCL_CMD_ALLTOALL;
+    // 核入口统一为aiv_alltoall_*，读写语义由运行期isWrite分流，funcKey不随语义变化。
+    aivAlltoAllArgs.isWrite = tempAlgParams.isWrite;
     aivAlltoAllArgs.input
         = tempAlgParams.buffInfo.inBuffBaseOff + reinterpret_cast<u64>(tempAlgParams.buffInfo.inputPtr);
     aivAlltoAllArgs.output
@@ -185,7 +187,10 @@ HcclResult AivTempAlltoAllMesh1D::KernelRun(
 
     CHK_RET(ExecuteKernelLaunch(aivAlltoAllArgs));
 
-    HCCL_INFO("[AivTempAlltoAllMesh1D] KernelRun finished");
+    HCCL_INFO(
+        "[AivTempAlltoAllMesh1D] KernelRun finished, isWrite[%d] dataType[%d] numBlocks[%u] sliceId[%u]",
+        static_cast<int>(tempAlgParams.isWrite), static_cast<int>(aivAlltoAllArgs.dataType), aivAlltoAllArgs.numBlocks,
+        aivAlltoAllArgs.sliceId);
     return HcclResult::HCCL_SUCCESS;
 }
 

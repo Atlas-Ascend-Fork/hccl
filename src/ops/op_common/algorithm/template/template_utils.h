@@ -264,6 +264,8 @@ struct TemplateDataParams {
     StepSliceInfo omniReadDstStepSliceInfo;
     bool omniLastStepRead_ = false;
     u64 localCopyFlag{0};
+    // 读写语义由执行期参数下传，模板本身无状态。
+    bool isWrite{false};
 
     std::vector<char> Serialize() const
     {
@@ -293,6 +295,7 @@ struct TemplateDataParams {
         binaryStream << omniReadDstStepSliceInfo.Serialize();
         binaryStream << omniLastStepRead_;
         binaryStream << localCopyFlag;
+        binaryStream << isWrite;
         std::vector<char> result;
         binaryStream.Dump(result);
         return result;
@@ -331,6 +334,7 @@ struct TemplateDataParams {
         omniReadDstStepSliceInfo.DeSerialize(omniReadDstStepSliceInfoData);
         binaryStream >> omniLastStepRead_;
         binaryStream >> localCopyFlag;
+        binaryStream >> isWrite;
     }
 };
 

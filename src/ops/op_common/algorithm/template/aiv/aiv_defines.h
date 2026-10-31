@@ -127,14 +127,14 @@ enum class CommPattern {
         uint64_t len, uint32_t dataType, uint32_t reduceOp, uint32_t root, uint32_t sliceId,                        \
         uint64_t inputSliceStride, uint64_t outputSliceStride, uint64_t repeatNum, uint64_t inputRepeatStride,      \
         uint64_t outputRepeatStride, uint32_t numBlocks, bool isOpBase, GM_ADDR headCountMem, GM_ADDR tailCountMem, \
-        GM_ADDR addOneMem, uint32_t counterMemSize, bool isEnableCounter
+        GM_ADDR addOneMem, uint32_t counterMemSize, bool isEnableCounter, bool isWrite
 
 #define EXTERN_KERNEL_ARGS_DEF_V2 KERNEL_ARGS_DEF, ExtraArgs extraArgs
 
 #define KERNEL_ARGS_CALL                                                                                            \
     buffIn, input, output, rank, sendRecvRemoteRank, rankSize, len, dataType, reduceOp, root, sliceId,              \
         inputSliceStride, outputSliceStride, repeatNum, inputRepeatStride, outputRepeatStride, numBlocks, isOpBase, \
-        headCountMem, tailCountMem, addOneMem, counterMemSize, isEnableCounter
+        headCountMem, tailCountMem, addOneMem, counterMemSize, isEnableCounter, isWrite
 
 #define EXTERN_KERNEL_ARGS_CALL KERNEL_ARGS_CALL, extraArgs
 

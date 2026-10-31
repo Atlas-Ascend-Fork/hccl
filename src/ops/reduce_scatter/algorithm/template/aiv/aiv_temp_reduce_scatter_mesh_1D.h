@@ -19,9 +19,13 @@ namespace ops_hccl {
 
 constexpr u64 REDUCE_SCATTER_SMALL_COUNT_512KB = 512 * 1024;
 
+// ReduceScatter写语义门控：在通用门控基础上排除hif8场景。
+bool IsReduceScatterAivWriteEnabled(const OpParam& param, const TopoInfoWithNetLayerDetails* topoInfo);
+
 class AivTempReduceScatterMesh1D : public AivAlgTemplateBase {
 public:
     static constexpr TemplateProp props = {.algoType = AlgoType::MESH};
+
     AivTempReduceScatterMesh1D() = default;
     explicit AivTempReduceScatterMesh1D(
         const OpParam& param, const u32 rankId, // 传通信域的rankId，userRank
@@ -44,6 +48,9 @@ public:
     HcclResult CalNumBlocks(u32& numBlocks, u64 dataSize, u32 numBlocksLimit) override;
 
     static std::vector<CostModelParam> CalcCostCoeff(CalcCostCoeffParam param);
+
+private:
+    HcclResult CalNumBlocksWrite(u32& numBlocks, u64 dataSize, u32 numBlocksLimit);
 };
 } // namespace ops_hccl
 

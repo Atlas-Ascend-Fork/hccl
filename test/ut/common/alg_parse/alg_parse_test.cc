@@ -149,6 +149,15 @@ TEST_F(HcclAlgoParserTest, ParseCorrectCase5)
     EXPECT_FALSE(parser.executorList[1].algoList[1].enable);
 }
 
+TEST_F(HcclAlgoParserTest, MeshConfigurationDoesNotExposeWriteSemantics)
+{
+    HcclAlgoParser parser;
+    EXPECT_EQ(parser.Parser("alltoall:sole{mesh}"), HCCL_SUCCESS);
+    EXPECT_EQ(GetAlgoNameToTypeMap().count("MeshWrite"), 0u);
+    EXPECT_EQ(GetAlgoNameToTypeMap().count("MeshTwoShotWrite"), 0u);
+    EXPECT_NE(parser.Parser("alltoall:sole{meshwrite}"), HCCL_SUCCESS);
+}
+
 // 测试错误用例1：非法 opType
 TEST_F(HcclAlgoParserTest, ParseErrorInvalidOpType)
 {

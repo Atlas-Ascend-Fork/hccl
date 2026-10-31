@@ -8,6 +8,7 @@
  * See LICENSE in the root of the software repository for the full text of the License.
  */
 
+#include <algorithm>
 #include "hccl_aiv_utils.h"
 #include "aiv/aiv_temp_reduce_scatter_mesh_1D.h"
 #include "config_log.h"
@@ -22,6 +23,15 @@ AivTempReduceScatterMesh1D::AivTempReduceScatterMesh1D(
 {}
 
 AivTempReduceScatterMesh1D::~AivTempReduceScatterMesh1D() {}
+
+bool IsReduceScatterAivWriteEnabled(const OpParam& param, const TopoInfoWithNetLayerDetails* topoInfo)
+{
+    // PCIe机型下的单算子场景走写语义，hif8沿用原读语义路径。
+    // 严格保序场景同样走写语义：两条写路径的归约顺序均按rank固定的树形折叠，与数据到达顺序无关，
+    // 且LocalTreeWrite直写前有逐对端presync、BigDataWrite为非pingpong并以BarrierAll收尾，
+    // 跨算子buffer交接安全，满足确定性bit一致要求。
+    return IsAivWriteEnabled(param, topoInfo) && param.DataDes.dataType != HcclDataType::HCCL_DATA_TYPE_HIF8;
+}
 
 std::vector<CostModelParam> AivTempReduceScatterMesh1D::CalcCostCoeff(CalcCostCoeffParam param)
 {
@@ -103,6 +113,35 @@ HcclResult AivTempReduceScatterMesh1D::CalNumBlocks(u32& numBlocks, u64 dataSize
     return HcclResult::HCCL_SUCCESS;
 }
 
+HcclResult AivTempReduceScatterMesh1D::CalNumBlocksWrite(u32& numBlocks, u64 dataSize, u32 numBlocksLimit)
+{
+    constexpr u32 TWO_RANK_SIZE = 2;
+    constexpr u32 SMALL_RANK_SIZE = 4;
+    constexpr u32 MEDIUM_RANK_SIZE = 8;
+    constexpr u32 SMALL_CORE_LIMIT = 12;
+    constexpr u32 MEDIUM_CORE_LIMIT = 24;
+    constexpr u32 LARGE_CORE_LIMIT = 48;
+    // 2卡不设额外核数上限；其余按12/24/48三档控核，超过8卡以48核封顶。
+    u32 rankCoreLimit = LARGE_CORE_LIMIT;
+    if (tempRankSize_ == TWO_RANK_SIZE) {
+        rankCoreLimit = numBlocksLimit;
+    } else if (tempRankSize_ <= SMALL_RANK_SIZE) {
+        rankCoreLimit = SMALL_CORE_LIMIT;
+    } else if (tempRankSize_ <= MEDIUM_RANK_SIZE) {
+        rankCoreLimit = MEDIUM_CORE_LIMIT;
+    }
+    numBlocks = std::min(numBlocksLimit, rankCoreLimit);
+    // 小数据沿用LocalTreeWrite路径，避免固定多核进入大数据kernel及其全局屏障。
+    if (dataSize < REDUCE_SCATTER_SMALL_COUNT_512KB) {
+        constexpr u32 SMALL_DATA_CORE_MULTIPLE = 2;
+        numBlocks = std::min(numBlocks, SMALL_DATA_CORE_MULTIPLE * tempRankSize_);
+    }
+    HCCL_CONFIG_INFO(
+        HCCL_ALG, "[AivTempReduceScatterMesh1D] Write semantics use core num[%u], limit[%u], rank limit[%u]", numBlocks,
+        numBlocksLimit, rankCoreLimit);
+    return HcclResult::HCCL_SUCCESS;
+}
+
 HcclResult AivTempReduceScatterMesh1D::KernelRun(
     const OpParam& param, const TemplateDataParams& tempAlgParams, const TemplateResource& templateResource)
 {
@@ -112,6 +151,8 @@ HcclResult AivTempReduceScatterMesh1D::KernelRun(
     dataType_ = param.DataDes.dataType;
     AivOpArgs aivReduceScatterArgs;
     aivReduceScatterArgs.cmdType = HcclCMDType::HCCL_CMD_REDUCE_SCATTER;
+    // 核入口统一为aiv_reduce_scatter_*，读写语义由运行期isWrite分流，funcKey不随语义变化。
+    aivReduceScatterArgs.isWrite = tempAlgParams.isWrite;
     aivReduceScatterArgs.input
         = tempAlgParams.buffInfo.inBuffBaseOff + reinterpret_cast<u64>(tempAlgParams.buffInfo.inputPtr);
     aivReduceScatterArgs.output
@@ -129,7 +170,11 @@ HcclResult AivTempReduceScatterMesh1D::KernelRun(
     aivReduceScatterArgs.isOpBase = (param.opMode == OpMode::OPBASE);
 
     u64 dataSize = tempAlgParams.inputSliceStride;
-    CHK_RET(CalNumBlocks(aivReduceScatterArgs.numBlocks, dataSize, param.numBlocksLimit));
+    if (tempAlgParams.isWrite) {
+        CHK_RET(CalNumBlocksWrite(aivReduceScatterArgs.numBlocks, dataSize, param.numBlocksLimit));
+    } else {
+        CHK_RET(CalNumBlocks(aivReduceScatterArgs.numBlocks, dataSize, param.numBlocksLimit));
+    }
 
     aivReduceScatterArgs.inputSliceStride = tempAlgParams.inputSliceStride;
     aivReduceScatterArgs.outputSliceStride = tempAlgParams.outputSliceStride;

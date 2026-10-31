@@ -13,15 +13,21 @@
 
 #include "aiv_communication_base_v2.h"
 #include "aiv_all_to_all_mesh_1D.h"
+#include "aiv_all_to_all_mesh_1D_write.h"
 using namespace AscendC;
 
 #if defined(HCCL_AIV_ACLGRAPH_SK)
 #define AIV_ALL_TO_ALL_KERNEL_DECL(type) extern "C" __aicore__ void aiv_alltoall_##type##_inner(KERNEL_ARGS_DEF)
 
+// isWrite为host下发的运行期参数：true走写语义实现，false保持原有读语义实现。
 #define AIV_ALL_TO_ALL_KERNEL_DEF(type)                                     \
     extern "C" __aicore__ void aiv_alltoall_##type##_inner(KERNEL_ARGS_DEF) \
     {                                                                       \
         AIV_INFO_HINT;                                                      \
+        if (isWrite) {                                                      \
+            AivAlltoAllV2Mesh1DWrite<type>(KERNEL_ARGS_CALL);               \
+            return;                                                         \
+        }                                                                   \
         AivAlltoAllV2Mesh1D<type>(KERNEL_ARGS_CALL);                        \
     }
 
@@ -40,6 +46,10 @@ using namespace AscendC;
     extern "C" __global__ __aicore__ void aiv_alltoall_##type(KERNEL_ARGS_DEF) \
     {                                                                          \
         AIV_INFO_HINT;                                                         \
+        if (isWrite) {                                                         \
+            AivAlltoAllV2Mesh1DWrite<type>(KERNEL_ARGS_CALL);                  \
+            return;                                                            \
+        }                                                                      \
         AivAlltoAllV2Mesh1D<type>(KERNEL_ARGS_CALL);                           \
     }                                                                          \
     EXPORT_AIV_META_INFO(aiv_alltoall_##type)

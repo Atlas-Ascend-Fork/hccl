@@ -15,7 +15,9 @@
 #include "aiv_reduce_scatter_mesh_1d.h"
 #include "aiv_reduce_scatter_mesh_1d_corectrl.h"
 #include "aiv_reduce_scatter_mesh_1d_bigdata.h"
+#include "aiv_reduce_scatter_mesh_1d_bigdata_write.h"
 #include "aiv_reduce_scatter_local_tree.h"
+#include "aiv_reduce_scatter_local_tree_write.h"
 #include "aiv_reduce_scatter_local_tree_corectrl.h"
 #include "aiv_reduce_scatter_mesh_1d_hif8.h" // hif8 两阶段升精度归约 kernel（搬运 hif8/本地升 fp32 归约）
 
@@ -25,10 +27,19 @@ using namespace AscendC;
 #define AIV_REDUCE_SCATTER_KERNEL_DECL(type) \
     extern "C" __aicore__ void aiv_reduce_scatter_##type##_inner(KERNEL_ARGS_DEF);
 
+// isWrite为host下发的运行期参数：按核数选择大数据写语义或LocalTreeWrite，少核沿用读语义。
 #define AIV_REDUCE_SCATTER_KERNEL_DEF(type)                                       \
     extern "C" __aicore__ void aiv_reduce_scatter_##type##_inner(KERNEL_ARGS_DEF) \
     {                                                                             \
         AIV_INFO_HINT;                                                            \
+        if (isWrite && numBlocks > 2 * rankSize) {                                \
+            AivReduceScatterV2Mesh1DBigDataWrite<type>(KERNEL_ARGS_CALL);         \
+            return;                                                               \
+        }                                                                         \
+        if (isWrite && numBlocks >= rankSize) {                                   \
+            AivReduceScatterV2LocalTreeWrite<type>(KERNEL_ARGS_CALL);             \
+            return;                                                               \
+        }                                                                         \
         if (numBlocks > 2 * rankSize) {                                           \
             AivReduceScatterV2Mesh1DBigData<type>(KERNEL_ARGS_CALL);              \
         } else if (numBlocks >= rankSize) {                                       \
@@ -53,6 +64,14 @@ using namespace AscendC;
     extern "C" __global__ __aicore__ void aiv_reduce_scatter_##type(KERNEL_ARGS_DEF) \
     {                                                                                \
         AIV_INFO_HINT;                                                               \
+        if (isWrite && numBlocks > 2 * rankSize) {                                   \
+            AivReduceScatterV2Mesh1DBigDataWrite<type>(KERNEL_ARGS_CALL);            \
+            return;                                                                  \
+        }                                                                            \
+        if (isWrite && numBlocks >= rankSize) {                                      \
+            AivReduceScatterV2LocalTreeWrite<type>(KERNEL_ARGS_CALL);                \
+            return;                                                                  \
+        }                                                                            \
         if (numBlocks > 2 * rankSize) {                                              \
             AivReduceScatterV2Mesh1DBigData<type>(KERNEL_ARGS_CALL);                 \
         } else if (numBlocks >= rankSize) {                                          \

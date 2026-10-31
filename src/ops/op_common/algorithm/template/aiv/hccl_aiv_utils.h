@@ -107,6 +107,7 @@ struct AivOpArgs {
     ExtraArgs extraArgs = {};
     AivOpArgs() {};
     KernelArgsType argsType = KernelArgsType::ARGS_TYPE_SERVER;
+    bool isWrite = false; // 写语义(write)标记，核函数内部据此走不同分支
 };
 
 // AIV Cache Definitions

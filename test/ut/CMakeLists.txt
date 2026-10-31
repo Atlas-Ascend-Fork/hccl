@@ -9,6 +9,7 @@
 # -----------------------------------------------------------------------------------------------------------
 
 add_subdirectory(common/prepare_ut_env)
+add_subdirectory(aiv_template_selector)
 add_subdirectory(common/alg_parse)
 add_subdirectory(common/topo_match)
 add_subdirectory(common/adapter_error_manager)
@@ -23,6 +24,9 @@ add_subdirectory(aicpu_task_cache)
 # 测 src/ 产品代码，与 alltoall_hier 同级无条件注册；注意 build.sh -u 的 UT 构建不传
 # ENABLE_EXPERIMENTAL，放入下方 if(ENABLE_EXPERIMENTAL) 分支将不被 -u 覆盖。
 add_subdirectory(reduce_scatter_seq64)
+add_subdirectory(alltoall_aiv)
+# reduce_scatter_aiv: RS 写语义 kernel（LocalTree / BigData）的 CPU 桩级覆盖，含 flag 依赖与输出平铺校验。
+add_subdirectory(reduce_scatter_aiv)
 # recursive_executor 测试仅在 --experimental 构建（ENABLE_EXPERIMENTAL=ON）时编译
 if(ENABLE_EXPERIMENTAL)
     add_subdirectory(reduce_scatter_birs)

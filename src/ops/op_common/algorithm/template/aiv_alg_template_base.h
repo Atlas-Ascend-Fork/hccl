@@ -24,6 +24,12 @@
 namespace ops_hccl {
 constexpr uint64_t MAX_DIM_NUM = 3;
 
+// level0PcieMix由拓扑流程统一计算，PCIe机型下各rank的L0链路均含PCIe，可直接区分机型。
+inline bool IsAivWriteEnabled(const OpParam& param, const TopoInfoWithNetLayerDetails* topoInfo)
+{
+    return param.opMode == OpMode::OPBASE && topoInfo != nullptr && topoInfo->level0PcieMix;
+}
+
 class AivAlgTemplateBase {
 public:
     // Template 属性，子类按需覆盖

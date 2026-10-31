@@ -44,6 +44,7 @@ struct SkArgsStruct {
     GM_ADDR addOneMem;
     uint32_t counterMemSize;
     alignas(SK_ARGS_BOOL_ALIGN_SIZE) bool isEnableCounter;
+    alignas(SK_ARGS_BOOL_ALIGN_SIZE) bool isWrite;
 };
 
 // __sk__定义的函数参数
@@ -73,7 +74,8 @@ struct SkArgsStruct {
     GM_ADDR tailCountMem = args->tailCountMem;              \
     GM_ADDR addOneMem = args->addOneMem;                    \
     uint32_t counterMemSize = args->counterMemSize;         \
-    bool isEnableCounter = args->isEnableCounter
+    bool isEnableCounter = args->isEnableCounter;           \
+    bool isWrite = args->isWrite
 
 // sk 绑定函数
 #define SuperKernelBind(kernel_name)                           \

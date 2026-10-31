@@ -9,6 +9,7 @@
  */
 
 #include "ins_v2_reduce_scatter_sole_executor.h"
+#include "aiv_alg_template_base.h"
 #include "ins_temp_reduce_scatter_mesh_1D.h"
 #include "aiv_temp_reduce_scatter_mesh_1D.h"
 #include "ins_temp_reduce_scatter_nhr.h"
@@ -188,6 +189,11 @@ HcclResult InsV2ReduceScatterSoleExecutor<AlgTopoMatch, InsAlgTemplate>::Orchest
     tempAlgParams.buffInfo.inBuffType = BufferType::INPUT;
     tempAlgParams.buffInfo.outBuffType = BufferType::OUTPUT;
     tempAlgParams.buffInfo.hcclBuffType = BufferType::HCCL_BUFFER;
+    // 写语义通过执行期参数下传；hif8场景沿用原路径。AICPU引擎不区分读写语义。
+    tempAlgParams.isWrite = false;
+#ifndef AICPU_COMPILE
+    tempAlgParams.isWrite = IsReduceScatterAivWriteEnabled(param, &resCtx.topoInfo);
+#endif
 
     // 构建template
     std::shared_ptr<InsAlgTemplate> algTemplate

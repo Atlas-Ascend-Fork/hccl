@@ -8,6 +8,7 @@
  * See LICENSE in the root of the software repository for the full text of the License.
  */
 
+#include <cstddef>
 #include <mutex>
 #include <condition_variable>
 #include <vector>
@@ -528,14 +529,15 @@ using AivKernelArgs = struct AivKernelArgsDef {
     const void* tailCountMem;
     const void* addOneMem;
     u32 counterMemSize;
-    bool isEnableCounter;
+    alignas(sizeof(u32)) bool isEnableCounter;
+    alignas(sizeof(u32)) bool isWrite;
 
     AivKernelArgsDef(
         const void* buffIn, u64 input, u64 output, u32 rank, u32 sendRecvRemoteRank, u32 rankSize, u64 len,
         u32 dataType, u32 reduceOp, u32 root, u32 tag, u64 inputSliceStride, u64 outputSliceStride, u64 repeatNum,
         u64 inputRepeatStride, u64 outputRepeatStride, u32 numBlocks, bool isOpBase = true,
         const void* headCountMem = nullptr, const void* tailCountMem = nullptr, const void* addOneMem = nullptr,
-        u32 counterMemSize = 0, bool isEnableCounter = false)
+        u32 counterMemSize = 0, bool isEnableCounter = false, bool isWrite = false)
         : buffersIn(buffIn),
           input(input),
           output(output),
@@ -558,9 +560,18 @@ using AivKernelArgs = struct AivKernelArgsDef {
           tailCountMem(tailCountMem),
           addOneMem(addOneMem),
           counterMemSize(counterMemSize),
-          isEnableCounter(isEnableCounter)
+          isEnableCounter(isEnableCounter),
+          isWrite(isWrite)
     {}
 };
+
+// 本结构的 bool 字段按 4 字节对齐（alignas(sizeof(u32))），与设备侧 aclrtLaunchKernel
+// 对 KERNEL_ARGS_DEF 标量参数的 4 字节打包 ABI 保持一致；该 assert 只能兜住 host 侧
+// 误删 alignas 导致的相对偏移变化，无法替代 host/device 布局一致性校验，
+// 两者必须出自同一次构建（设备二进制与 libhccl.so 版本绑定，勿混用）。
+static_assert(
+    offsetof(AivKernelArgs, isWrite) == offsetof(AivKernelArgs, isEnableCounter) + sizeof(u32),
+    "AivKernelArgs bool fields must keep 4-byte alignment to match device kernel arg packing");
 
 using AivExtraKernelArgs = struct AivExtraKernelArgsDef {
     const void* buffersIn; // 注册的CCLIN地址，所有卡可访问
@@ -585,7 +596,8 @@ using AivExtraKernelArgs = struct AivExtraKernelArgsDef {
     const void* tailCountMem;
     const void* addOneMem;
     u32 counterMemSize;
-    bool isEnableCounter;
+    alignas(sizeof(u32)) bool isEnableCounter;
+    alignas(sizeof(u32)) bool isWrite;
     ExtraArgs extraArgs;
 
     AivExtraKernelArgsDef(
@@ -593,7 +605,7 @@ using AivExtraKernelArgs = struct AivExtraKernelArgsDef {
         u32 dataType, u32 reduceOp, u32 root, u32 tag, u64 inputSliceStride, u64 outputSliceStride, u64 repeatNum,
         u64 inputRepeatStride, u64 outputRepeatStride, u32 numBlocks, bool isOpBase = true,
         const void* headCountMem = nullptr, const void* tailCountMem = nullptr, const void* addOneMem = nullptr,
-        u32 counterMemSize = 0, const ExtraArgs* extraArgsPtr = nullptr)
+        u32 counterMemSize = 0, const ExtraArgs* extraArgsPtr = nullptr, bool isWrite = false)
         : buffersIn(buffIn),
           input(input),
           output(output),
@@ -615,13 +627,21 @@ using AivExtraKernelArgs = struct AivExtraKernelArgsDef {
           headCountMem(headCountMem),
           tailCountMem(tailCountMem),
           addOneMem(addOneMem),
-          counterMemSize(counterMemSize)
+          counterMemSize(counterMemSize),
+          isEnableCounter(false),
+          isWrite(isWrite)
     {
         if (extraArgsPtr != nullptr) {
             extraArgs = *extraArgsPtr;
         }
     }
 };
+
+// 与 AivKernelArgs 相同：bool 字段 4 字节对齐对应设备侧参数打包 ABI，
+// assert 仅兜底 host 侧布局，host/device 二进制必须出自同一次构建。
+static_assert(
+    offsetof(AivExtraKernelArgs, isWrite) == offsetof(AivExtraKernelArgs, isEnableCounter) + sizeof(u32),
+    "AivExtraKernelArgs bool fields must keep 4-byte alignment to match device kernel arg packing");
 
 HcclResult GetAivOpBinaryPath(const std::string& aivBinaryName, std::string& binaryPath)
 {
@@ -1129,9 +1149,11 @@ HcclResult ExecuteKernelLaunchInner(const AivOpArgs& opArgs, void* args, u32 arg
         "[ExecuteKernelLaunchInner] sendbuff [%p] recvbuff [%p] "
         "rank [%u] sendRecvRemoteRank [%u] rankSize [%u] count [%llu] "
         "dataType [%d] reduceOp [%d] root [%u] tag [%u] isOpBase [%d] "
+        "cmdType [%d] argsType [%d] numBlocks [%u] isWrite [%d] "
         "extraArgsPtr [%p] argsSize [%u]",
         opArgs.input, opArgs.output, opArgs.rank, opArgs.sendRecvRemoteRank, opArgs.rankSize, opArgs.count,
-        opArgs.dataType, opArgs.op, opArgs.root, opArgs.sliceId, opArgs.isOpBase, args, argsSize);
+        opArgs.dataType, opArgs.op, opArgs.root, opArgs.sliceId, opArgs.isOpBase, static_cast<int>(opArgs.cmdType),
+        static_cast<int>(opArgs.argsType), opArgs.numBlocks, static_cast<int>(opArgs.isWrite), args, argsSize);
 
     aclrtLaunchKernelCfg cfg;
     aclrtLaunchKernelAttr attr[AIV_ATTRNUM_THREE];
@@ -1245,7 +1267,8 @@ HcclResult ExecuteKernelLaunch(const AivOpArgs& opArgs)
             reinterpret_cast<void*>(opArgs.counter.tailCountMem),
             reinterpret_cast<void*>(opArgs.counter.addOneMem),
             opArgs.counter.memSize,
-            &opArgs.extraArgs};
+            &opArgs.extraArgs,
+            opArgs.isWrite};
         CHK_RET(ExecuteKernelLaunchInner(opArgs, &aivExtraKernelArgs, sizeof(aivExtraKernelArgs)));
     } else {
         AivKernelArgs aivKernelArgs{
@@ -1270,7 +1293,9 @@ HcclResult ExecuteKernelLaunch(const AivOpArgs& opArgs)
             reinterpret_cast<void*>(opArgs.counter.headCountMem),
             reinterpret_cast<void*>(opArgs.counter.tailCountMem),
             reinterpret_cast<void*>(opArgs.counter.addOneMem),
-            opArgs.counter.memSize};
+            opArgs.counter.memSize,
+            false,
+            opArgs.isWrite};
         CHK_RET(ExecuteKernelLaunchInner(opArgs, &aivKernelArgs, sizeof(aivKernelArgs)));
     }
     return HCCL_SUCCESS;

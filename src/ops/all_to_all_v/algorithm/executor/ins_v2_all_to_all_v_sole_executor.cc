@@ -9,6 +9,7 @@
  */
 
 #include "ins_v2_all_to_all_v_sole_executor.h"
+#include "aiv_alg_template_base.h"
 #include "executor_common_ops.h"
 #include <cstring>
 #include "alg_attrs_registry.h"
@@ -207,6 +208,8 @@ HcclResult InsV2AlltoAllVSoleExecutor<AlgTopoMatch, InsAlgTemplate>::Orchestrate
         tempAlgParams, BufferType::INPUT, BufferType::OUTPUT, param.inputPtr, param.outputPtr, resCtx.cclMem);
     tempAlgParams.buffInfo.inputSize = param.inputSize;
     tempAlgParams.buffInfo.outputSize = param.outputSize;
+    // 写语义通过执行期参数下传；host模板类型只负责选择对应的控核策略。
+    tempAlgParams.isWrite = IsAivWriteEnabled(param, &resCtx.topoInfo);
 
     // RestoreVarDataAlltoAllV 已经将数据放到对应的指针
     std::vector<u64> sendCounts(rankSize_, 0);
