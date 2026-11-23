@@ -199,6 +199,14 @@ TEST_F(ST_REDUCE_AICPU_TEST, st_reduce_aicpu_1level_8rank_int64_sum_auto_test)
     RunReduceTest(topoMeta, 1024, HcclDataType::HCCL_DATA_TYPE_INT64, HcclReduceOp::HCCL_REDUCE_SUM, 0);
 }
 
+// ST_RD_2L_013b: 单机8rank+INT64+PROD(int64与fp64/uint64/PROD统一走AICPU后单级mesh形态的执行正确性)
+TEST_F(ST_REDUCE_AICPU_TEST, st_reduce_aicpu_1level_8rank_int64_prod_auto_test)
+{
+    TopoMeta topoMeta;
+    GenTopoMeta(topoMeta, 1, 1, 8);
+    RunReduceTest(topoMeta, 1024, HcclDataType::HCCL_DATA_TYPE_INT64, HcclReduceOp::HCCL_REDUCE_PROD, 0);
+}
+
 // ST_RD_2L_014: 两级+FP32+MAX门禁负向(非64bit非PROD, 新算法不进候选池)
 TEST_F(ST_REDUCE_AICPU_TEST, st_reduce_aicpu_2level_16rank_fp32_max_auto_test)
 {

@@ -55,11 +55,12 @@ TEST(AutoSelectorBaseTest, AllToAllOnPcieMeshBigClosTriggersRollback)
     EXPECT_TRUE(ops_hccl::AutoSelectorBase::IsRollBackAiv(param, &topo));
 }
 
-TEST(AutoSelectorBaseTest, Int64ReduceOpOnPcieMeshTriggersRollback)
+// int64 与 fp64/uint64/PROD 统一走 AICPU（Issue #993）：PCIE 场景不再触发 AIV 回退
+TEST(AutoSelectorBaseTest, Int64ReduceOpOnPcieMeshDoesNotTriggerRollback)
 {
     OpParam param = MakeParam(OpExecuteConfig::CCU_MS, HcclCMDType::HCCL_CMD_ALLREDUCE, HCCL_DATA_TYPE_INT64);
     TopoInfoWithNetLayerDetails topo = MakeRollbackTopo();
-    EXPECT_TRUE(ops_hccl::AutoSelectorBase::IsRollBackAiv(param, &topo));
+    EXPECT_FALSE(ops_hccl::AutoSelectorBase::IsRollBackAiv(param, &topo));
 }
 
 TEST(AutoSelectorBaseTest, NonInt64ReduceOpDoesNotTriggerRollback)
