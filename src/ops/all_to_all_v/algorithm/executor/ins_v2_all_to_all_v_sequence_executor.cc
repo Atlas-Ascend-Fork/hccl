@@ -411,16 +411,24 @@ REGISTER_EXECUTOR_BY_TOPO(
 REGISTER_ALG_ATTRS(
     AicpuAllToAllVSequenceMeshMesh, topo.minTopoLevelNum = 2; topo.maxTopoLevelNum = 3;
     topo.supportLevel0Topos = LEVEL0_TOPO_MESH_1D;
-    topo.topoCustomCheck = [](const TopoInfoWithNetLayerDetails* topo) -> bool {
-        return topo->level0Symmetric;
+    topo.topoPrecondCheck = [](const TopoInfoWithNetLayerDetails* topo) -> bool {
+        if (topo->netLayerDetails.netLayers.empty()) {
+            return false;
+        }
+        const auto& layer0List = topo->netLayerDetails.instSizeListOfLayer[topo->netLayerDetails.netLayers[0]];
+        return !layer0List.empty() && CalcGcd(layer0List) > 1;
     };);
 
 REGISTER_ALG_ATTRS(
     AicpuAllToAllVCSequenceMeshMesh, topo.minTopoLevelNum = 2; topo.maxTopoLevelNum = 3;
     topo.supportLevel0Topos = LEVEL0_TOPO_MESH_1D;
     // 同AicpuAllToAllVSequenceMeshMesh：拒绝非对称两级拓扑
-    topo.topoCustomCheck = [](const TopoInfoWithNetLayerDetails* topo) -> bool {
-        return topo->level0Symmetric;
+    topo.topoPrecondCheck = [](const TopoInfoWithNetLayerDetails* topo) -> bool {
+        if (topo->netLayerDetails.netLayers.empty()) {
+            return false;
+        }
+        const auto& layer0List = topo->netLayerDetails.instSizeListOfLayer[topo->netLayerDetails.netLayers[0]];
+        return !layer0List.empty() && CalcGcd(layer0List) > 1;
     };);
 
 } // namespace ops_hccl
