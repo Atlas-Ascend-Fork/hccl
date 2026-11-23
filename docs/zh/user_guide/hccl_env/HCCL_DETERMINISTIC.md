@@ -41,7 +41,15 @@ HCCL_DETERMINISTIC支持的取值如下：
   - 针对Ascend 950PR&950DT系列产品，
     - 支持归约类通信算子AllReduce、ReduceScatter。
     - 通信规模要求rank size ≥ 3。
-    - 仅支持归约类通信算子展开模式为AI CPU和Vector Core，其他展开模式（CCU_MS、CCU_SCHED）配置保序功能会回退到AI CPU，使能保序。
+    - 归约类通信算子展开模式为AI CPU和Vector Core时支持保序。
+      - CCU_MS模式（仅Ascend 950DT、单机场景）下，AllReduce配置保序功能会回退到AI CPU使能保序。
+      - CCU_MS模式下，ReduceScatter同时满足以下条件时，可直接使用CCU_MS使能保序；不满足时回退到AI CPU使能保序：
+        - 单层全Mesh拓扑；
+        - rank size ≤ 8；
+        - 归约操作仅支持sum；
+        - 非inplace；
+        - 数据类型为float16、float32或bfp16。
+      - CCU_SCHED模式配置保序功能会回退到AI CPU，使能保序。
     - 不支持RoCE协议的链路。
   <!-- end id12 -->
   <!-- npu="A3" id11 -->
