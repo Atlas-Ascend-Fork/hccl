@@ -277,6 +277,12 @@ Or the CANN log contains the keyword "CMD information *** check fail", as shown 
 [ERROR] HCCL(3743927,all_reduce_test):2025-10-25-16:11:16.831.679 [rank_consistentcy_checker.cc:439] [3743951][InitChannelStage][ParameterConflict]CMD information op check fail. local[255], remote[0]
 ```
 
+When the consistency check fails during the parameter plane link setup stage (implemented in `inconsistent_check.cc`), the log prints the rank and IP of both endpoints, allowing you to directly locate the inconsistent communication nodes, as shown below:
+
+```text
+[ERROR] HCCL(3743927,all_reduce_test):2026-11-09-10:20:33.112.640 [inconsistent_check.cc:215][3743951][InitChannelStage][ParameterConflict] errNo[0x0000000005000001] CMD information op[AllReduce] OpType check fail. localRank[4] remoteRank[7] remoteIp[127.10.0.1] localIp[127.10.0.1] tag[AllReduce_127.10.0.1%enp_60000_0_1761379874757928] group[hccl_world] local[2], remote[6]
+```
+
 ### Possible Causes
 
 During parameter plane link setup, after the socket is established, a parameter consistency check is performed between the two endpoints. The check covers the operator identifier tag, operator type cmdType, reduction type op, data volume count, HCCL buffer size cclbufferSize, data type dataType, and other parameters. The inconsistent data can be identified based on the information in the error message. For example, in the following case, the operator identifier tags on the two endpoints are inconsistent, causing the communication operator to fail the consistency check during link setup. The data in local and remote represent the inconsistent values on the two endpoints.
@@ -292,6 +298,14 @@ The node information of the two endpoints with inconsistent parameters can be co
 - remoteUserrank: Rank number of the peer.
 - remoteIpAddr: Node IP information of the peer.
 - tag: Communication operator identifier.
+
+The fields added to the failure log implemented in `inconsistent_check.cc` are described as follows:
+
+- localRank: Rank number of the local endpoint (from `HcclGetRankId(comm)`).
+- remoteRank: Rank number of the peer (from the `remoteRank` field in the channel description, `HcclChannelDesc.remoteRank`).
+- remoteIp/localIp: `commAddr` of the channel `Endpoint`. IPv4/IPv6 addresses are displayed as the corresponding IP; the ID type is displayed as `ID:<n>`; non-IP types such as EID are displayed as `N/A` (dumped separately by hcomm).
+- tag: Communication operator identifier.
+- group: Communicator name.
 
 ### Solution
 

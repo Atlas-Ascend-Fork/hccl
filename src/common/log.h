@@ -212,18 +212,18 @@ const u64 HCCL_MODULE_ID = 5;
     } while (0)
 
 /* 检查函数返回值, 返错时打印函数名及通信域标识 */
-#define CHK_RET_AND_PRINT_IDE(call, identifier)                                   \
-    do {                                                                          \
-        HcclResult hcclRet = call;                                                \
-        if (UNLIKELY(hcclRet != HCCL_SUCCESS)) {                                  \
-            HCCL_RUN_INFO("[HCCL_TRACE]%s identifier[%s]", __func__, identifier); \
-            if (hcclRet == HCCL_E_AGAIN) {                                        \
-                HCCL_WARNING("[%s]call trace: hcclRet -> %d", __func__, hcclRet); \
-            } else {                                                              \
-                HCCL_ERROR("[%s]call trace: hcclRet -> %d", __func__, hcclRet);   \
-            }                                                                     \
-            return hcclRet;                                                       \
-        }                                                                         \
+#define CHK_RET_AND_PRINT_IDE(call, identifier)                                                              \
+    do {                                                                                                     \
+        HcclResult hcclRet = call;                                                                           \
+        if (UNLIKELY(hcclRet != HCCL_SUCCESS)) {                                                             \
+            HCCL_RUN_INFO("[HCCL_TRACE]%s identifier[%s]", __func__, identifier);                            \
+            if (hcclRet == HCCL_E_AGAIN) {                                                                   \
+                HCCL_WARNING("[%s]call trace: identifier[%s] hcclRet -> %d", __func__, identifier, hcclRet); \
+            } else {                                                                                         \
+                HCCL_ERROR("[%s]call trace: identifier[%s] hcclRet -> %d", __func__, identifier, hcclRet);   \
+            }                                                                                                \
+            return hcclRet;                                                                                  \
+        }                                                                                                    \
     } while (0)
 
 /* 检查函数返回值, 并返回空 */

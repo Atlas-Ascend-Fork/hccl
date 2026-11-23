@@ -125,38 +125,38 @@ HcclResult SetOpParamAlgTag(OpParam& param, const std::string& algName)
 /* ---------------- 一致性检视桩（仅计数） ---------------- */
 namespace ops_hccl {
 HcclResult
-InconsistentCheckOpType(uint32_t remoteRank, const OpExchangeInfo& exchangeInfo, const HcclCMDType& rmtOpType)
+InconsistentCheckOpType(const CheckFailLogCtx& logCtx, const OpExchangeInfo& exchangeInfo, const HcclCMDType& rmtOpType)
 {
     (void)exchangeInfo;
     (void)rmtOpType;
+    (void)logCtx;
     g_ccuStub.inconsistentCheckCnt++;
-    (void)remoteRank;
     return HCCL_SUCCESS;
 }
 
 HcclResult ReportOpExchangeInfoCheckFailed(
-    uint32_t remoteRank, const OpExchangeInfo& exchangeInfo, const std::string& paraName, uint32_t expectVal,
+    const CheckFailLogCtx& logCtx, const OpExchangeInfo& exchangeInfo, const std::string& paraName, uint32_t expectVal,
     uint32_t remotePara)
 {
     (void)exchangeInfo;
     (void)paraName;
     (void)expectVal;
     (void)remotePara;
+    (void)logCtx;
     g_ccuStub.inconsistentCheckCnt++;
-    (void)remoteRank;
     return HCCL_SUCCESS;
 }
 
 HcclResult ReportOpExchangeInfoCheckFailed(
-    uint32_t remoteRank, const OpExchangeInfo& exchangeInfo, const std::string& paraName, const std::string& expectVal,
-    const std::string& remotePara)
+    const CheckFailLogCtx& logCtx, const OpExchangeInfo& exchangeInfo, const std::string& paraName,
+    const std::string& expectVal, const std::string& remotePara)
 {
     (void)exchangeInfo;
     (void)paraName;
     (void)expectVal;
     (void)remotePara;
+    (void)logCtx;
     g_ccuStub.inconsistentCheckCnt++;
-    (void)remoteRank;
     return HCCL_SUCCESS;
 }
 } // namespace ops_hccl
@@ -181,6 +181,16 @@ HcclResult HcclGetRankSize(HcclComm comm, uint32_t* rankSize)
         return HCCL_E_PARA;
     }
     *rankSize = g_ccuStub.rankSize;
+    return HCCL_SUCCESS;
+}
+
+HcclResult HcclGetRankId(HcclComm comm, uint32_t* rank)
+{
+    (void)comm;
+    if (rank == nullptr) {
+        return HCCL_E_PARA;
+    }
+    *rank = g_ccuStub.localRank;
     return HCCL_SUCCESS;
 }
 

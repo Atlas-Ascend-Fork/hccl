@@ -21,6 +21,12 @@ EI0005: 2024-04-24-06:32:27.781.599 The arguments for collective communication a
 [ERROR] HCCL(3743927,all_reduce_test):2025-10-25-16:11:16.831.679 [rank_consistentcy_checker.cc:439] [3743951][InitChannelStage][ParameterConflict]CMD information op check fail. local[255], remote[0]
 ```
 
+参数面建链阶段一致性校验失败时，日志中会打印两端rank与IP，可直接定位到不一致的通信节点，如下所示：
+
+```text
+[ERROR] HCCL(3743927,all_reduce_test):2026-11-09-10:20:33.112.640 [inconsistent_check.cc:215][3743951][InitChannelStage][ParameterConflict] errNo[0x0000000005000001] CMD information op[AllReduce] OpType check fail. localRank[4] remoteRank[7] remoteIp[127.10.0.1] localIp[127.10.0.1] tag[AllReduce_127.10.0.1%enp_60000_0_1761379874757928] group[hccl_world] local[2], remote[6]
+```
+
 ## 可能原因
 
 参数面建链时，在socket建立完成后会进行两端的参数一致性校验，校验的范围包括算子标识符tag、算子类型cmdType、规约类型op、数据量count、HCCL Buffer的大小cclbufferSize、数据类型dataType等，可根据报错里的信息确定不一致的数据。例如下述示例中，两端的算子标识符tag不一致，导致通信算子在建链时一致性校验不通过，local和remote中的数据为两端不一致的数据。
@@ -34,8 +40,11 @@ EI0005: 2024-04-24-06:32:27.781.599 The arguments for collective communication a
 - localUserrank：本端rank编号。
 - localIpAddr：本端的节点IP信息。
 - remoteUserrank：对端rank编号。
-- remoteIpAddr：对端的节点IP信息。
+- localRank：本端rank编号（取自`HcclGetRankId(comm)`查询的本端rank）。
+- remoteRank：对端rank编号（取自channel描述中的remoteRank字段，HcclChannelDesc.remoteRank）。
+- remoteIp/localIp：channel两端`Endpoint`的`commAddr`。IPv4/IPv6显示对应IP；ID类型显示为`ID:<n>`；EID等非IP类型显示`N/A`（由hcomm侧单独dump）。
 - tag：通信算子标识符。
+- group：通信域名称。
 
 ## 解决方法
 

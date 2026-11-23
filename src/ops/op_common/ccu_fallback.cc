@@ -134,8 +134,8 @@ static bool IsValidNegotiationPayload(const CheckParamInfo* recvInfos, u32 rankS
     return true;
 }
 
-static HcclResult
-CompareCcuParam(const CheckParamInfo* recvInfos, u32 rankSize, const OpParam& param, OpExecuteConfig& lowestConfig)
+static HcclResult CompareCcuParam(
+    const CheckParamInfo* recvInfos, u32 rankSize, u32 localRank, const OpParam& param, OpExecuteConfig& lowestConfig)
 {
     bool isVariableCountOp
         = (param.opType == HcclCMDType::HCCL_CMD_ALLTOALLV || param.opType == HcclCMDType::HCCL_CMD_ALLTOALLVC
@@ -154,15 +154,22 @@ CompareCcuParam(const CheckParamInfo* recvInfos, u32 rankSize, const OpParam& pa
                 CHK_PRT_RET(
                     cpyRet != EOK, HCCL_ERROR("[%s] strncpy_s for group failed, ret[%d].", __func__, cpyRet),
                     HCCL_E_MEMORY);
+                cpyRet = strncpy_s(exchangeInfo.tag, TAG_LENGTH, param.tag, sizeof(param.tag) - 1);
+                CHK_PRT_RET(
+                    cpyRet != EOK,
+                    HCCL_ERROR("[%s] strncpy_s for tag failed, ret[%d], param.tag[%s].", __func__, cpyRet, param.tag),
+                    HCCL_E_MEMORY);
                 // opType、dataType、datacount均会导致数据量不一致，参照一致性校验进行规范格式报错
-                CHK_RET(InconsistentCheckOpType(i, exchangeInfo, static_cast<HcclCMDType>(recvInfos[i].opType)));
+                // localRank 用 HcclGetRankId(comm) 查询，remoteRank 用 i（对端 rank 序号）；CCU 路径无 IP，按 N/A
+                const CheckFailLogCtx logCtx{localRank, i, "N/A", "N/A"};
+                CHK_RET(InconsistentCheckOpType(logCtx, exchangeInfo, static_cast<HcclCMDType>(recvInfos[i].opType)));
                 if (recvInfos[i].dataType != static_cast<uint32_t>(param.DataDes.dataType)) {
                     CHK_RET(ReportOpExchangeInfoCheckFailed(
-                        i, exchangeInfo, "HcclDataType", static_cast<uint32_t>(param.DataDes.dataType),
+                        logCtx, exchangeInfo, "HcclDataType", static_cast<uint32_t>(param.DataDes.dataType),
                         recvInfos[i].dataType));
                 } else {
                     CHK_RET(ReportOpExchangeInfoCheckFailed(
-                        i, exchangeInfo, "DataCount", std::to_string(param.DataDes.count),
+                        logCtx, exchangeInfo, "DataCount", std::to_string(param.DataDes.count),
                         std::to_string(recvInfos[i].count)));
                 }
             }
@@ -269,7 +276,14 @@ HcclResult CheckCcuParamAndFallback(
         // CCU only模式误拒绝）
         lowestConfig = OpExecuteConfig::AICPU_TS;
     } else {
-        CHK_RET(CompareCcuParam(recvInfos.data(), rankSize, param, lowestConfig));
+        u32 localRank = INVALID_VALUE_RANKID;
+        HcclResult rankRet = HcclGetRankId(comm, &localRank);
+        if (rankRet != HCCL_SUCCESS) {
+            HCCL_WARNING(
+                "[%s]HcclGetRankId failed, ret[%d], localRank fallback to INVALID_VALUE_RANKID", __func__, rankRet);
+            localRank = INVALID_VALUE_RANKID;
+        }
+        CHK_RET(CompareCcuParam(recvInfos.data(), rankSize, localRank, param, lowestConfig));
     }
 
     if (lowestConfig != param.opExecuteConfig) {

@@ -9,12 +9,37 @@
  */
 
 #include "inconsistent_check.h"
+
+#include <arpa/inet.h>
+#include <cstdio>
+
 #include "hcom.h"
 #include "alg_env_config.h"
 #include "adapter_error_manager_pub.h"
 #include "hccl_res_expt_dl.h"
 
 namespace ops_hccl {
+
+// 将 CommAddr 转为可读字符串写入调用方栈缓冲区 buf
+static void CommAddrToIpStr(const CommAddr& addr, char* buf, size_t bufSize)
+{
+#if CANN_VERSION_NUM >= CANN_VERSION(9, 0, 0)
+    if (addr.type == COMM_ADDR_TYPE_IP_V4) {
+        if (inet_ntop(AF_INET, addr.raws, buf, bufSize) != nullptr) {
+            return;
+        }
+    } else if (addr.type == COMM_ADDR_TYPE_IP_V6) {
+        if (inet_ntop(AF_INET6, addr.raws, buf, bufSize) != nullptr) {
+            return;
+        }
+    } else if (addr.type == COMM_ADDR_TYPE_ID) {
+        (void)snprintf(buf, bufSize, "ID:%u", addr.id);
+        return;
+    }
+#endif
+    (void)snprintf(buf, bufSize, "N/A");
+}
+
 bool NeedInconsistentCheck(HcclComm comm, const OpParam& param)
 {
     if (HcommIsSupportHcclCommAddExchangeInfo() && (comm != nullptr)) {
@@ -76,6 +101,13 @@ InconsistentCheckParams(HcclComm comm, const OpExchangeInfo& exchangeInfo, const
         HCCL_INFO("[InconsistentCheckParams] channels is empty.");
         return HCCL_SUCCESS;
     }
+    u32 localRank = INVALID_VALUE_RANKID;
+    HcclResult rankRet = HcclGetRankId(comm, &localRank);
+    if (rankRet != HCCL_SUCCESS) {
+        HCCL_WARNING(
+            "[%s]HcclGetRankId failed, ret[%d], localRank fallback to INVALID_VALUE_RANKID", __func__, rankRet);
+        localRank = INVALID_VALUE_RANKID;
+    }
     for (auto& channel : channels) {
         OpExchangeInfo rmtExchangeInfo{};
         uint32_t rmtDataLen = 0;
@@ -89,46 +121,50 @@ InconsistentCheckParams(HcclComm comm, const OpExchangeInfo& exchangeInfo, const
                 "[InconsistentCheckParams] locDataLen is not equal to rmtDataLen. remoteRank[%u]", channel.remoteRank);
             return HCCL_E_PARA;
         }
+        CheckFailLogCtx logCtx{localRank, channel.remoteRank, {0}, {0}};
+        CommAddrToIpStr(channel.remoteEndpoint.commAddr, logCtx.remoteIp, sizeof(logCtx.remoteIp));
+        CommAddrToIpStr(channel.localEndpoint.commAddr, logCtx.localIp, sizeof(logCtx.localIp));
         if (exchangeInfo.cclBufferSize != rmtExchangeInfo.cclBufferSize) {
             CHK_RET(ReportOpExchangeInfoCheckFailed(
-                channel.remoteRank, exchangeInfo, "HcclBufferSize", std::to_string(exchangeInfo.cclBufferSize),
+                logCtx, exchangeInfo, "HcclBufferSize", std::to_string(exchangeInfo.cclBufferSize),
                 std::to_string(rmtExchangeInfo.cclBufferSize)));
         }
         if (exchangeInfo.root != rmtExchangeInfo.root) {
             CHK_RET(ReportOpExchangeInfoCheckFailed(
-                channel.remoteRank, exchangeInfo, "RootRankId", exchangeInfo.root, rmtExchangeInfo.root));
+                logCtx, exchangeInfo, "RootRankId", exchangeInfo.root, rmtExchangeInfo.root));
         }
-        CHK_RET(InconsistentCheckOpType(channel.remoteRank, exchangeInfo, rmtExchangeInfo.opType));
+        CHK_RET(InconsistentCheckOpType(logCtx, exchangeInfo, rmtExchangeInfo.opType));
         if (exchangeInfo.opExecuteConfig != rmtExchangeInfo.opExecuteConfig) {
             CHK_RET(ReportOpExchangeInfoCheckFailed(
-                channel.remoteRank, exchangeInfo, "OpExecuteConfig",
-                static_cast<uint32_t>(exchangeInfo.opExecuteConfig),
+                logCtx, exchangeInfo, "OpExecuteConfig", static_cast<uint32_t>(exchangeInfo.opExecuteConfig),
                 static_cast<uint32_t>(rmtExchangeInfo.opExecuteConfig)));
         }
         if (exchangeInfo.reduceType != rmtExchangeInfo.reduceType) {
             CHK_RET(ReportOpExchangeInfoCheckFailed(
-                channel.remoteRank, exchangeInfo, "HcclReduceOp", static_cast<uint32_t>(exchangeInfo.reduceType),
+                logCtx, exchangeInfo, "HcclReduceOp", static_cast<uint32_t>(exchangeInfo.reduceType),
                 static_cast<uint32_t>(rmtExchangeInfo.reduceType)));
         }
         if (exchangeInfo.dataType != rmtExchangeInfo.dataType) {
             CHK_RET(ReportOpExchangeInfoCheckFailed(
-                channel.remoteRank, exchangeInfo, "HcclDataType", static_cast<uint32_t>(exchangeInfo.dataType),
+                logCtx, exchangeInfo, "HcclDataType", static_cast<uint32_t>(exchangeInfo.dataType),
                 static_cast<uint32_t>(rmtExchangeInfo.dataType)));
         }
         if (exchangeInfo.count != rmtExchangeInfo.count) {
             CHK_RET(ReportOpExchangeInfoCheckFailed(
-                channel.remoteRank, exchangeInfo, "DataCount", std::to_string(exchangeInfo.count),
+                logCtx, exchangeInfo, "DataCount", std::to_string(exchangeInfo.count),
                 std::to_string(rmtExchangeInfo.count)));
         }
         if (exchangeInfo.aivCoreLimit != rmtExchangeInfo.aivCoreLimit) {
             HCCL_RUN_WARNING(
                 "[InconsistentCheckParams]op information aivCoreLimit check fail."
-                " remoteRank[%u] expectValue[%u] remotePara[%u]",
-                channel.remoteRank, exchangeInfo.aivCoreLimit, rmtExchangeInfo.aivCoreLimit);
+                " localRank[%u] remoteRank[%u] remoteIp[%s] localIp[%s] tag[%s] group[%s] expectValue[%u] "
+                "remotePara[%u]",
+                logCtx.localRank, logCtx.remoteRank, logCtx.remoteIp, logCtx.localIp, exchangeInfo.tag,
+                exchangeInfo.group, exchangeInfo.aivCoreLimit, rmtExchangeInfo.aivCoreLimit);
         }
         if (strncmp(exchangeInfo.group, rmtExchangeInfo.group, MAX_LENGTH) != 0) {
             CHK_RET(ReportOpExchangeInfoCheckFailed(
-                channel.remoteRank, exchangeInfo, "GroupName", exchangeInfo.group, rmtExchangeInfo.group));
+                logCtx, exchangeInfo, "GroupName", exchangeInfo.group, rmtExchangeInfo.group));
         }
         if (strncmp(exchangeInfo.tag, rmtExchangeInfo.tag, TAG_LENGTH) != 0) {
             bool isGroupEnabled = false;
@@ -137,7 +173,7 @@ InconsistentCheckParams(HcclComm comm, const OpExchangeInfo& exchangeInfo, const
             }
             if (!isGroupEnabled) {
                 CHK_RET(ReportOpExchangeInfoCheckFailed(
-                    channel.remoteRank, exchangeInfo, "OpTag", exchangeInfo.tag, rmtExchangeInfo.tag));
+                    logCtx, exchangeInfo, "OpTag", exchangeInfo.tag, rmtExchangeInfo.tag));
             }
         }
         HCCL_INFO("[InconsistentCheckParams] success. remoteRank[%u]", channel.remoteRank);
@@ -146,7 +182,7 @@ InconsistentCheckParams(HcclComm comm, const OpExchangeInfo& exchangeInfo, const
 }
 
 HcclResult
-InconsistentCheckOpType(uint32_t remoteRank, const OpExchangeInfo& exchangeInfo, const HcclCMDType& rmtOpType)
+InconsistentCheckOpType(const CheckFailLogCtx& logCtx, const OpExchangeInfo& exchangeInfo, const HcclCMDType& rmtOpType)
 {
     HcclCMDType locOpType = exchangeInfo.opType;
     if (locOpType == HcclCMDType::HCCL_CMD_SEND || locOpType == HcclCMDType::HCCL_CMD_RECEIVE) {
@@ -164,17 +200,17 @@ InconsistentCheckOpType(uint32_t remoteRank, const OpExchangeInfo& exchangeInfo,
         if ((rmtOpType != HcclCMDType::HCCL_CMD_SEND && rmtOpType != HcclCMDType::HCCL_CMD_RECEIVE)
             || locOpType == rmtOpType) {
             CHK_RET(ReportOpExchangeInfoCheckFailed(
-                remoteRank, exchangeInfo, "OpType", expectValue, static_cast<uint32_t>(rmtOpType)));
+                logCtx, exchangeInfo, "OpType", expectValue, static_cast<uint32_t>(rmtOpType)));
         }
     } else if (locOpType != rmtOpType) {
         CHK_RET(ReportOpExchangeInfoCheckFailed(
-            remoteRank, exchangeInfo, "OpType", static_cast<uint32_t>(locOpType), static_cast<uint32_t>(rmtOpType)));
+            logCtx, exchangeInfo, "OpType", static_cast<uint32_t>(locOpType), static_cast<uint32_t>(rmtOpType)));
     }
     return HCCL_SUCCESS;
 }
 
 HcclResult ReportOpExchangeInfoCheckFailed(
-    uint32_t remoteRank, const OpExchangeInfo& exchangeInfo, const std::string& paraName, uint32_t expectVal,
+    const CheckFailLogCtx& logCtx, const OpExchangeInfo& exchangeInfo, const std::string& paraName, uint32_t expectVal,
     uint32_t remotePara)
 {
     std::string opInfo = "Unknown";
@@ -186,14 +222,15 @@ HcclResult ReportOpExchangeInfoCheckFailed(
             {opInfo, exchangeInfo.group, paraName, std::to_string(expectVal), std::to_string(remotePara)}));
     HCCL_ERROR(
         "[InitChannelStage][ParameterConflict] errNo[0x%016llx] CMD information op[%s] %s check fail. "
-        "local[%u], remote[%u], remoteRank[%u]",
-        HCCL_ERROR_CODE(HCCL_E_PARA), opInfo.c_str(), paraName.c_str(), expectVal, remotePara, remoteRank);
+        "localRank[%u] remoteRank[%u] remoteIp[%s] localIp[%s] tag[%s] group[%s] local[%u], remote[%u]",
+        HCCL_ERROR_CODE(HCCL_E_PARA), opInfo.c_str(), paraName.c_str(), logCtx.localRank, logCtx.remoteRank,
+        logCtx.remoteIp, logCtx.localIp, exchangeInfo.tag, exchangeInfo.group, expectVal, remotePara);
     return HCCL_E_PARA;
 }
 
 HcclResult ReportOpExchangeInfoCheckFailed(
-    uint32_t remoteRank, const OpExchangeInfo& exchangeInfo, const std::string& paraName, const std::string& expectVal,
-    const std::string& remotePara)
+    const CheckFailLogCtx& logCtx, const OpExchangeInfo& exchangeInfo, const std::string& paraName,
+    const std::string& expectVal, const std::string& remotePara)
 {
     std::string opInfo = "Unknown";
     CHK_RET(GetOpTypeName(exchangeInfo, opInfo));
@@ -202,9 +239,9 @@ HcclResult ReportOpExchangeInfoCheckFailed(
         std::vector<std::string>({opInfo, exchangeInfo.group, paraName, expectVal, remotePara}));
     HCCL_ERROR(
         "[InitChannelStage][ParameterConflict] errNo[0x%016llx] CMD information op[%s] %s check fail. "
-        "local[%s], remote[%s], remoteRank[%u]",
-        HCCL_ERROR_CODE(HCCL_E_PARA), opInfo.c_str(), paraName.c_str(), expectVal.c_str(), remotePara.c_str(),
-        remoteRank);
+        "localRank[%u] remoteRank[%u] remoteIp[%s] localIp[%s] tag[%s] group[%s] local[%s], remote[%s]",
+        HCCL_ERROR_CODE(HCCL_E_PARA), opInfo.c_str(), paraName.c_str(), logCtx.localRank, logCtx.remoteRank,
+        logCtx.remoteIp, logCtx.localIp, exchangeInfo.tag, exchangeInfo.group, expectVal.c_str(), remotePara.c_str());
     return HCCL_E_PARA;
 }
 

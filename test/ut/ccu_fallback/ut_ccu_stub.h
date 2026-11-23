@@ -39,6 +39,9 @@ struct CcuStubConfig {
     /* ---- HcclGetRankSize 桩 ---- */
     uint32_t rankSize = 8;
 
+    /* ---- HcclGetRankId 桩 ---- */
+    uint32_t localRank = 0;
+
     /* ---- IsCommExpansionModeCcu 桩（经 DlHcommFunction 单例 dlHcclConfigGetInfo 注入） ---- */
     uint32_t expansionMode = HCCL_OP_EXPANSION_EXT_CCU_MS; // 默认 ccu 模式
 

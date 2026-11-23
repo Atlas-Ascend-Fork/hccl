@@ -11,6 +11,8 @@
 #ifndef INCONSISTENT_CHECK_H
 #define INCONSISTENT_CHECK_H
 
+#include <arpa/inet.h>
+
 #include <string>
 
 #include "alg_param.h"
@@ -24,19 +26,27 @@ bool CheckCtxStatus(HcclComm comm, const OpParam& param);
 HcclResult CompareOpExchangeInfos(
     HcclComm comm, const OpParam& param, const AlgResourceRequest& resRequest, const OpExchangeInfo& exchangeInfo);
 
+// 一致性校验失败日志上下文：聚合本端/对端 rank 与 IP
+struct CheckFailLogCtx {
+    uint32_t localRank;
+    uint32_t remoteRank;
+    char remoteIp[INET6_ADDRSTRLEN];
+    char localIp[INET6_ADDRSTRLEN];
+};
+
 HcclResult InconsistentCheckParams(
     HcclComm comm, const OpExchangeInfo& exchangeInfo, const std::vector<HcclChannelDesc>& channels);
 
-HcclResult
-InconsistentCheckOpType(uint32_t remoteRank, const OpExchangeInfo& exchangeInfo, const HcclCMDType& rmtOpType);
+HcclResult InconsistentCheckOpType(
+    const CheckFailLogCtx& logCtx, const OpExchangeInfo& exchangeInfo, const HcclCMDType& rmtOpType);
 
 HcclResult ReportOpExchangeInfoCheckFailed(
-    uint32_t remoteRank, const OpExchangeInfo& exchangeInfo, const std::string& paraName, uint32_t expectVal,
+    const CheckFailLogCtx& logCtx, const OpExchangeInfo& exchangeInfo, const std::string& paraName, uint32_t expectVal,
     uint32_t remotePara);
 
 HcclResult ReportOpExchangeInfoCheckFailed(
-    uint32_t remoteRank, const OpExchangeInfo& exchangeInfo, const std::string& paraName, const std::string& expectVal,
-    const std::string& remotePara);
+    const CheckFailLogCtx& logCtx, const OpExchangeInfo& exchangeInfo, const std::string& paraName,
+    const std::string& expectVal, const std::string& remotePara);
 
 HcclResult GetOpTypeName(const OpExchangeInfo& exchangeInfo, std::string& opInfo);
 

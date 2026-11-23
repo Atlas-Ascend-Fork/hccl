@@ -262,7 +262,7 @@ HcclResult HcclAlltoAllGraphMode(
         AlltoAllVOutPlaceGraphMode(
             sendBuf, sendCounts.data(), sdispls.data(), recvBuf, recvCounts.data(), rdispls.data(), recvType, comm,
             stream, tag, HcclCMDType::HCCL_CMD_ALLTOALL, rankSize, resPack),
-        opTag);
+        opTag.c_str());
 
     CHK_RET(LogHcclExit("HcclAlltoAllGraphMode", opTag.c_str(), startut, true));
 
@@ -321,7 +321,7 @@ HcclResult HcclAlltoAllVGraphMode(
         AlltoAllVOutPlaceGraphMode(
             sendBuf, sendCounts, sdispls, recvBuf, recvCounts, rdispls, recvType, comm, stream, tag,
             HcclCMDType::HCCL_CMD_ALLTOALLV, rankSize, resPack),
-        opTag);
+        opTag.c_str());
 
     CHK_RET(LogHcclExit("HcclAlltoAllVGraphMode", opTag.c_str(), startut, true));
 
@@ -378,7 +378,7 @@ HcclResult HcclAlltoAllVCGraphMode(
         AlltoAllVOutPlaceGraphMode(
             sendBuf, sendCounts.data(), sdispls.data(), recvBuf, recvCounts.data(), rdispls.data(), recvType, comm,
             stream, tag, HcclCMDType::HCCL_CMD_ALLTOALLVC, rankSize, resPack),
-        opTag);
+        opTag.c_str());
 
     CHK_RET(LogHcclExit("HcclAlltoAllVCGraphMode", opTag.c_str(), startut, true));
 

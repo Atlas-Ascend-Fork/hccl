@@ -162,7 +162,7 @@ HcclResult HcclReduceScatterVGraphMode(
     CHK_RET_AND_PRINT_IDE(
         ReduceScatterVOutPlaceGraphMode(
             sendBuf, sendDispls, sendCounts, recvBuf, recvCount, dataType, op, comm, stream, tag, resPack),
-        opTag);
+        opTag.c_str());
 
     CHK_RET(LogHcclExit("HcclReduceScatterVGraphMode", opTag.c_str(), startut, true));
 

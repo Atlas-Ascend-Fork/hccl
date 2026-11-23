@@ -127,7 +127,7 @@ HcclResult HcclAllGatherVGraphMode(
     CHK_RET_AND_PRINT_IDE(
         AllGatherVOutPlaceGraphMode(
             sendBuf, recvBuf, sendCount, recvCounts, recvDispls, dataType, comm, stream, tag, resPack),
-        opTag);
+        opTag.c_str());
     CHK_RET(LogHcclExit("HcclAllGatherVGraphMode", opTag.c_str(), startut, true));
 
     return HCCL_SUCCESS;
