@@ -40,22 +40,45 @@ add_executable(tuner_setup_test
     stub/mock_tuner_stubs.cc
 )
 
+# CANN 头路径按架构自适应：hccl_res_expt.h 等仅存在于 <arch>/pkg_inc/hccl/，
+# 写死 x86_64-linux 在 aarch64 环境必然缺失（对齐 reduce_scatter_selector UT 模式）。
+if(NOT ASCEND_CANN_PACKAGE_PATH OR NOT IS_DIRECTORY "${ASCEND_CANN_PACKAGE_PATH}")
+    message(FATAL_ERROR
+        "[UT] ASCEND_CANN_PACKAGE_PATH is not set or does not exist: '${ASCEND_CANN_PACKAGE_PATH}'")
+endif()
+
+file(GLOB _cann_arch_dirs LIST_DIRECTORIES true "${ASCEND_CANN_PACKAGE_PATH}/*-linux")
+if(NOT _cann_arch_dirs)
+    message(FATAL_ERROR
+        "[UT] No *-linux directory found under ASCEND_CANN_PACKAGE_PATH: ${ASCEND_CANN_PACKAGE_PATH}")
+endif()
+
+set(_cann_arch_dir "")
+foreach(_dir ${_cann_arch_dirs})
+    if(_dir MATCHES "/${CMAKE_SYSTEM_PROCESSOR}-linux$")
+        set(_cann_arch_dir "${_dir}")
+        break()
+    endif()
+endforeach()
+if(NOT _cann_arch_dir)
+    message(FATAL_ERROR
+        "[UT] Cannot select CANN arch directory for CMAKE_SYSTEM_PROCESSOR='${CMAKE_SYSTEM_PROCESSOR}'. "
+        "Candidates: ${_cann_arch_dirs}")
+endif()
+
 target_include_directories(tuner_setup_test PRIVATE
     ${_tuner_ut_include_dirs}
-    ${ASCEND_CANN_PACKAGE_PATH}/include
-    ${ASCEND_CANN_PACKAGE_PATH}/include/hccl
-    ${ASCEND_CANN_PACKAGE_PATH}/x86_64-linux/include
-    ${ASCEND_CANN_PACKAGE_PATH}/x86_64-linux/pkg_inc/base
-    ${ASCEND_CANN_PACKAGE_PATH}/x86_64-linux/pkg_inc/hccl
-    ${ASCEND_CANN_PACKAGE_PATH}/x86_64-linux/pkg_inc/hcomm/ccu
+    ${_cann_arch_dir}/include
+    ${_cann_arch_dir}/include/hccl
+    ${_cann_arch_dir}/pkg_inc
+    ${_cann_arch_dir}/pkg_inc/hccl
+    ${_cann_arch_dir}/pkg_inc/base
+    ${_cann_arch_dir}/pkg_inc/hcomm/ccu
 )
 
 # dlsym_common.h 的 HcclCommStatus/ThreadHandle 桩以 CANN_VERSION_NUM 守卫，UT 目标须与
 # CANN 环境头一致传入该定义，否则 9.1+ 环境下桩与公开头冲突（同 selector_engine UT 模式）
-set(_ut_cann_ver_header "${ASCEND_CANN_PACKAGE_PATH}/include/version/cann_version.h")
-if(NOT EXISTS "${_ut_cann_ver_header}")
-    set(_ut_cann_ver_header "${ASCEND_CANN_PACKAGE_PATH}/x86_64-linux/include/version/cann_version.h")
-endif()
+set(_ut_cann_ver_header "${_cann_arch_dir}/include/version/cann_version.h")
 if(EXISTS "${_ut_cann_ver_header}")
     file(STRINGS "${_ut_cann_ver_header}" _ut_cann_ver_line
          REGEX "^#define[ \t]+CANN_VERSION_NUM[ \t]+")
@@ -78,4 +101,4 @@ target_link_libraries(tuner_setup_test PRIVATE
 
 # 不链接 -ldl：dlopen/dlsym 由 mock_tuner_stubs.cc 链接期替换
 
-add_test(NAME tuner_setup_test COMMAND tuner_setup_test)
+run_llt_test(TARGET tuner_setup_test TASK_NUM 1)
