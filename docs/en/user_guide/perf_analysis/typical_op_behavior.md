@@ -1,14 +1,14 @@
 # Typical Operator Behavior Analysis
 
-<!-- md-trans-meta sourceCommit=unknown translatedAt=2026-09-12T11:09:33.921Z pushedAt=2026-09-18T08:03:58.298Z -->
+<!-- md-trans-meta sourceCommit=unknown translatedAt=2026-11-06T09:51:37.131Z pushedAt=2026-11-16T06:28:10.272Z nl=2 -->
 
-Taking the profile data of the AllReduce operator on dual-server Atlas 800T A2 as an example, this section describes how to map the task orchestration of a communication operator to tasks in profiling. The following figure shows the complete AllReduce operator execution flow on one rank, and maps each execution step of the AllReduce operator to the profiling tasks.
+Taking the profile data of the AllReduce operator on dual-server Atlas 800T A2 as an example, this section describes how to map the task orchestration of a communication operator to tasks in profiling. The following figure shows the complete AllReduce operator execution flow on one rank, and maps each execution step of the AllReduce operator to profiling.
 
 ![AllReduce operator execution flow](figures/allreduce_task.png)
 
 1. Copy communication data from the user input memory to the HCCL Buffer memory.
 
-    ![usermem_to_hcclbuffer](figures/usermen_to_hcclbuffer.png)
+    ![usermem_to_hcclbuffer](figures/usermem_to_hcclbuffer.png)
 
 2. Implement intra-node ReduceScatter communication semantics, including pre-notify synchronization, ReduceInline memory copy, inline computation, and post-notify synchronization.
 

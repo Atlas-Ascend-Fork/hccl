@@ -1,14 +1,14 @@
 # HCCL_LOGIC_SUPERPOD_ID
 
-<!-- md-trans-meta sourceCommit=unknown translatedAt=2026-09-12T09:42:51.440Z pushedAt=2026-09-18T08:03:58.208Z -->
+<!-- md-trans-meta sourceCommit=unknown translatedAt=2026-11-06T09:47:34.962Z pushedAt=2026-11-16T06:28:10.177Z nl=2 -->
 
-## Description
+## Function
 
-For the SuperPoD networking of Atlas A3 training products/Atlas A3 inference products, if you do not use a rank table to configure cluster resource information, you can use this environment variable to specify the SuperPoD ID to which the current node's running process belongs, thereby dividing a physical SuperPoD into multiple logical SuperPoDs.
+In SuperPoD networking on Atlas A3 products, if the rank table file is not used to configure cluster resource information, set this environment variable to specify the SuperPoD ID to which the process running on the current node belongs. This divides a physical SuperPoD into multiple logical SuperPoDs.
 
-The value of this environment variable is a string with fewer than 128 characters, and defaults to an empty string.
+The value of this environment variable is a string with fewer than 128 characters in length, and defaults to null.
 
-If this environment variable is not configured, the value of `Super Pod ID` in the environment is obtained as the SuperPoD ID. You can query this value by running `npu-smi info -t spod-info -i <id> -c <chip_id>`.
+If this environment variable is not configured, the value of `Super Pod ID` in the environment is obtained as the SuperPoD ID. You can query this value running `npu-smi info -t spod-info -i <id> -c <chip_id>`.
 
 ## Configuration Example
 
@@ -24,13 +24,13 @@ export HCCL_LOGIC_SUPERPOD_ID=super_pod_id_1
 ## Applicable Products
 
 <!-- npu="950" id1 -->
-- 950PR/950DT: Not supported
+- Ascend 950PR&950DT products: Not supported
 <!-- end id1 -->
 <!-- npu="A3" id2 -->
-- Atlas A3 training products/Atlas A3 inference products: Supported
+- Atlas A3 products: Supported
 <!-- end id2 -->
 <!-- npu="910b" id3 -->
-- Atlas A2 training products/Atlas A2 inference products: Not supported
+- Atlas A2 products: Not supported
 <!-- end id3 -->
 <!-- npu="910" id4 -->
 - Atlas training products: Not supported

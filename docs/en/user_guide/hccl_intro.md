@@ -1,13 +1,13 @@
-# Introduction to HCCL
+# HCCL Introduction
 
-<!-- md-trans-meta sourceCommit=unknown translatedAt=2026-09-02T08:08:00.953Z pushedAt=2026-09-08T02:19:27.095Z -->
+<!-- md-trans-meta sourceCommit=unknown translatedAt=2026-11-09T03:30:23.055Z pushedAt=2026-11-12T09:04:48.685Z nl=2 -->
 
 HCCL (Huawei Collective Communication Library) is a high-performance collective communication library based on Ascend hardware, providing high-performance and high-reliability communication solutions for computing clusters.
 
 ## Core Features
 
 - Provides high-performance collective communication and point-to-point communication in single-node and multi-node environments.
-- Supports collective communication primitives such as AllReduce, Broadcast, AllGather, ReduceScatter, AlltoAll, Send, and Receive.
+- Supports collective communication primitives such as AllReduce, Broadcast, AllGather, and ReduceScatter, as well as point-to-point communication primitives such as Send and Receive.
 - Supports communication algorithms such as Ring, Mesh, and Recursive Halving-Doubling (RHD).
 - Supports high-speed communication links such as HCCS, RoCE, PCIe, and UB (Unified Bus).
 - Supports two execution modes: single-operator mode and graph mode.
@@ -17,16 +17,16 @@ HCCL (Huawei Collective Communication Library) is a high-performance collective 
 
 HCCL is a core component of CANN, providing high-performance and high-reliability communication solutions for NPU clusters. HCCL supports multiple AI frameworks on the upper layer and enables efficient interconnection among various Ascend AI processors on the lower layer. Its architecture is shown in the following figure.
 
-**Figure 1**  Collective communication library software architecture
+**Figure 1**  Collective communication library software architecture  
 ![Collective communication library software architecture](figures/hccl_architecture.png)
 
 HCCL consists of the HCCL collective communication library and the HCOMM (Huawei Communication) communication basics library:
 
 - **HCCL collective communication library**: Includes built-in communication operators and extended communication operators, and provides external communication operator interfaces.
   - Built-in communication operators: Basic communication operators provided by HCCL, including collective communication operators and point-to-point communication operators.
-  - Extended communication operators: Users can customize extended communication operators using the interfaces provided by the HCOMM communication basics library.
+  - Extended communication operators: Users can customize extended communication operators using the interfaces provided by the HCOMM library.
 
-- **HCOMM communication basics library**: Adopts a layered decoupling design approach, dividing communication capabilities into a control plane and a data plane.
+- **HCOMM library**: Adopts a layered decoupling design approach, dividing communication capabilities into a control plane and a data plane.
 
   - Control plane: provides topology information query and communication resource management functions.
   - Data plane: provides data movement and computation functions such as local operations, inter-operator synchronization, and communication operations.
@@ -36,13 +36,13 @@ HCCL consists of the HCCL collective communication library and the HCOMM (Huawei
 ## Supported Products
 
 <!-- npu="950" id1 -->
-- Ascend 950PR/Ascend 950DT
+- Ascend 950PR&950DT products
 <!-- end id1 -->
 <!-- npu="A3" id2 -->
-- Atlas A3 Training Products/Atlas A3 Inference Products
+- Atlas A3 products
 <!-- end id2 -->
 <!-- npu="910b" id3 -->
-- Atlas A2 Training Products/Atlas A2 Inference Products
+- Atlas A2 products
 <!-- end id3 -->
 <!-- npu="910" id4 -->
 - Atlas training products
@@ -52,11 +52,11 @@ HCCL consists of the HCCL collective communication library and the HCOMM (Huawei
 <!-- end id5 -->
 
 <!-- npu="910b,310p" id8 -->
-> [!NOTE]Note
+> [!NOTE]
 > <!-- npu="910b" id6 -->
-> - For Atlas A2 training products/Atlas A2 inference products, only Atlas 800T A2 training server, Atlas 900 A2 PoD cluster base unit, and Atlas 200T A2 Box16 heterogeneous subrack are supported.
+> - For Atlas A2 products, only Atlas 800T A2, Atlas 900 A2 PoD, and Atlas 200T A2 Box16 are supported.
 > <!-- end id6 -->
 > <!-- npu="310p" id7 -->
-> - For Atlas inference products, only Atlas 300I Duo inference card is supported.
+> - For Atlas inference products, only Atlas 300I Duo is supported.
 <!-- end id7 -->
 <!-- end id8 -->

@@ -1,8 +1,8 @@
 # HCCL_CONNECT_TIMEOUT
 
-<!-- md-trans-meta sourceCommit=unknown translatedAt=2026-09-12T09:08:11.868Z pushedAt=2026-09-18T08:03:58.173Z -->
+<!-- md-trans-meta sourceCommit=unknown translatedAt=2026-11-06T09:46:11.366Z pushedAt=2026-11-16T06:28:10.138Z nl=2 -->
 
-## Description
+## Function
 
 In distributed training or inference tasks, processes on different devices may become desynchronized due to other factors before collective communication initialization. This environment variable limits the timeout wait period for socket connection establishment between different devices, during which each device process waits for other devices to establish their connections and synchronize.
 
@@ -26,13 +26,13 @@ None.
 ## Applicable Products
 
 <!-- npu="950" id5 -->
-- 950PR/950DT: Supported
+- Ascend 950PR&950DT products: Supported
 <!-- end id5 -->
 <!-- npu="A3" id4 -->
-- Atlas A3 training products/Atlas A3 inference products: Supported
+- Atlas A3 products: Supported
 <!-- end id4 -->
 <!-- npu="910b" id3 -->
-- Atlas A2 training products/Atlas A2 inference products: Supported
+- Atlas A2 products: Supported
 <!-- end id3 -->
 <!-- npu="910" id1 -->
 - Atlas training products: Supported

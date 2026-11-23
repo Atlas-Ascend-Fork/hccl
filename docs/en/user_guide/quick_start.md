@@ -1,6 +1,6 @@
 # Quick Start
 
-<!-- md-trans-meta sourceCommit=unknown translatedAt=2026-09-02T08:08:43.004Z pushedAt=2026-09-08T02:33:27.252Z -->
+<!-- md-trans-meta sourceCommit=unknown translatedAt=2026-11-09T03:30:30.327Z pushedAt=2026-11-12T09:08:25.499Z nl=2 -->
 
 This section uses the AllReduce operator as an example to introduce its usage in single-operator execution mode, helping users quickly experience collective communication functionality.
 
@@ -19,7 +19,7 @@ You can click [Sample Link](../../../examples/02_collectives/01_allreduce) to ob
 - Device detection: queries the number of available devices through the `aclrtGetDeviceCount()` API.
 - Uses rank0 as the root node and generates the rootInfo identification information of the root node through the `HcclGetRootInfo()` API.
 - Based on rootInfo, initializes the communicator in each thread through the `HcclCommInitRootInfo()` API.
-- Call the `HcclAllReduce( )` API to add the input data of all ranks in the communicator, send the result to all nodes, and print the result.
+- Calls the `HcclAllReduce()` API to add the input data of all ranks in the communicator, sends the result to all nodes, and prints the result.
 
 ## Compilation and Execution
 
@@ -65,16 +65,16 @@ rankId: 7, output: [ 0 8 16 24 32 40 48 56 ]
 2. Allocate memory and construct input data.
 
     ```c
-    // Set the device operated by the current thread.
+    // Set the device to be operated by the current thread.
     ACLCHECK(aclrtSetDevice(ctx->device));
     
-    // Apply for device memory for the collective communication operation.
+    // Allocate device memory for the collective communication operation.
     size_t count = ctx->devCount;
     size_t mallocSize = count * sizeof(float);
     ACLCHECK(aclrtMalloc(&sendBuf, mallocSize, ACL_MEM_MALLOC_HUGE_ONLY));
     ACLCHECK(aclrtMalloc(&recvBuf, mallocSize, ACL_MEM_MALLOC_HUGE_ONLY));
     
-    // Apply for host memory to store the input data, and initialize the content to 0 to 7.
+    // Allocate host memory for storing input data, and initialize the content to 0 to 7.
     void *hostBuf = nullptr;
     ACLCHECK(aclrtMallocHost(&hostBuf, mallocSize));
     float *tmpHostBuff = static_cast<float *>(hostBuf);
@@ -82,7 +82,7 @@ rankId: 7, output: [ 0 8 16 24 32 40 48 56 ]
         tmpHostBuff[i] = static_cast<float>(i);
     }
     
-    // Copy the input data from the host side to the device side.
+    // Copy the input data from the host to the device.
     ACLCHECK(aclrtMemcpy(sendBuf, mallocSize, hostBuf, mallocSize, ACL_MEMCPY_HOST_TO_DEVICE));
     ```
 
@@ -100,18 +100,18 @@ rankId: 7, output: [ 0 8 16 24 32 40 48 56 ]
     aclrtStream stream;
     ACLCHECK(aclrtCreateStream(&stream));
     
-    // Execute AllReduce to add the sendBuf of all nodes in the communicator, and then send the result to the recvBuf of all nodes.
+    // Execute AllReduce to sum the sendBuf of all nodes in the communicator, and then send the result to the recvBuf of all nodes.
     HCCLCHECK(HcclAllReduce(sendBuf, recvBuf, count, HCCL_DATA_TYPE_FP32, HCCL_REDUCE_SUM, hcclComm, stream));
-    // Block and wait until the collective communication task in the task stream is complete.
+    // Block until the collective communication task in the stream is complete.
     ACLCHECK(aclrtSynchronizeStream(stream));
     ```
 
 5. Release resources.
 
     ```c
-    ACLCHECK(aclrtFree(sendBuf));          // Release the device-side memory.
-    ACLCHECK(aclrtFree(recvBuf));          // Release the device-side memory.
-    ACLCHECK(aclrtFreeHost(hostBuf));      // Release the host-side memory.
+    ACLCHECK(aclrtFree(sendBuf));          // Free the device memory.
+    ACLCHECK(aclrtFree(recvBuf));          // Free the device memory.
+    ACLCHECK(aclrtFreeHost(hostBuf));      // Free the host memory.
     ACLCHECK(aclrtDestroyStream(stream));  // Destroy the stream.
     HCCLCHECK(HcclCommDestroy(hcclComm));  // Destroy the communicator.
     ACLCHECK(aclFinalize());               // Deinitialize the device.

@@ -1,8 +1,8 @@
 # Slow/Fast Device Analysis
 
-<!-- md-trans-meta sourceCommit=unknown translatedAt=2026-09-12T11:07:06.643Z pushedAt=2026-09-18T08:03:58.293Z -->
+<!-- md-trans-meta sourceCommit=unknown translatedAt=2026-11-06T09:51:18.735Z pushedAt=2026-11-16T06:28:10.263Z nl=2 -->
 
-Before executing memory copy tasks, a collective communication operator needs to perform pre-synchronization with the peer to ensure that the peer is ready to receive data from the local end. Therefore, if the peer has not yet reached the same communication operator, the local end must wait for the peer to get in sync before proceeding. This notify wait time is also counted in the communication operator execution time, resulting in slow communication operator performance.
+Before executing memory copy tasks, a collective communication operator needs to perform pre-synchronization with the peer to ensure that the peer is ready to receive data from the local end. Therefore, if the peer has not yet reached the same communication operator, the local end must wait for the peer to get in sync before proceeding. This notify wait time is also counted in the communication operator execution, resulting in slow communication operator performance.
 
 ![Slow/fast devices issue](figures/slow_fast_rank.png)
 

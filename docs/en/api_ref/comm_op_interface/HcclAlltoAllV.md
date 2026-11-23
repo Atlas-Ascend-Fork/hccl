@@ -1,17 +1,17 @@
 # HcclAlltoAllV
 
-<!-- md-trans-meta sourceCommit=unknown translatedAt=2026-09-12T07:52:46.529Z pushedAt=2026-09-18T08:03:58.117Z -->
+<!-- md-trans-meta sourceCommit=unknown translatedAt=2026-11-06T09:43:36.473Z pushedAt=2026-11-16T06:28:10.074Z nl=2 -->
 
 ## Applicable Products
 
 <!-- npu="950" id1 -->
-- 950PR/950DT: Supported
+- Ascend 950PR&950DT products: Supported
 <!-- end id1 -->
 <!-- npu="A3" id2 -->
-- Atlas A3 training products/Atlas A3 inference products: Supported
+- Atlas A3 products: Supported
 <!-- end id2 -->
 <!-- npu="910b" id3 -->
-- Atlas A2 training products/Atlas A2 inference products: Supported
+- Atlas A2 products: Supported
 <!-- end id3 -->
 <!-- npu="310p" id4 -->
 - Atlas inference products: Supported
@@ -20,7 +20,18 @@
 - Atlas training products: Supported
 <!-- end id5 -->
 
-## Description
+<!-- npu="910b,310p" id8 -->
+> [!NOTE]
+>
+> <!-- npu="910b" id9 -->
+> - For Atlas A2 products, only Atlas 800T A2, Atlas 900 A2 PoD, and Atlas 200T A2 Box16 are supported.
+> <!-- end id9 -->
+> <!-- npu="310p" id15 -->
+> - For Atlas inference products, only Atlas 300I Duo is supported.
+<!-- end id15 -->
+<!-- end id8 -->
+
+## Function
 
 The operation API for the collective communication operator AlltoAllV, which sends data (with customizable data volume) to all ranks in the communicator and receives data from all ranks.
 
@@ -36,49 +47,49 @@ HcclResult HcclAlltoAllV(const void *sendBuf, const void *sendCounts, const void
 
 | Parameter | Input/Output | Description |
 | --- | --- | --- |
-| sendBuf | Input | Address of the source data buffer. |
-| sendCounts | Input | A uint64 array that indicates the send data volume. `sendCounts[i] = n` indicates that this rank sends n data units to rank i.<br>For example, if `sendType` is float32, `sendCounts[i] = n` indicates that this rank sends n float32 data units to rank i. |
-| sdispls | Input | A uint64 array that indicates the send offset. `sdispls[i] = n` indicates the offset of the data sent by this rank to rank i in sendBuf relative to the start of sendBuf, in units of sendType. |
-| sendType | Input | Data type of the sent data, of [HcclDataType](https://gitcode.com/cann/hcomm/blob/master/docs/en/api_ref/comm_mgr_c/data_type_definition/HcclDataType.md) type.<br>Different models support different data types. For details, see [Supported Data Types](#supported-data-types).|
-| recvBuf | Output | Address of the destination data buffer. The collective communication result is output to this buffer.<br>The address of recvBuf must be different from that of sendBuf, and their memory scope must not overlap. |
-| recvCounts | Input | A uint64 array that indicates the received data volume. `recvCounts[i] = n` indicates that this rank receives n data units from rank i.<br>For example, if `recvType` is float32, `recvCounts[i] = n` indicates that this rank receives n float32 data units from rank i. |
-| rdispls | Input | A uint64 array that indicates the received data offset. `rdispls[i] = n` indicates the offset of the data received by this rank from rank i in recvBuf relative to the start of recvBuf, in units of recvType. |
-| recvType | Input | Data type of the received data, of [HcclDataType](https://gitcode.com/cann/hcomm/blob/master/docs/en/api_ref/comm_mgr_c/data_type_definition/HcclDataType.md) type.<br>Different models support different data types. For details, see [Supported Data Types](#supported-data-types).|
-| comm | Input | Communicator in which the collective communication operation is performed. |
-| stream | Input | Stream used by this rank. |
+| sendBuf | Input | Source data buffer address. |
+| sendCounts | Input | uint64 array indicating the amount of data to send, where `sendCounts[i] = n` indicates that the amount of data sent by this rank to rank i is n.<br>For example, if `sendType` is float32, `sendCounts[i] = n` indicates that this rank sends n float32 data elements to rank i. |
+| sdispls | Input | uint64 array indicating the send offset, where `sdispls[i] = n` indicates the offset, relative to sendBuf, of the start position in sendBuf of the data that this rank sends to rank i, in units of sendType. |
+| sendType | Input | Data type of the data to send, of the [HcclDataType](https://gitcode.com/cann/hcomm/blob/master/docs/en/api_ref/comm_mgr_c/data_type_definition/HcclDataType.md) type.<br>Supported data types vary by model. For details, see [Supported Data Types](#supported-data-types).|
+| recvBuf | Output | Destination data buffer address, to which the collective communication result is output.<br>The addresses configured for recvBuf and sendBuf cannot be the same, and their memory ranges cannot overlap. |
+| recvCounts | Input | uint64 array indicating the amount of data to receive, where `recvCounts[i] = n` indicates that the amount of data received by this rank from rank i is n.<br>For example, if `recvType` is float32, `recvCounts[i] = n` indicates that this rank receives n float32 data elements from rank i. |
+| rdispls | Input | uint64 array indicating the receive offset, where `rdispls[i] = n` indicates the offset, relative to recvBuf, of the start position in recvBuf where the data that this rank receives from rank i is stored, in units of recvType. |
+| recvType | Input | Data type of the data to receive, of the [HcclDataType](https://gitcode.com/cann/hcomm/blob/master/docs/en/api_ref/comm_mgr_c/data_type_definition/HcclDataType.md) type.<br>Supported data types vary by model. For details, see [Supported Data Types](#supported-data-types).|
+| comm | Input | Communicator where the collective communication operation is performed. |
+| stream | Input | Stream used by the current rank. |
 
 ### Supported Data Types
 
 <!-- npu="950" id10 -->
-- For 950PR/950DT, supported data types: int8, uint8, int16, uint16, int32, uint32, int64, uint64, float8-e5m2, float8-e4m3, float8-e8m0, hifloat8, float16, float32, float64, bfp16.
+- For Ascend 950PR&950DT products, supported data types: int8, uint8, int16, uint16, int32, uint32, int64, uint64, float8-e5m2, float8-e4m3, float8-e8m0, hifloat8, float16, float32, float64, bfp16.
 <!-- end id10 -->
 <!-- npu="A3" id11 -->
-- For Atlas A3 training products/Atlas A3 inference products, supported data types: int8, uint8, int16, uint16, int32, uint32, int64, uint64, float16, float32, float64, bfp16.
+- For Atlas A3 products, supported data types: int8, uint8, int16, uint16, int32, uint32, int64, uint64, float16, float32, float64, bfp16.
 <!-- end id11 -->
 <!-- npu="910b" id12 -->
-- For Atlas A2 training products/Atlas A2 inference products, supported data types: int8, uint8, int16, uint16, int32, uint32, int64, uint64, float16, float32, float64, bfp16.
+- For Atlas A2 products, supported data types: int8, uint8, int16, uint16, int32, uint32, int64, uint64, float16, float32, float64, bfp16.
 <!-- end id12 -->
 <!-- npu="910" id13 -->
 - For Atlas training products, supported data types: int8, uint8, int16, uint16, int32, uint32, int64, uint64, float16, float32, float64.
 <!-- end id13 -->
 <!-- npu="310p" id6 -->
-- For Atlas 300I Duo, supported data types: int8, uint8, int16, uint16, int32, uint32, int64, uint64, float16, float32, float64.
+- For Atlas inference products, supported data types: int8, uint8, int16, uint16, int32, uint32, int64, uint64, float16, float32, float64.
 <!-- end id6 -->
 
-## Return Value
+## Return Values
 
 [HcclResult](https://gitcode.com/cann/hcomm/blob/master/docs/en/api_ref/comm_mgr_c/data_type_definition/HcclResult.md)
 
 | Return Value | Description |
 | --- | --- |
-| HCCL_SUCCESS | API call success. |
-| HCCL_E_PTR | The passed pointer parameter is null. For example, comm, sendBuf, recvBuf, stream, sendCounts, sdispls, recvCounts, or rdispls is nullptr. |
-| HCCL_E_PARA | The passed parameter is invalid. For example, the addresses of sendBuf and recvBuf are the same. |
-| HCCL_E_NOT_SUPPORT | The operation is not supported. For example, sendType/recvType is invalid or not supported by the current model. |
+| HCCL_SUCCESS | The API call succeeds. |
+| HCCL_E_PTR | An input pointer parameter is null, for example, comm, sendBuf, recvBuf, stream, sendCounts, sdispls, recvCounts, or rdispls is nullptr. |
+| HCCL_E_PARA | An input parameter is invalid, for example, sendBuf and recvBuf have the same address. |
+| HCCL_E_NOT_SUPPORT | The operation is not supported, for example, sendType/recvType is invalid or the current model does not support it. |
 | HCCL_E_INTERNAL | Internal error. |
-| HCCL_E_UNAVAIL | The resource is unavailable, e.g., an exception occurs during CCU resource reuse (reused threads are empty, or the thread count exceeds the limit). |
-| HCCL_E_RUNTIME | Failed to call the underlying runtime API (e.g., memory copy or memory reset). |
-| HCCL_E_MEMORY | Memory allocation or operation failed. |
+| HCCL_E_UNAVAIL | A resource is unavailable, for example, a CCU resource reuse exception (null reuse thread or excess threads). |
+| HCCL_E_RUNTIME | A call to an underlying runtime API (for example, memory copy or memory zeroing) fails. |
+| HCCL_E_MEMORY | Memory allocation or operation fails. |
 
 ## Constraints
 
@@ -88,65 +99,52 @@ HcclResult HcclAlltoAllV(const void *sendBuf, const void *sendCounts, const void
 
   In cluster networking, single-server 1p and 2p communicators must be within the same cluster (devices 0-3 and devices 4-7 within a server each form a cluster). For single-server 4p, single-server 8p, and multi-server communicators, ranks must be organized by cluster as the basic unit, and the cluster selection must be consistent across servers.
 
-- For Atlas training products, in single-server use cases, the NIC status must be "up"; otherwise, this API will fail to execute.
+- For Atlas training products, in single-server use cases, the NIC status must be `up`; otherwise, this API will fail to execute.
 <!-- end id7 -->
 <!-- npu="310p" id14 -->
-- For Atlas 300I Duo, only single-server use cases are supported, with a maximum of two Atlas 300I Duo inference cards (i.e., four NPUs) per server.
+- For Atlas inference products, only single-server use cases are supported, and a single server supports deploying a maximum of 2 inference devices (4 NPUs).
 <!-- end id14 -->
-- Must serialize the calls to all communication operators in multiple communicators on each device. Out-of-order/multi-threaded concurrent calls and thread reentrancy are not allowed.
-- On the same device, the threads that dispatch all collective communication operators in the same communicator must use the same context.
+- All communication operators in multiple communicators must be dispatched serially on each device. Out-of-order dispatch, multi-thread concurrent dispatch, and thread reentrancy are not supported.
+- On the same device, the dispatch threads of all communication operators in the same communicator must use the same context.
 
 ## Example
 
-For the Atlas 300I Duo Inference Card, initialize the communicator before allocating device memory. See [Constraints and Limitations](../../user_guide/constraints.md#atlas-300i-duo-inference-card).
+```c
+// Allocate device memory for the collective communication operation.
+void *sendBuf = nullptr;
+void *recvBuf = nullptr;
+uint64_t count = 8;
+size_t mallocSize = count * sizeof(float);
+aclrtMalloc((void **)&sendBuf, mallocSize, ACL_MEM_MALLOC_HUGE_ONLY);
+aclrtMalloc((void **)&recvBuf, mallocSize, ACL_MEM_MALLOC_HUGE_ONLY);
 
-The following application function shows the call order. Initialize the ACL runtime before calling it. `rankId` is the communicator rank and `deviceId` is the local logical device ID. Rank 0 obtains `rootInfo` using HcclGetRootInfo and distributes the same value to all ranks through the application's out-of-band channel before passing it to this function. Configure `rankSize` and other arguments according to the interface's product and networking constraints.
+// Initialize the communicator.
+uint32_t rankSize = 8;
+HcclComm hcclComm;
+HcclCommInitRootInfo(rankSize, &rootInfo, deviceId, &hcclComm);
 
-```cpp
-#include <cstdint>
-#include <vector>
-#include "hccl/hccl.h"
+// Create a task stream.
+aclrtStream stream;
+aclrtCreateStream(&stream);
 
-void ExampleHcclAlltoAllV(uint32_t rankSize, uint32_t rankId, uint32_t deviceId, const HcclRootInfo& rootInfo)
-{
-    // Select the local logical device and initialize the communicator.
-    aclrtSetDevice(deviceId);
-    HcclComm hcclComm = nullptr;
-    HcclCommInitRootInfo(rankSize, &rootInfo, rankId, &hcclComm);
-
-    // Create the stream.
-    aclrtStream stream = nullptr;
-    aclrtCreateStream(&stream);
-
-    // Allocate device memory for the collective communication operation.
-    void* sendBuf = nullptr;
-    void* recvBuf = nullptr;
-    uint64_t count = rankSize;
-    size_t mallocSize = count * sizeof(float);
-    aclrtMalloc((void**)&sendBuf, mallocSize, ACL_MEM_MALLOC_HUGE_ONLY);
-    aclrtMalloc((void**)&recvBuf, mallocSize, ACL_MEM_MALLOC_HUGE_ONLY);
-
-    // Set the amounts of data to send and receive. The amounts are the same.
-    std::vector<uint64_t> sendCounts(rankSize, 1);
-    std::vector<uint64_t> recvCounts(rankSize, 1);
-    std::vector<uint64_t> sdispls(rankSize);
-    std::vector<uint64_t> rdispls(rankSize);
-    for (size_t i = 0; i < rankSize; ++i) {
-        sdispls[i] = i;
-        rdispls[i] = i;
-    }
-    // Execute AlltoAllV to send the same amount of data to all ranks in the communicator and receive the same amount of
-    // data from all ranks. The data amount can be customized.
-    HcclAlltoAllV(
-        sendBuf, sendCounts.data(), sdispls.data(), HCCL_DATA_TYPE_FP32, recvBuf, recvCounts.data(), rdispls.data(),
-        HCCL_DATA_TYPE_FP32, hcclComm, stream);
-    // Block and wait for the collective communication tasks in the task stream to complete.
-    aclrtSynchronizeStream(stream);
-
-    // Release resources
-    aclrtFree(sendBuf);         // Free memory on the device.
-    aclrtFree(recvBuf);         // Free memory on the device.
-    aclrtDestroyStream(stream); // Destroy the stream.
-    HcclCommDestroy(hcclComm);  // Destroy the communicator.
+// Set the data volumes to send and receive, which are the same.
+std::vector<uint64_t> sendCounts(rankSize, 1);
+std::vector<uint64_t> recvCounts(rankSize, 1);
+std::vector<uint64_t> sdispls(rankSize);
+std::vector<uint64_t> rdispls(rankSize);
+for (size_t i = 0; i < rankSize; ++i) {
+    sdispls[i] = i;
+    rdispls[i] = i;
 }
+// Execute AlltoAllV to send data of the same volume to all ranks in the communicator and receive data of the same volume from all ranks. The data volume is custom.
+HcclAlltoAllV(sendBuf, sendCounts.data(), sdispls.data(), HCCL_DATA_TYPE_FP32,
+              recvBuf, recvCounts.data(), rdispls.data(), HCCL_DATA_TYPE_FP32, hcclComm, stream);
+// Block and wait until the collective communication task in the task stream completes.
+aclrtSynchronizeStream(stream);
+
+// Release resources.
+aclrtFree(sendBuf);          // Free the device memory.
+aclrtFree(recvBuf);          // Free the device memory.
+aclrtDestroyStream(stream);  // Destroy the stream.
+HcclCommDestroy(hcclComm);   // Destroy the communicator.
 ```

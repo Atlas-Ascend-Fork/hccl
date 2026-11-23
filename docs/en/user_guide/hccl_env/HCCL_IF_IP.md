@@ -1,6 +1,6 @@
 # HCCL_IF_IP
 
-<!-- md-trans-meta sourceCommit=unknown translatedAt=2026-09-12T09:34:06.246Z pushedAt=2026-09-18T08:03:58.198Z -->
+<!-- md-trans-meta sourceCommit=unknown translatedAt=2026-11-06T09:47:13.725Z pushedAt=2026-11-16T06:28:10.167Z nl=2 -->
 
 ## Function
 
@@ -28,13 +28,13 @@ None.
 ## Applicable Products
 
 <!-- npu="950" id3 -->
-- 950PR/950DT: Supported
+- Ascend 950PR&950DT products: Supported
 <!-- end id3 -->
 <!-- npu="A3" id4 -->
-- Atlas A3 training products/Atlas A3 inference products: Supported
+- Atlas A3 products: Supported
 <!-- end id4 -->
 <!-- npu="910b" id5 -->
-- Atlas A2 training products/Atlas A2 inference products: Supported
+- Atlas A2 products: Supported
 <!-- end id5 -->
 <!-- npu="910" id1 -->
 - Atlas training products: Supported

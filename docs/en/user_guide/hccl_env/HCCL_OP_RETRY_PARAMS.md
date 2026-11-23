@@ -1,8 +1,8 @@
 # HCCL_OP_RETRY_PARAMS
 
-<!-- md-trans-meta sourceCommit=unknown translatedAt=2026-09-12T10:05:36.979Z pushedAt=2026-09-18T08:03:58.221Z -->
+<!-- md-trans-meta sourceCommit=unknown translatedAt=2026-11-06T09:48:01.708Z pushedAt=2026-11-16T06:28:10.185Z nl=2 -->
 
-## Description
+## Function
 
 When you enable the HCCL operator retry feature through the environment variable [HCCL_OP_RETRY_ENABLE](HCCL_OP_RETRY_ENABLE.md), you can use this environment variable to configure the wait time before the first retry, the maximum number of retries, and the interval between two retries.
 
@@ -28,13 +28,13 @@ export HCCL_OP_RETRY_PARAMS="MaxCnt:5,HoldTime:5000,IntervalTime:5000"
 ## Applicable Products
 
 <!-- npu="950" id2 -->
-- 950PR/950DT: Not Supported
+- Ascend 950PR&950DT products: Not supported
 <!-- end id2 -->
 <!-- npu="A3" id1 -->
-- Atlas A3 training products/Atlas A3 inference products: Supported
+- Atlas A3 products: Supported
 <!-- end id1 -->
 <!-- npu="910b" id3 -->
-- Atlas A2 training products/Atlas A2 inference products: Not supported
+- Atlas A2 products: Not supported
 <!-- end id3 -->
 <!-- npu="910" id4 -->
 - Atlas training products: Not supported

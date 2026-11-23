@@ -1,8 +1,8 @@
 # HCCL_RDMA_TC
 
-<!-- md-trans-meta sourceCommit=unknown translatedAt=2026-09-12T10:16:02.409Z pushedAt=2026-09-18T08:03:58.235Z -->
+<!-- md-trans-meta sourceCommit=unknown translatedAt=2026-11-06T09:48:48.656Z pushedAt=2026-11-16T06:28:10.208Z nl=2 -->
 
-## Description
+## Function
 
 Configures the traffic class for RDMA NICs.
 
@@ -15,7 +15,7 @@ In the RoCE V2 protocol, this value corresponds to the ToS (Type of Service) fie
 ## Configuration Example
 
 ```bash
-# If this environment variable is set to 100 (25*4), DSCP is 25.
+# Set this environment variable to 25*4 = 100, so the DSCP is 25.
 export HCCL_RDMA_TC=100
 ```
 
@@ -26,13 +26,13 @@ If you call the HCCL C API to initialize a communicator with specific configurat
 ## Applicable Products
 
 <!-- npu="950" id3 -->
-- 950PR/950DT: Supported
+- Ascend 950PR&950DT products: Supported
 <!-- end id3 -->
 <!-- npu="A3" id4 -->
-- Atlas A3 training products/Atlas A3 inference products: Supported
+- Atlas A3 products: Supported
 <!-- end id4 -->
 <!-- npu="910b" id5 -->
-- Atlas A2 training products/Atlas A2 inference products: Supported
+- Atlas A2 products: Supported
 <!-- end id5 -->
 <!-- npu="910" id1 -->
 - Atlas training products: Supported

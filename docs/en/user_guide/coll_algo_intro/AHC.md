@@ -1,10 +1,10 @@
 # AHC
 
-<!-- md-trans-meta sourceCommit=unknown translatedAt=2026-09-02T07:35:30.827Z pushedAt=2026-09-11T02:10:03.189Z -->
+<!-- md-trans-meta sourceCommit=unknown translatedAt=2026-11-09T03:21:07.403Z pushedAt=2026-11-10T09:19:00.985Z nl=2 -->
 
 ## Algorithm Description
 
-When a cluster network exhibits hierarchical characteristics with bandwidth convergence between layers, collective communication faces two major technical challenges. First, due to bandwidth convergence between different regions, the performance of traditional single-layer collective communication algorithms degrades. Second, the number of compute units varies across different regions (i.e., asymmetric card counts), rendering conventional hierarchical algorithms inapplicable. For example, in a cluster, the same communicator may span two SuperPoDs, and the number of cards in the two SuperPoDs is inconsistent (e.g., one SuperPoD has 64 cards while the other has 128 cards). This scenario poses significant challenges to the performance of collective communication algorithms.
+When a cluster network has hierarchical characteristics and bandwidth convergence exists between layers, collective communication faces two major technical challenges. First, due to the bandwidth convergence problem between different regions, the performance of traditional single-layer collective communication algorithms degrades. Second, the number of compute units in different regions differs (that is, the number of cards is asymmetric), which makes conventional hierarchical algorithms no longer applicable. For example, in a cluster, the same communicator may span two SuperPoDs, and the number of cards in the two SuperPoDs is inconsistent (for example, one SuperPoD has 64 cards while the other has 128 cards). This situation poses a significant challenge to the performance of collective communication algorithms.
 
 **Figure 1**  AHC implementing the AllReduce process based on logical same-number cards (5 ranks, two groups of 2+3)
 ![](figures/ahc_allreduce_5rank_flow.png "AHC implementing the AllReduce process based on logical same-number cards (5 ranks, two groups of 2+3)")

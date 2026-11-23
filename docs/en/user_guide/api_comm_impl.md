@@ -1,6 +1,6 @@
-# Using the Communication Library API to Implement Communication Functions
+# Implementing Communication Functions Using the Communication Library API
 
-<!-- md-trans-meta sourceCommit=unknown translatedAt=2026-09-02T07:59:14.670Z pushedAt=2026-09-11T13:40:50.351Z -->
+<!-- md-trans-meta sourceCommit=unknown translatedAt=2026-11-09T03:29:43.079Z pushedAt=2026-11-12T08:45:22.973Z nl=2 -->
 
 ## Overview
 
@@ -43,7 +43,7 @@ Communicators can be created in the following ways, depending on the user scenar
 - Operators within the same communicator must be executed serially by the user.
 - Multiple communicators must be created serially on the same NPU.
 <!-- npu="A3" id4 -->
-- For Atlas A3 training products/Atlas A3 inference products, when initializing a communicator, if the network contains multiple SuperPoDs, configure the AI server information belonging to the same SuperPoD together. Assume there are two SuperPoDs with identifiers "0" and "1". Configure the AI server information in "0" first, and then configure the AI server information in "1". Cross-configuring the AI server information of "0" and "1" is not supported.
+- For Atlas A3 products, when initializing a communicator, if the network contains multiple SuperPoDs, configure the AI server information belonging to the same SuperPoD together. Assume there are two SuperPoDs with identifiers "0" and "1". Configure the AI server information in "0" first, and then configure the AI server information in "1". Cross-configuring the AI server information of "0" and "1" is not supported.
 <!-- end id4 -->
 
 ### Creating a Communicator Based on a Rank Table
@@ -64,7 +64,7 @@ A simple code snippet is as follows:
     // Initialize the HCCL communicator.
     HcclCommInitClusterInfo(rankTableFile, devId, &hcclComm);
    
-    /*  Collective communication operation   */
+    /*  Collective communication operations  */
 
     // Destroy the HCCL communicator.
     HcclCommDestroy(hcclComm);
@@ -74,13 +74,13 @@ A simple code snippet is as follows:
 
 For the following products:
 <!-- npu="950" id1 -->
-- Ascend 950PR/Ascend 950DT
+- Ascend 950PR&950DT products
 <!-- end id1 -->
 <!-- npu="A3" id2 -->
-- Atlas A3 Training Products/Atlas A3 Inference Products
+- Atlas A3 products
 <!-- end id2 -->
 <!-- npu="910b" id3 -->
-- Atlas A2 Training Products/Atlas A2 Inference Products
+- Atlas A2 products
 <!-- end id3 -->
 
 If the service runs in a single-card multi-process scenario, it is recommended that you configure the "device_port" field in the rank table configuration file, and different business processes need to set different port numbers. Otherwise, the service may fail to run due to port conflicts. Note, however, that multiple processes will have a certain impact on resource overhead and communication performance.
@@ -91,7 +91,7 @@ In multi-machine collective communication scenarios, if a complete cluster infor
 
 - Scenario where each Device corresponds to one business process. The implementation process is as follows:
        <!-- npu="950" id5 -->
-    1. For Ascend 950PR/Ascend 950DT, check whether the rootinfo file exists. For other products, skip this step.
+    1. For Ascend 950PR&950DT products, check whether the rootinfo file exists. Skip this step for other products.
 
         Before creating a communicator based on root node information, check whether the `/etc/hccl_rootInfo.json` file exists. This file records the EID (Entity ID, the identifier of the initiator or receiver in communication) information for inter-NPU communication and is automatically generated after environment deployment. If this file does not exist, submit an issue in the current source repository.
        <!-- end id5 -->
@@ -107,32 +107,32 @@ In multi-machine collective communication scenarios, if a complete cluster infor
         - Method 2: Configure the communication NIC name on each Host node through the environment variable [HCCL_SOCKET_IFNAME](./hccl_env/HCCL_SOCKET_IFNAME.md), and configure the communication protocol used by the NIC through [HCCL_SOCKET_FAMILY](./hccl_env/HCCL_SOCKET_FAMILY.md). HCCL will obtain the Host IP through this NIC name to communicate with the root node. The following is a configuration example:
 
             ```bash
-            # Configure the IP protocol version used by the communication NIC during HCCL initialization. AF_INET: IPv4; AF_INET6: IPv6.
+            # Configure the IP protocol version used by the communication NIC during HCCL initialization. AF_INET: IPv4; AF_INET6: IPv6
             export HCCL_SOCKET_FAMILY=AF_INET
             
-            # The following NIC name configuration formats are supported (choose one of the four formats; multiple NICs can be configured in the environment variable, separated by commas, and the first matched NIC is used as the communication NIC).
-            # Exact match
-            export HCCL_SOCKET_IFNAME==eth0,enp0   # Use the specified eth0 or enp0 NIC.
-            export HCCL_SOCKET_IFNAME=^=eth0,enp0     # Do not use the eth0 and enp0 NICs.
+            # The following NIC name configuration formats are supported (choose one of the four formats. Multiple NICs can be configured in the environment variable, separated by commas. The first matched NIC is used as the communication NIC.)
+            # Exact NIC match
+            export HCCL_SOCKET_IFNAME==eth0,enp0   # Use the specified eth0 or enp0 NIC
+            export HCCL_SOCKET_IFNAME=^=eth0,enp0     # Do not use the eth0 or enp0 NIC
             
-            # Fuzzy match
-            export HCCL_SOCKET_IFNAME=eth,enp       # Use all NICs with the eth or enp prefix.
-            export HCCL_SOCKET_IFNAME=^eth,enp      # Do not use any NIC with the eth or enp prefix.
+            # Fuzzy NIC match
+            export HCCL_SOCKET_IFNAME=eth,enp       # Use all NICs whose names start with eth or enp
+            export HCCL_SOCKET_IFNAME=^eth,enp      # Do not use any NIC whose name starts with eth or enp
             ```
 
         The environment variable HCCL_IF_IP takes precedence over HCCL_SOCKET_IFNAME. If neither HCCL_IF_IP nor HCCL_SOCKET_IFNAME is configured, the system automatically selects the NIC based on the following priority. If the NIC selected on the current node cannot establish a link with the NIC selected on the root node, HCCL connection setup will fail.
 
         ```text
-        physical NICs other than Docker and loopback (sorted by NIC name in ascending lexicographic order) > Docker NICs > loopback NICs
+        NICs other than docker/lo (in ascending lexicographic order of NIC names) > docker NIC > lo NIC
         ```
 
     3. On the root node, call the [HcclGetRootInfo](https://gitcode.com/cann/hcomm/blob/master/docs/en/api_ref/comm_mgr_c/HcclGetRootInfo.md) API to generate the root node rank identification information "rootInfo", which includes the device IP address, device ID, and other details.
     4. Broadcast the rank information of the root node to all ranks within the communicator.
     5. On all nodes in the communicator, call the [HcclCommInitRootInfo](https://gitcode.com/cann/hcomm/blob/master/docs/en/api_ref/comm_mgr_c/HcclCommInitRootInfo.md) or [HcclCommInitRootInfoConfig](https://gitcode.com/cann/hcomm/blob/master/docs/en/api_ref/comm_mgr_c/HcclCommInitRootInfoConfig.md) API (which creates a communicator with specific configuration) to initialize the communicator based on the received "rootInfo" and the rank ID of the local rank.
 
-- Each AI Server corresponds to one business process, and each thread corresponds to one Device. In the scenario where multiple communicators are created through multi-threading, the implementation process is as follows:
+- Each AI server corresponds to one business process, and each thread corresponds to one Device. In the scenario where multiple communicators are created through multi-threading, the implementation process is as follows:
        <!-- npu="950" id6 -->
-    1. For Ascend 950PR/Ascend 950DT, check whether the rootinfo file exists. For other products, skip this step.
+    1. For Ascend 950PR&950DT products, check whether the rootinfo file exists. Skip this step for other products.
 
         Before creating a communicator based on root node information, check whether the "/etc/hccl_rootInfo.json" file exists. This file records the EID (Entity ID, the identifier of the initiating or receiving object in communication) information for inter-NPU communication and is automatically generated after environment deployment is complete. If this file does not exist, file an issue in the current code repository.
        <!-- end id6 -->
@@ -145,13 +145,13 @@ In multi-machine collective communication scenarios, if a complete cluster infor
 
 For the following products:
 <!-- npu="950" id7 -->
-- Ascend 950PR/Ascend 950DT
+- Ascend 950PR&950DT products
 <!-- end id7 -->
 <!-- npu="A3" id8 -->
-- Atlas A3 Training Products/Atlas A3 Inference Products
+- Atlas A3 products
 <!-- end id8 -->
 <!-- npu="910b" id9 -->
-- Atlas A2 Training Products/Atlas A2 Inference Products
+- Atlas A2 products
 <!-- end id9 -->
 
 If the service is a single-card multi-process scenario, it is recommended to configure the communication ports used by HCCL on the host side and NPU side through the environment variables "[HCCL_HOST_SOCKET_PORT_RANGE](./hccl_env/HCCL_HOST_SOCKET_PORT_RANGE.md)" and "[HCCL_NPU_SOCKET_PORT_RANGE](./hccl_env/HCCL_NPU_SOCKET_PORT_RANGE.md)" respectively. Otherwise, port conflicts may occur. The configuration example is as follows. However, note that multiple processes have a certain impact on resource overhead and communication performance.
@@ -177,13 +177,13 @@ In a single-machine communication scenario, developers can create communicators 
     // Initialize the HCCL communicator.
     HcclCommInitAll(ndev, devices, comms);
 
-    // Start threads to perform collective communication operations.
+    // Start a thread to perform collective communication operations.
     std::vector<std::unique_ptr<std::thread> > threads(ndev);
     struct ThreadContext args[ndev];
     for (uint32_t i = 0; i < ndev; i++) {
         args[i].device = i;
         args[i].comm = comms[i];
-       /*  Collective communication operation   */      
+       /*  Collective communication operations  */      
     }
 
     // Destroy the HCCL communicator.
@@ -192,7 +192,7 @@ In a single-machine communication scenario, developers can create communicators 
     }
 ```
 
-Note that when calling collective communication operation APIs (such as HcclAllReduce) in multiple threads, it should be ensured that the time difference between the calls to collective communication operation APIs in different threads does not exceed the link establishment timeout period of collective communication (which can be set via the environment variable [HCCL_CONNECT_TIMEOUT](./hccl_env/HCCL_CONNECT_TIMEOUT.md), with a default value of 120s), to avoid link establishment timeout.
+Note that when calling collective communication operation APIs (such as HcclAllReduce) in multiple threads, it should be ensured that the time difference between the calls to collective communication operation APIs in different threads does not exceed the link setup timeout period of collective communication (which can be set via the environment variable [HCCL_CONNECT_TIMEOUT](./hccl_env/HCCL_CONNECT_TIMEOUT.md), with a default value of 120s), to avoid link setup timeout.
 
 ### Splitting a Sub-Communicator From an Existing Communicator
 
@@ -202,18 +202,18 @@ HCCL provides the [HcclCreateSubCommConfig](https://gitcode.com/cann/hcomm/blob/
 // Initialize the global communicator.
 HcclComm globalHcclComm;
 HcclCommInitClusterInfo(rankTableFile, devId, &globalHcclComm);
-// Communicator configuration
+// Communication domain configuration.
 HcclCommConfig config;
 HcclCommConfigInit(&config);
 config.hcclBufferSize = 50;
 strcpy(config.hcclCommName, "comm_1");
-// Initialize the sub-communicator
+// Initialize the sub-communicator.
 HcclComm hcclComm;
-uint32_t rankIds[4] = {0, 1, 2, 3};  // Rank list of the sub-communicator
+uint32_t rankIds[4] = {0, 1, 2, 3};  // Rank list of the sub-communicator.
 HcclCreateSubCommConfig(&globalHcclComm, 4, rankIds, 1, devId, &config, &hcclComm);
 ```
 
-> [!NOTE]Note
+> [!NOTE]
 > This interface does not support nested splitting of communicators, meaning that further splitting of sub-communicators within a sub-communicator is not supported.
 
 ### Destroying a Communicator
@@ -224,7 +224,7 @@ After collective communication operations are complete, the [HcclCommDestroy](ht
 
 Collective communication is a communication mode in which multiple NPUs participate in data transmission to form a collective operation. It is commonly used in scenarios such as gradient synchronization and parameter update among different NPUs in large-scale clusters.
 
-HCCL supports communication operators such as AllReduce, Broadcast, AllGather, Scatter, ReduceScatter, Reduce, AlltoAll, and AlltoAllV, and provides corresponding APIs for developers to invoke, enabling rapid implementation of collective communication capabilities.
+HCCL supports communication operators such as AllReduce, Broadcast, AllGather, AllGatherV, Scatter, ReduceScatter, ReduceScatterV, Reduce, AlltoAll, AlltoAllV, and AlltoAllVC, and provides corresponding APIs for developers to call, enabling rapid implementation of collective communication capabilities.
 
 ### Broadcast
 
@@ -254,7 +254,7 @@ The AllGather operation reorders the inputs of all nodes within the communicator
 
 ![AllGather](figures/allgather.png)
 
-> [!NOTE]Note
+> [!NOTE]
 > For the AllGather operation, each node receives the data set reordered by rank ID, meaning that the AllGather output is the same for every node.
 
 Related API: [HcclAllGather](../api_ref/comm_op_interface/HcclAllGather.md).
@@ -265,7 +265,7 @@ The AllGatherV operation reorders the inputs of all nodes within the communicato
 
 ![AllGatherV](figures/allgatherv.png)
 
-> [!NOTE]Note
+> [!NOTE]
 > For the AllGatherV operation, each node receives the data set reordered by rank ID, meaning that the AllGatherV output of each node is identical.
 
 Related API: [HcclAllGatherV](../api_ref/comm_op_interface/HcclAllGatherV.md).
@@ -354,15 +354,15 @@ int malloc_kSize = count * sizeof(float);
 aclrtStream stream;
 aclrtCreateStream(&stream);
 
-//Allocate memory for the collective communication operation.
+// Allocate memory for the collective communication operation. 
 aclrtMalloc((void**)&sendBuf, malloc_kSize, ACL_MEM_MALLOC_HUGE_ONLY); 
 aclrtMalloc((void**)&recvBuf, malloc_kSize, ACL_MEM_MALLOC_HUGE_ONLY);
 
-//Initialize the input memory.
+// Initialize the input memory.
 aclrtMallocHost((void**)&hostBuf, malloc_kSize);
 aclrtMemcpy((void*)sendBuf, malloc_kSize, (void*)hostBuf, malloc_kSize, ACL_MEMCPY_HOST_TO_DEVICE);
 
-//Execute the collective communication operation.
+// Execute the collective communication operation.
 HcclAllReduce((void *)sendBuf, (void*)recvBuf, count, HCCL_DATA_TYPE_FP32, HCCL_REDUCE_SUM, hcclComm, stream);
 ```
 

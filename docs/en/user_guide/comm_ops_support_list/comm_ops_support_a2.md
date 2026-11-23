@@ -1,17 +1,17 @@
-# Atlas A2 Training Products/Atlas A2 Inference Products
+# Atlas A2 Products
 
 <!-- md-trans-meta sourceCommit=unknown translatedAt=2026-09-02T07:45:45.438Z pushedAt=2026-09-07T07:40:23.247Z -->
 
-This section provides the communication operator support status for the Atlas A2 training products/Atlas A2 inference products.
+This section provides the communication operator support status for the Atlas A2 products.
 
-- Single-Operator Zero-Copy: To reduce memory copy overhead, HCCL can directly operate on the memory passed by the service, thereby improving communication performance.
-- Communication Operator Re-execution: When a network failure causes a communication interruption, HCCL attempts to re-execute the communication operator, thereby improving communication stability.
-- Deterministic Computation: Under the same hardware and input conditions, reduction-type communication operators produce the same output across multiple executions.
+- Single-operator zero-copy: To reduce memory copy overhead, HCCL can directly operate on the memory passed by the service, thereby improving communication performance.
+- Communication operator re-execution: When a network failure causes a communication interruption, HCCL attempts to re-execute the communication operator, thereby improving communication stability.
+- Deterministic computation: Under the same hardware and input conditions, reduction-type communication operators produce the same output across multiple executions.
 
-> [!NOTE]Note
+> [!NOTE]
 >
 > - The communication operator support status is presented below by expansion mode. Expansion modes not listed are not supported.
-> - In the tables in this section, "√" indicates supported, "×" indicates not supported, and "NA" indicates not applicable. The Atlas A2 training products/Atlas A2 inference products do not support Single-Operator Zero-Copy or Re-execution.
+> - In the tables in this section, "√" indicates supported, "×" indicates not supported, and "NA" indicates not applicable. Atlas A2 products do not support single-operator zero-copy or re-execution.
 > - Operators and network running modes not listed are not supported.
 
 ## HOST/HOST_TS

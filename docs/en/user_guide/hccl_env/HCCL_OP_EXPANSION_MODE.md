@@ -1,13 +1,13 @@
 # HCCL_OP_EXPANSION_MODE
 
-<!-- md-trans-meta sourceCommit=unknown translatedAt=2026-09-12T09:50:54.790Z pushedAt=2026-09-18T08:03:58.216Z -->
+<!-- md-trans-meta sourceCommit=unknown translatedAt=2026-11-06T09:48:05.500Z pushedAt=2026-11-16T06:28:10.188Z nl=2 -->
 
-## Description
+## Function
 
 Configures the expansion mode of communication operators.
 
   <!-- npu="950" id2 -->
-- **For 950PR/950DT**: The supported configurations are listed below. Setting an unsupported value will trigger error reporting.
+- **For Ascend 950PR&950DT products**: The supported configurations are listed below. If an unsupported environment variable is set, the system reports an error.
 
   - **AI_CPU**: Communication operators are expanded on the AI CPU, and the device automatically selects the corresponding scheduler based on the hardware model.
 
@@ -16,7 +16,7 @@ Configures the expansion mode of communication operators.
     **Note**
 
     - `AI_CPU` will be deprecated in a later version. Use `AICPU_TS` instead. In the current version, AICPU_TS is functionally identical to AI_CPU.
-    - In graph (Ascend IR) or graph capture (aclgraph) use cases, when the communication algorithm uses AI CPU, the number of concurrent graphs on a single device cannot exceed 6. Otherwise, communication may be blocked due to AI CPU cores being fully occupied.
+    - In graph mode (Ascend IR) or graph capture (aclgraph) scenarios, when the communication algorithm uses AI CPU mode, the number of concurrent graphs on a single device must not exceed the AI CPU limit reserved by the system for collective communication (the default limit is 6, but the actual available amount may be reduced due to other service occupancy). Otherwise, communication may be blocked because the AI CPU cores are fully occupied.
 
   - **AICPU_TS (default)**: Communication operators are expanded on the AI CPU and scheduled using the STARS scheduler.
 
@@ -24,45 +24,74 @@ Configures the expansion mode of communication operators.
 
     **Note**
 
-    In graph (Ascend IR) or graph capture (aclgraph) use cases, when the communication algorithm uses AI CPU, the number of concurrent graphs on a single device cannot exceed 6. Otherwise, communication may be blocked due to AI CPU cores being fully occupied.
+    In graph mode (Ascend IR) or graph capture (aclgraph) use cases, when the communication algorithm uses AI CPU mode, the number of concurrent graphs on a single device must not exceed the AI CPU limit reserved by the system for collective communication (the default limit is 6, but the actual available amount may be reduced due to occupancy by other services). Otherwise, communication may be blocked because the AI CPU cores are fully occupied.
 
   - **AICPU_CacheDisable**: Disables AI CPU cache for HCCL operators.
 
+    **WARNING**: The `AICPU_CacheDisable` configuration item is marked as deprecated in CANN 9.3.0 and will be removed in versions released after March 30, 2028. Use `HCOMM_AICPU_TASK_CACHE_ENABLE=0` to disable the cache instead.
+
     AI CPU cache means that when the same communication operator is executed for the second time, HCCL reuses the result of its first execution, thereby saving expansion overhead. Enabling AI CPU cache incurs certain device memory overhead. Therefore, when the communication data volume changes frequently, we recommend disabling caching to reduce device memory overhead.
 
+    **Differences and priority between `AICPU_CacheDisable` and `HCOMM_AICPU_TASK_CACHE_ENABLE`**: `AICPU_CacheDisable` is a config of this environment variable. It selects the AI CPU expansion mode and disables caching. The independent environment variable [HCOMM_AICPU_TASK_CACHE_ENABLE](HCOMM_AICPU_TASK_CACHE_ENABLE.md) only controls the cache switch and does not change the operator expansion mode.
+
+    When a valid value of `HCOMM_AICPU_TASK_CACHE_ENABLE` is explicitly configured, its value takes priority over the cache switch result derived from this environment variable. When it is not configured, the result of this environment variable is used. In the following table, `1` can be written as `true`, and `0` can be written as `false`:
+
+    | `HCCL_OP_EXPANSION_MODE` | `HCOMM_AICPU_TASK_CACHE_ENABLE` | Cache Switch |
+    | --- | --- | --- |
+    | `AICPU_TS` | Not set | Enabled |
+    | `AICPU_TS` | `1` | Enabled |
+    | `AICPU_TS` | `0` | Disabled |
+    | `AICPU_CacheDisable` | Not set | Disabled |
+    | `AICPU_CacheDisable` | `1` | Enabled |
+    | `AICPU_CacheDisable` | `0` | Disabled |
+
   - **AIV**: Communication operators are expanded and executed on the Vector Core.
-    - This config supports only symmetric networking and inference features.
+    - This config supports only the inference feature.
     - This config does not support parallel communicators (because multiple communicators cannot be simultaneously configured in `AIV` mode). Otherwise, unpredictable behavior may occur. You can set the operator expansion mode of a specific communicator to `AIV` through `HcclCommConfig` when initializing a communicator with specific configurations.
     - This config supports only the Broadcast, Reduce, AllReduce, ReduceScatter, Scatter, AllGather, AlltoAll, AlltoAllV, AlltoAllVC, Send, and Recv operators.
-      - For Reduce, AllReduce, and ReduceScatter operators, the supported data types are int8, int16, int32, int64, float16, float32, and bfp16. Only sum, max, and min reduction operations are supported; prod is not supported.
+      - For the Reduce and AllReduce operators, the supported data types are int8, int16, int32, int64, float16, float32, and bfp16. The supported Reduce operation types are sum, max, and min only. prod is not supported.
+      - For the ReduceScatter operator, the supported data types are int8, int16, int32, int64, float16, float32, bfp16, and hifloat8. The supported Reduce operation types are sum, max, and min only. prod is not supported.
 
-    - Under this config, core control is supported. Set the number of Vector Cores based on the concurrency of computation operators and communication operators in actual use.
+    - This config supports core control. You are advised to configure the number of Vector Cores based on the concurrency between computation operators and communication operators in actual use.
 
   - **CCU_MS**: Communication operators are expanded on the CCU, using CcuBuffer for memory read/write. Ascend 950PR does not support this config.
 
     In this mode, when the CCU communicates with multiple remote ends, CcuBuffer serves as a relay to save memory read/write bandwidth. CcuBuffer features a small size but high speed.
 
-    This mode does not support in-place operations.
+    This mode does not support inplace use cases.
 
-    When CCU resources are insufficient, the system automatically switches to AI_CPU mode.
-    This config supports only the Broadcast, Reduce, AllReduce, ReduceScatter, and AllGather operators, and only in single-node use cases.
+    When CCU resources are insufficient, the HCCL operator first attempts to fall back from CCU_MS mode to CCU_SCHED mode for dispatch. If CCU_SCHED mode still cannot meet the running conditions, it falls back to the AI CPU expansion mode for dispatch.
+
+    This config supports only the Broadcast, Reduce, AllReduce, ReduceScatter, and AllGather operators, and currently supports only single-device use cases.
     For the Reduce, AllReduce, and ReduceScatter operators, the supported data types are int16, int32, float16, float32, and bfp16. For the data types supported by other communication operators, see the corresponding collective communication API reference.
+
+    For the rules of CCU resource expansion and extra instance reuse, see the description in the CCU_SCHED section below.
 
   - **CCU_SCHED**: Communication operators are expanded on the CCU with scheduling enabled.
 
     This config uses the CCU as a scheduler to dispatch UB WQE tasks to the UB engine. CcuBuffer is not used, and data is transferred directly between two ranks from on-chip memory to on-chip memory.
 
-    This mode does not support in-place operations.
+    This mode does not support inplace use cases.
 
-    For AllReduce, ReduceScatter, and Reduce operators in single-node communication, when the data volume exceeds a specified threshold, the system automatically switches to AI_CPU mode to prevent performance degradation. (This threshold is not fixed and may vary depending on factors such as the operator running mode and network scale.)
+    This config supports the Broadcast, AllGather, ReduceScatter, AllReduce, Reduce, Scatter, AlltoAll, AlltoAllV, AlltoAllVC, AllGatherV, and ReduceScatterV operators. For the AllReduce, ReduceScatter, and Reduce operators, only int8, int16, int32, float16, float32, and bfp16 are supported. For the ReduceScatterV operator, only int16, int32, float16, float32, and bfp16 are supported. For the data types supported by other communication operators, see the corresponding collective communication API reference.
+
+    In single-device communication use cases, when the data volume exceeds a certain threshold, the HCCL AllReduce, ReduceScatter, and Reduce operators automatically fall back to the AI CPU expansion mode for dispatch to avoid performance degradation. This threshold is not fixed and is adjusted based on factors such as the operator running mode and network scale.
 
     In this mode, the ReduceScatterV and AllGatherV operators support only single-server use cases.
 
-    When CCU resources are insufficient, the system automatically switches to AI_CPU mode.
+    When AlltoAllV is executed using the CCU scheduling algorithm, if the capacity of the existing CCU instance in the communicator cannot meet its resource requirements, HCCL automatically applies for an extra CCU instance when the remaining device resources suffice, and uses this instance to execute the operator. No additional configuration is required.
+
+    - Each communication domain creates at most one extra CCU instance. The original instance and the extra instance each carry the complete operator resource requirements, and their capacities are not combined.
+    - When a subsequent HCCL operator applies for CCU resources in the same communicator, it preferentially reuses the existing extra instance. If the extra instance capacity is insufficient, no further expansion is performed, and the capacity of the original instance is no longer checked. Instead, the operator falls back according to the existing process.
+    - Resource application is supported in both the single-operator process and graph mode. Graph replay does not repeatedly create extra instances.
+    - The extra instances are managed by HCCL. They are released through a callback when the communicator is destroyed by calling [HcclCommDestroy](https://gitcode.com/cann/hcomm/blob/master/docs/en/api_ref/comm_mgr_c/HcclCommDestroy.md). The service does not need to release them.
+    - Capacity expansion requires the matching HCOMM library. If extra instances need to be created but HCOMM does not support the required destruction callback capability, no extra instances are created and the fallback process is used.
+
+    When HCCL operators cannot obtain the required CCU resources, they automatically fall back to the AI CPU expansion mode for dispatch.
   <!-- end id2 -->
 
   <!-- npu="A3" id3 -->
-- **For Atlas A3 training products/Atlas A3 inference products**: The following configurations are supported. Setting an unsupported value leads to using the default value.
+- **For Atlas A3 products**: The supported configurations are listed below. If an unsupported environment variable is set, the default value is used.
 
   - **AI_CPU (default)**: Communication operators are expanded on the AI CPU. The device automatically selects the corresponding scheduler based on the hardware model.
 
@@ -75,6 +104,8 @@ Configures the expansion mode of communication operators.
 
   - **AICPU_CacheDisable**: Disables AI CPU cache for HCCL operators.
 
+    **Warning**: `AICPU_CacheDisable` is marked as deprecated in CANN 9.3.0 and will be removed in versions released after March 30, 2028.
+
     AI CPU cache means that when the same communication operator is executed for the second time, HCCL reuses the result of its first execution, thereby saving expansion overhead. Enabling AI CPU cache incurs certain device memory overhead. Therefore, when the communication data volume changes frequently, we recommend disabling caching to reduce device memory overhead.
 
   - **AIV**: Communication operators are expanded and executed on the Vector Core.
@@ -82,12 +113,13 @@ Configures the expansion mode of communication operators.
     - This config supports only symmetric networking and inference features.
     - This config does not support parallel communicators (because multiple communicators cannot be simultaneously configured in `AIV` mode). Otherwise, unpredictable behavior may occur. You can set the operator expansion mode of a specific communicator to `AIV` through `HcclCommConfig` when initializing a communicator with specific configurations.
     - This config supports only Broadcast, AllReduce, ReduceScatter, AllGather, AlltoAll, AlltoAllV, and AlltoAllVC operators.
-      - For the Broadcast operator, supported data types are int8, uint8, int16, uint16, int32, uint32, float16, float32, bfp16, int64, uint64, and float64. Only single-node/multi-node communication within a SuperPoD is supported. Only single-operator mode and Ascend IR graph mode are supported. Cross-SuperPoD communication is not supported.
-      - For the AllReduce operator, supported data types are int8, int16, int32, float16, float32, and bfp16. The Reduce type supports only sum, max, and min. Only single-node/multi-node communication within a SuperPoD is supported. Cross-SuperPoD communication is not supported.
-      - For the ReduceScatter operator, supported data types are int8, int16, int32, float16, float32, and bfp16. The Reduce type supports only sum, max, and min. Only single-node/multi-node communication within a SuperPoD is supported. Cross-SuperPoD communication is not supported.
-      - For AllGather, AlltoAll, AlltoAllV, and AlltoAllVC operators, the supported data types are int8, uint8, int16, uint16, int32, uint32, float16, float32, bfp16, int64, uint64, and float64. Only single-node/multi-node communication within a SuperPoD is supported; cross-SuperPoD communication is not supported.
+      - For the Broadcast operator, the supported data types are int8, uint8, int16, uint16, int32, uint32, float16, float32, bfp16, int64, uint64, and float64. Only single-server/multi-server communication within a SuperPoD is supported. Only the single-operator mode and Ascend IR graph mode are supported. Cross-SuperPoD communication is not supported.
+      - For the AllReduce operator, supported data types are int8, int16, int32, float16, float32, and bfp16. The Reduce type supports only sum, max, and min. Only single-server/multi-server communication within a SuperPoD is supported. Cross-SuperPoD communication is not supported.
+      - For the ReduceScatter operator, supported data types are int8, int16, int32, float16, float32, and bfp16. The Reduce type supports only sum, max, and min. Only single-server/multi-server communication within a SuperPoD is supported. Cross-SuperPoD communication is not supported.
+      - For the AllGather, AlltoAll, AlltoAllV, and AlltoAllVC operators, the supported data types are int8, uint8, int16, uint16, int32, uint32, float16, float32, bfp16, int64, uint64, and float64. Only single-server/multi-server communication within a SuperPoD is supported. Cross-SuperPoD communication is not supported.
 
-    - For Broadcast, AllReduce, ReduceScatter, AllGather, and AlltoAll (single-node communication) operators, when the data volume exceeds a specified threshold, the system automatically switches to AI_CPU mode to prevent performance degradation (this threshold is not fixed and may vary depending on factors such as the operator running mode, whether deterministic computation is enabled, and the network scale). For AlltoAllV, AlltoAllVC, and AlltoAll (multi-node communication) operators, when configured in AIV mode, the system does not automatically switch to AI_CPU mode. To avoid performance degradation, use AIV mode when the maximum communication data volume between any two ranks does not exceed 1 MB; otherwise, use AI_CPU mode.
+    - For HCCL Broadcast, AllReduce, ReduceScatter, AllGather, and AlltoAll (single-device communication) operators, when the data volume exceeds a certain threshold, they automatically fall back to the AI CPU expansion mode for dispatch to avoid performance degradation. This threshold is not fixed. It is adjusted based on factors such as the operator running mode, whether deterministic computation is enabled, and the network scale.
+    - For HCCL AlltoAllV, AlltoAllVC, and AlltoAll (multi-device communication) operators, when configured in AIV mode, they do not automatically fall back to the AI CPU expansion mode for dispatch. To avoid performance degradation, configure AIV mode when the maximum communication data volume between any two ranks does not exceed 1 MB. Otherwise, use AI_CPU mode.
     - Under this config, collective communication supports core control. Set the number of Vector Cores based on the concurrency of computation operators and communication operators in actual use.
 
       - For the Broadcast operator, you are advised to allocate at least *{ranksize}* Vector Cores.
@@ -102,7 +134,7 @@ Configures the expansion mode of communication operators.
   <!-- end id3 -->
 
   <!-- npu="910b" id4 -->
-- **For Atlas A2 training products/Atlas A2 inference products**: The supported configurations are listed below. Setting an unsupported value leads to using the default value.
+- **For Atlas A2 products**: The supported configurations are listed below. If an unsupported environment variable is set, the default value is used.
 
   - **HOST (default)**: Communication operators are expanded on the host-side CPU, and the device automatically selects the corresponding scheduler based on the hardware model.
   - **HOST_TS**: Communication operators are expanded on the host-side CPU. The host dispatches tasks to the device's task scheduler which schedules the tasks for execution.
@@ -112,19 +144,19 @@ Configures the expansion mode of communication operators.
 
     **Note**
 
-    In graph mode (Ascend IR) use cases, when the communication algorithm uses the AI CPU mode, the concurrent graph count on a single device cannot exceed 6. Otherwise, communication may be blocked because all AI CPU cores are occupied.
+    In graph mode (Ascend IR), when the communication algorithm uses AI CPU mode, the concurrent graph count on a single device cannot exceed 6. Otherwise, communication blocking may occur because AI CPU cores are fully occupied.
 
   - **AIV**: Communication operators are expanded and executed on the Vector Core.
 
     - This config supports only symmetric networking and inference features.
     - This config does not support parallel communicators (because multiple communicators cannot be simultaneously configured in `AIV` mode). Otherwise, unexpected behavior may occur. You can set the operator expansion mode of a specific communicator to `AIV` through `HcclCommConfig` during the initialization of a communicator with specific configurations.
     - This config supports only Broadcast, AllReduce, AlltoAll, AlltoAllV, AlltoAllVC, AllGather, ReduceScatter, AllGatherV, and ReduceScatterV operators.
-      - For the Broadcast operator, supported data types are int8, uint8, int16, uint16, int32, uint32, float16, float32, bfp16, int64, uint64, and float64. Only the single-operator mode with no more than 8 devices on a single node is supported.
+      - For the Broadcast operator, the supported data types are int8, uint8, int16, uint16, int32, uint32, float16, float32, bfp16, int64, uint64, and float64. Only the single-operator mode is supported, in a single-server use case with up to 8 devices.
       - For the AllReduce operator, supported data types are int8, int16, int32, float16, float32, and bfp16. The Reduce type supports only sum, max, and min.
       - For AlltoAll, AlltoAllV, and AlltoAllVC operators, supported data types are int8, uint8, int16, uint16, int32, uint32, float16, float32, bfp16, int64, uint64, and float64. For AlltoAllV and AlltoAllVC operators, only single-node use cases are supported. For the AlltoAll operator in graph mode, only single-node use cases are supported.
       - For the AllGather operator, supported data types are int8, uint8, int16, uint16, int32, uint32, float16, float32, bfp16, int64, uint64, and float64. For this operator in graph mode, only single-node use cases are supported.
       - For the ReduceScatter operator, supported data types are int8, int16, int32, float16, float32, and bfp16. The Reduce type supports only sum, max, and min. For this operator in graph mode, only single-node use cases are supported.
-      - For the AllGatherV operator, supported data types are int8, uint8, int16, uint16, int32, uint32, float16, float32, bfp16, int64, uint64, and float64. Only the single-operator mode is supported.
+      - For the AllGatherV operator, the supported data types are int8, uint8, int16, uint16, int32, uint32, float16, float32, bfp16, int64, uint64, and float64. Only the single-operator mode is supported.
       - For the ReduceScatterV operator, supported data types are int8, int16, int32, float16, float32, and bfp16. The Reduce type supports only sum, max, and min.
 
     - Under this config, collective communication supports core control. Set the number of Vector Cores based on the concurrency of computation operators and communication operators in actual use.
@@ -141,13 +173,13 @@ Configures the expansion mode of communication operators.
   <!-- end id4 -->
 
   <!-- npu="310p" id1 -->
-- **For Atlas 300I Duo**: The following configurations are supported. Setting an unsupported value leads to using the default value.
+- **For Atlas inference products**: The supported configurations are as follows. If an unsupported environment variable is set, the default value is used.
   - **HOST (default)**: Communication operators are expanded on the host-side CPU, and the device automatically selects the corresponding scheduler based on the hardware model.
   - **AI_CPU**: Communication operators are expanded on the AI CPU, and the device automatically selects the corresponding scheduler based on the hardware model.
     - Only single-node single-communicator use cases are supported.
     - Only the AllReduce operator is supported. For the data types supported by the AllReduce operator, see the HcclAllReduce API.
     - When set to `AI_CPU`, communication operators no longer support profiling.
-    - For graphs with static shapes, this config is not supported, meaning that the communication operator expansion mode can't be AI_CPU.
+    - For static shape graphs, this config is not supported, meaning that the communication operator expansion mode can't be AI_CPU.
   <!-- end id1 -->
 
 ## Configuration Example
@@ -159,7 +191,7 @@ export HCCL_OP_EXPANSION_MODE="AI_CPU"
 ## Constraints
 
 - If you call the HCCL C API to initialize a communicator with specific configurations and configure the communication operator expansion mode through `hcclOpExpansionMode` of `HcclCommConfig`, the configuration at the communicator granularity takes precedence.
-- For the **inference feature** of Atlas A2 training products/Atlas A2 inference products:
+- **Inference feature** for Atlas A2 products:
 
     **When AIV is in use**, if the process is forcibly terminated by pressing CTRL+C, errors indicating that the device accessed an illegal address may appear in the device-side log file exported by msnpureport. The log keywords are `devmm_page_fault_d2h_query_flag`, `devmm_svm_device_fault`, or `ipc_fault_msg_para_check`, as shown below. This case does not affect the NPU status or the execution of subsequent new tasks.
 
@@ -174,13 +206,13 @@ export HCCL_OP_EXPANSION_MODE="AI_CPU"
 ## Applicable Products
 
 <!-- npu="950" id5 -->
-- 950PR/950DT: Supported
+- Ascend 950PR&950DT products: Supported
 <!-- end id5 -->
 <!-- npu="A3" id6 -->
-- Atlas A3 training products/Atlas A3 inference products: Supported
+- Atlas A3 products: Supported
 <!-- end id6 -->
 <!-- npu="910b" id7 -->
-- Atlas A2 training products/Atlas A2 inference products: Supported
+- Atlas A2 products: Supported
 <!-- end id7 -->
 <!-- npu="910" id8 -->
 - Atlas training products: Not supported

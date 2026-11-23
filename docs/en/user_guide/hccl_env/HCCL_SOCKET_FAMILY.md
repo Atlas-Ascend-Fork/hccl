@@ -1,8 +1,8 @@
 # HCCL_SOCKET_FAMILY
 
-<!-- md-trans-meta sourceCommit=unknown translatedAt=2026-09-12T10:20:03.128Z pushedAt=2026-09-18T08:03:58.239Z -->
+<!-- md-trans-meta sourceCommit=unknown translatedAt=2026-11-06T09:48:55.348Z pushedAt=2026-11-16T06:28:10.213Z nl=2 -->
 
-## Description
+## Function
 
 Specifies the IP protocol used by the communication NIC. The following two options are supported:
 
@@ -23,10 +23,10 @@ This environment variable has the following two use cases:
 
   For example, if this environment variable is set to IPv6 but only IPv4 NICs exist on the device, the IPv4 NICs will be used.
 
-**For 950PR/950DT**: This environment variable does not support configuring the IP protocol version for the communication NIC on the device. The device-side NICs on these models use:
+**For Ascend 950PR&950DT products**: This environment variable does not support configuring the IP protocol version of the device-side communication NIC. The IP protocols used by the device-side NICs of this model are as follows:
 
-- IPv6 for socket link establishment when the UB protocol is used for communication.
-- IPv4 for socket link establishment when the UBoE protocol is used for communication.
+- IPv6 for socket connection establishment when the UB protocol is used for communication.
+- IPv4 for socket connection establishment when the UBoE protocol is used for communication.
 
 ## Configuration Example
 
@@ -42,13 +42,13 @@ None.
 ## Applicable Products
 
 <!-- npu="950" id3 -->
-- 950PR/950DT: Supported
+- Ascend 950PR&950DT products: Supported
 <!-- end id3 -->
 <!-- npu="A3" id4 -->
-- Atlas A3 training products/Atlas A3 inference products: Supported
+- Atlas A3 products: Supported
 <!-- end id4 -->
 <!-- npu="910b" id5 -->
-- Atlas A2 training products/Atlas A2 inference products: Supported
+- Atlas A2 products: Supported
 <!-- end id5 -->
 <!-- npu="910" id1 -->
 - Atlas training products: Supported

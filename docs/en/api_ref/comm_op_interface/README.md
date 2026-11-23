@@ -1,8 +1,8 @@
 # Communication Operator APIs
 
-<!-- md-trans-meta sourceCommit=unknown translatedAt=2026-09-12T08:33:50.218Z pushedAt=2026-09-18T08:03:58.148Z -->
+<!-- md-trans-meta sourceCommit=unknown translatedAt=2026-11-06T09:44:53.527Z pushedAt=2026-11-16T06:28:10.109Z nl=2 -->
 
-- [API Overview](intro.md)
+- [API Introduction](intro.md)
 - [Collective Communication](collective_comm.md)
   - [HcclBroadcast](HcclBroadcast.md)
   - [HcclAllGather](HcclAllGather.md)

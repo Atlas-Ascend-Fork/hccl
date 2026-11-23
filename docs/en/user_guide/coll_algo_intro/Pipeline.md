@@ -1,6 +1,6 @@
 # Pipeline
 
-<!-- md-trans-meta sourceCommit=unknown translatedAt=2026-09-02T07:41:29.507Z pushedAt=2026-09-04T07:22:56.799Z -->
+<!-- md-trans-meta sourceCommit=unknown translatedAt=2026-11-09T03:22:13.177Z pushedAt=2026-11-10T11:25:20.276Z nl=2 -->
 
 ## Algorithm Description
 
@@ -16,7 +16,7 @@ Taking AllGather as an example, the Ring algorithm is selected for inter-server 
 
 ![](figures/pipeline.png)
 
-As shown in the figure above, the green data block is sent from Rank5 to Rank1 (only the behavior of some Ranks is described here; other Ranks are processed symmetrically). In the next step, Rank1 continues to send the green data block to Rank3 (a standard step of the Ring algorithm), while Rank1 can also send the green data block to Rank0 in the same server. As the Ring algorithm proceeds, at each step, while inter-server data transmission is in progress, the data block received in the previous step is also transmitted to other Ranks within the server. After the last step of the Ring algorithm is completed, only one more intra-server data block transmission is needed to finish all algorithm steps (the intra-server transmission of the Rank's initial data block can be hidden within the first step of the Ring algorithm).
+As shown in the preceding figure, the green data block is sent from Rank5 to Rank1 (only the behavior of some ranks is described here; other ranks are processed symmetrically). In the following steps, Rank1 continues to send the green data block to Rank3 (a standard step of the Ring algorithm), and at the same time, Rank1 can also send the green data block to Rank0 in the same server. As the Ring algorithm continues, in each step, while data blocks are transferred between servers, the data block received in the previous step is also transferred to other ranks within the server. After the last step of the Ring algorithm is completed, only one more data block transfer within the server is required to complete all algorithm steps (the intra-server transfer of the initial data block of a rank can be hidden in the first step of the Ring algorithm).
 
 From the perspective of Rank0, the orchestration of all transmission tasks is shown in the figure below. The LocalCopy operation is executed only when the input and output memory are different, and is used to move the data block from the input memory to the output memory. When the input and output memory are the same, this operation does not need to be executed.
 

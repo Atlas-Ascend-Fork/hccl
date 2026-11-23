@@ -1,27 +1,27 @@
-# Atlas A3 Training Products/Atlas A3 Inference Products
+# Atlas A3 Products
 
 <!-- md-trans-meta sourceCommit=unknown translatedAt=2026-09-02T07:46:32.783Z pushedAt=2026-09-11T02:16:57.766Z -->
 
-This section provides the communication operator support status for the Atlas A3 training products/Atlas A3 inference products.
+This section provides the communication operator support status for the Atlas A3 products.
 
-- Single-Operator Zero-Copy: To reduce memory copy overhead, HCCL can directly operate on the memory passed by the service, thereby improving communication performance.
-- Communication Operator Re-execution: When a network failure causes a communication interruption, HCCL attempts to re-execute the communication operator, thereby improving communication stability.
-- Deterministic Computation: Under the same hardware and input conditions, reduction-type communication operators produce the same output across multiple executions.
+- single-operator zero-copy: To reduce memory copy overhead, HCCL can directly operate on the memory passed by the service, thereby improving communication performance.
+- communication operator re-execution: When a network failure causes a communication interruption, HCCL attempts to re-execute the communication operator, thereby improving communication stability.
+- deterministic computation: Under the same hardware and input conditions, reduction-type communication operators produce the same output across multiple executions.
 
-> [!NOTE]Note
+> [!NOTE]
 >
 > - The following presents the support status of communication operators based on their expansion modes. Expansion modes not listed are not supported.
-> - In the tables of this section, "✓" indicates supported, "×" indicates not supported, and "NA" indicates not applicable.
+> - In the tables of this section, "√" indicates supported, "×" indicates not supported, and "NA" indicates not applicable.
 > - Operators and network running modes not listed are not supported.
 
 ## AI CPU
 
 <table><thead align="left"><tr><th><p>Operator</p></th>
 <th><p>Network Running Mode</p></th>
-<th><p>Single-Operator Zero Copy</p></th>
+<th><p>Single-Operator Zero-Copy</p></th>
 <th><p>Deterministic Computation</p></th>
 <th><p>Re-execution</p></th>
-<th><p>Intra-node Communication</p></th>
+<th><p>Intra-Node Communication</p></th>
 <th><p>Intra-SuperPoD Communication</p></th>
 <th><p>Inter-SuperPoD Communication</p></th>
 </tr>
@@ -367,10 +367,10 @@ This section provides the communication operator support status for the Atlas A3
 
 <table><thead align="left"><tr><th><p>Operator</p></th>
 <th><p>Network Running Mode</p></th>
-<th><p>Single-Operator Zero Copy</p></th>
+<th><p>Single-Operator Zero-Copy</p></th>
 <th><p>Deterministic Computation</p></th>
 <th><p>Re-execution</p></th>
-<th><p>Intra-node Communication</p></th>
+<th><p>Intra-Node Communication</p></th>
 <th><p>Intra-SuperPoD Communication</p></th>
 <th><p>Inter-SuperPoD Communication</p></th>
 </tr>
@@ -492,7 +492,7 @@ This section provides the communication operator support status for the Atlas A3
 <td><p>√</p></td>
 <td><p>×</p></td>
 </tr>
-<tr><td><p>Graph capture mode `aclgraph`</p></td>
+<tr><td><p>Graph Capture Mode (ACL graph)</p></td>
 <td><p>×</p></td>
 <td><p>NA</p></td>
 <td><p>×</p></td>
@@ -550,7 +550,7 @@ This section provides the communication operator support status for the Atlas A3
 <td><p>√</p></td>
 <td><p>×</p></td>
 </tr>
-<tr><td rowspan="3"><p>AllGather</p></td>
+<tr><td rowspan="3"><p>AllGatherV</p></td>
 <td><p>Single-Operator Mode</p></td>
 <td><p>×</p></td>
 <td><p>NA</p></td>
@@ -603,9 +603,9 @@ This section provides the communication operator support status for the Atlas A3
 </tbody>
 </table>
 
-> [!NOTE]Note
+> [!NOTE]
 > AIV mode delivers better performance for small-size data communication and is primarily used in inference scenarios. In this mode:
 >
-> - Single-Operator Zero-Copy introduces runtime memory negotiation, which increases communication latency. Therefore, Single-Operator Zero-Copy is not supported in AIV mode.
+> - Single-operator zero-copy introduces runtime memory negotiation, which increases communication latency. Therefore, single-operator zero-copy is not supported in AIV mode.
 > - The re-execution feature increases execution time, so operator re-execution is not supported in AIV mode.
 > - Only intra-SuperPoD communication is supported; inter-SuperPoD communication is not supported.

@@ -1,6 +1,6 @@
 # Introduction to Collective Communication Algorithms
 
-<!-- md-trans-meta sourceCommit=unknown translatedAt=2026-09-02T07:42:34.230Z pushedAt=2026-09-04T07:55:31.862Z -->
+<!-- md-trans-meta sourceCommit=unknown translatedAt=2026-11-09T03:22:13.820Z pushedAt=2026-11-10T11:28:44.946Z nl=2 -->
 
 - [Algorithm Overview](algo_intro.md)
 - [Mesh](Mesh.md)
@@ -12,4 +12,4 @@
 - [NB](NB.md)
 - [AHC](AHC.md)
 - [Pipeline](Pipeline.md)
-- [Hierarchical Communication Principle](hierarchical_comm_principle.md)
+- [Hierarchical Communication Principles](hierarchical_comm_principle.md)

@@ -1,8 +1,8 @@
 # HCCL_RDMA_QP_PORT_CONFIG_PATH
 
-<!-- md-trans-meta sourceCommit=unknown translatedAt=2026-09-12T10:09:19.604Z pushedAt=2026-09-18T08:03:58.226Z -->
+<!-- md-trans-meta sourceCommit=unknown translatedAt=2026-11-06T09:48:47.121Z pushedAt=2026-11-16T06:28:10.205Z nl=2 -->
 
-## Description
+## Function
 
 During RDMA communication between two ranks, one QP (Queue Pair) is created by default for data transfer. If you want RDMA communication between two ranks to use multiple QPs and specify the source port numbers for multi-QP communication, you can use this environment variable.
 
@@ -16,7 +16,7 @@ export HCCL_RDMA_QP_PORT_CONFIG_PATH=/home/tmp
 
 Here, `/home/tmp` is the storage path of the configuration file `MultiQpSrcPort.cfg` that maps `<srcIP,dstIP>` and ports. Both absolute and relative paths are supported, and the maximum path length must be less than or equal to 4,096 characters.
 
-The `MultiQpSrcPort.cfg` file must be user-defined (note that the file name must remain "MultiQpSrcPort.cfg"). The configuration format is as follows:
+You need to defien the `MultiQpSrcPort.cfg` file (note that the file name must remain "MultiQpSrcPort.cfg") as follows:
 
 ```text
 srcIP1,dstIP1=srcPort0,srcPort1,...,srcPortN
@@ -47,20 +47,27 @@ export HCCL_RDMA_QP_PORT_CONFIG_PATH=/home/tmp
 
 - This environment variable supports only single-operator calls and does not support static graphs.
 - This environment variable has a higher priority than [HCCL_RDMA_QPS_PER_CONNECTION](HCCL_RDMA_QPS_PER_CONNECTION.md). After this environment variable is configured, the number of QPs used for communication between two ranks is determined by the number of source port numbers configured in the `MultiQpSrcPort.cfg` file.
+- The configuration file `MultiQpSrcPort.cfg` read by this environment variable must not use non-Linux escape characters.
 - The priorities of QP-related configurations are as follows:
 
-    Management-plane multi-QP configuration (configured via the "-s multi_qp" parameter of hccn_tool) \> NSLB QP configuration (configured via the "-t nslb-dp" parameter of hccn_tool) \> Environment variable HCCL_RDMA_QP_PORT_CONFIG_PATH \> Environment variable HCCL_RDMA_QPS_PER_CONNECTION
+    Environment variable HCCL_RDMA_QP_PORT_CONFIG_PATH \> environment variable HCCL_RDMA_QPS_PER_CONNECTION.
+
+<!-- npu="A3,910b" id6 -->
+- For Atlas A3 products and Atlas A2 products, QP-related configuration can also be set through the hccn_tool. The priority of hccn_tool configuration and this environment variable is as follows:
+
+    Management-plane multi-QP configuration (configured via the "-s multi_qp" parameter of hccn_tool) \> NSLB QP configuration (configured via the "-t nslb-dp" parameter of hccn_tool)\> environment variable HCCL_RDMA_QP_PORT_CONFIG_PATH \> environment variable HCCL_RDMA_QPS_PER_CONNECTION.
+<!-- end id6 -->
 
 ## Applicable Products
 
 <!-- npu="950" id3 -->
-- 950PR/950DT: Supported
+- Ascend 950PR&950DT products: Supported
 <!-- end id3 -->
 <!-- npu="A3" id2 -->
-- Atlas A3 training products/Atlas A3 inference products: Supported
+- Atlas A3 products: Supported
 <!-- end id2 -->
 <!-- npu="910b" id1 -->
-- Atlas A2 training products/Atlas A2 inference products: Supported
+- Atlas A2 products: Supported
 <!-- end id1 -->
 <!-- npu="910" id4 -->
 - Atlas training products: Not supported

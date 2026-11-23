@@ -1,17 +1,17 @@
 # HcclReduce
 
-<!-- md-trans-meta sourceCommit=unknown translatedAt=2026-09-12T08:11:16.061Z pushedAt=2026-09-18T08:03:58.130Z -->
+<!-- md-trans-meta sourceCommit=unknown translatedAt=2026-11-06T09:44:15.770Z pushedAt=2026-11-16T06:28:10.087Z nl=2 -->
 
 ## Applicable Products
 
 <!-- npu="950" id1 -->
-- 950PR/950DT: Supported
+- Ascend 950PR&950DT products: Supported
 <!-- end id1 -->
 <!-- npu="A3" id2 -->
-- Atlas A3 training products/Atlas A3 inference products: Supported
+- Atlas A3 products: Supported
 <!-- end id2 -->
 <!-- npu="910b" id3 -->
-- Atlas A2 training products/Atlas A2 inference products: Supported
+- Atlas A2 products: Supported
 <!-- end id3 -->
 <!-- npu="310p" id4 -->
 - Atlas inference products: Not supported
@@ -20,7 +20,12 @@
 - Atlas training products: Supported
 <!-- end id5 -->
 
-## Description
+<!-- npu="910b" id6 -->
+> [!NOTE]
+> For Atlas A2 products, only Atlas 800T A2, Atlas 900 A2 PoD, and Atlas 200T A2 Box16 are supported.
+<!-- end id6 -->
+
+## Function
 
 The operation API for the collective communication operator Reduce, which adds (or performs other reduce operations on) data from all ranks and then sends the result to the specified position on the root node.
 
@@ -36,59 +41,59 @@ HcclResult HcclReduce(void *sendBuf, void *recvBuf, uint64_t count, HcclDataType
 
 | Parameter | Input/Output | Description |
 | --- | --- | --- |
-| sendBuf | Input | Address of the source data buffer. |
-| recvBuf | Output | Address of the destination data buffer. The collective communication result is output to this buffer. |
-| count | Input | Number of data units participating in the reduce operation. For example, `count` is `1` if only one int32 data unit participates. |
-| dataType | Input | Data type of the reduce operation, of [HcclDataType](https://gitcode.com/cann/hcomm/blob/master/docs/en/api_ref/comm_mgr_c/data_type_definition/HcclDataType.md) type.<br>Different models support different data types. For details, see [dataType Description](#datatype-description).|
-| op | Input | Operation type of the reduce operation.<br>Different models support different operation types. For details, see [op Description](#description).|
-| root | Input | Rank ID serving as the reduce root. |
+| sendBuf | Input | Source data buffer address. |
+| recvBuf | Output | Destination data buffer address, to which the collective communication result is output. |
+| count | Input | Number of data elements participating in the reduce operation. For example, if only one int32 data is involved, count=1. |
+| dataType | Input | Data type of the reduce operation, of [HcclDataType](https://gitcode.com/cann/hcomm/blob/master/docs/en/api_ref/comm_mgr_c/data_type_definition/HcclDataType.md) type.<br>Supported data types vary by product. For details, see [dataType description](#datatype-description).|
+| op | Input | Type of the reduce operation.<br>Supported operation types vary by product. For details, see [Operation Types](#operation-types).|
+| root | Input | Rank ID of the reduce root. |
 | comm | Input | Communicator where the collective communication operation is performed. |
 | stream | Input | Stream used by the current rank. |
 
 ### dataType Description
 
 <!-- npu="950" id10 -->
-- For 950PR/950DT, supported data types: int8, int16, int32, int64, uint64, float16, float32, float64, and bfp16.
+- For Ascend 950PR&950DT products, supported data types: int8, int16, int32, int64, uint64, float16, float32, float64, bfp16.
 <!-- end id10 -->
 <!-- npu="A3" id11 -->
-- For Atlas A3 training products/Atlas A3 inference products, supported data types: int8, int16, int32, int64, float16, float32, bfp16.
+- For Atlas A3 products, supported data types: int8, int16, int32, int64, float16, float32, and bfp16.
 <!-- end id11 -->
 <!-- npu="910b" id12 -->
-- For Atlas A2 training products/Atlas A2 inference products, supported data types: int8, int16, int32, int64, float16, float32, bfp16. Note that for int64, performance may degrade to certain extent.
+- For Atlas A2 products, supported data types: int8, int16, int32, int64, float16, float32, and bfp16. Note that the performance of the int64 data type degrades to some extent.
 <!-- end id12 -->
 <!-- npu="910" id13 -->
-- For Atlas training products, supported data types: int8, int32, int64, float16, float32.
+- For Atlas training products, supported data types: int8, int32, int64, float16, and float32.
 <!-- end id13 -->
 
 ### Operation Types
 
 <!-- npu="950" id14 -->
-- For 950PR/950DT, the supported operation types are sum, prod, max, and min. The prod operation does not support int16 and bfp16 data types.
+- For Ascend 950PR&950DT products, the supported operation types are sum, prod, max, and min. The prod operation does not support int16 or bfp16 data types.
 <!-- end id14 -->
 <!-- npu="A3" id15 -->
-- For Atlas A3 training products/Atlas A3 inference products, the supported operation types are sum, prod, max, and min. The prod operation does not support int16 and bfp16 data types.
+- For Atlas A3 products, the supported operation types are sum, prod, max, and min, where the prod operation does not support the int16 or bfp16 data types.
 <!-- end id15 -->
 <!-- npu="910b" id16 -->
-- For Atlas A2 training products/Atlas A2 inference products, the supported operation types are sum, prod, max, and min. The prod operation does not support int16 and bfp16 data types.
+- For Atlas A2 products, the supported operation types are sum, prod, max, and min, where the prod operation does not support the int16 or bfp16 data types.
 <!-- end id16 -->
 <!-- npu="910" id17 -->
 - For Atlas training products, the supported operation types are sum, prod, max, and min.
 <!-- end id17 -->
 
-## Return Value
+## Return Values
 
 [HcclResult](https://gitcode.com/cann/hcomm/blob/master/docs/en/api_ref/comm_mgr_c/data_type_definition/HcclResult.md)
 
 | Return Value | Description |
 | --- | --- |
-| HCCL_SUCCESS | API call success. |
-| HCCL_E_PTR | The passed pointer parameter is null, for example, comm, sendBuf, recvBuf, or stream is nullptr. |
-| HCCL_E_PARA | The passed parameter is invalid, for example, count exceeds the upper limit or root is out of range. |
-| HCCL_E_NOT_SUPPORT | The operation is not supported, for example, dataType is invalid or not supported by the current model, or the prod operation does not support the int16/bfp16 data type. |
+| HCCL_SUCCESS | The API call succeeds. |
+| HCCL_E_PTR | An input pointer parameter is null, e.g., comm, sendBuf, recvBuf, and stream are nullptr. |
+| HCCL_E_PARA | An input parameter is invalid, for example, count exceeds the upper limit, or root is out of range. |
+| HCCL_E_NOT_SUPPORT | The operation is not supported, for example, it is not supported by the current product model, dataType is invalid, or the prod operation does not support the int16/bfp16 data type. |
 | HCCL_E_INTERNAL | Internal error. |
-| HCCL_E_UNAVAIL | The resource is unavailable, e.g., an exception occurs during CCU resource reuse (reused threads are empty, or the thread count exceeds the limit). |
-| HCCL_E_RUNTIME | Failed to call the underlying runtime API (e.g., memory copy or memory reset). |
-| HCCL_E_MEMORY | Memory allocation or operation failed. |
+| HCCL_E_UNAVAIL | A resource is unavailable, for example, a CCU resource reuse exception (null reuse thread or excess threads). |
+| HCCL_E_RUNTIME | A call to an underlying runtime API (for example, memory copy or memory zeroing) fails. |
+| HCCL_E_MEMORY | Memory allocation or operation fails. |
 
 ## Constraints
 
@@ -98,14 +103,14 @@ HcclResult HcclReduce(void *sendBuf, void *recvBuf, uint64_t count, HcclDataType
   - int16, float16, and bfp16: 2-byte address alignment.
   - int32 and float32: 4-byte address alignment.
   - int64, uint64, and float64: 8-byte address alignment.
-- Inplace operation is supported. That is, sendBuf and recvBuf can point to the same address, and the reduce result is directly written back to the input buffer. Currently, CCU/AIV engine algorithms support inplace.
-- Must serialize the calls to all communication operators in multiple communicators on each device. Out-of-order/multi-threaded concurrent calls and thread reentrancy are not allowed.
-- On the same device, the threads that dispatch all collective communication operators in the same communicator must use the same context.
+- Inplace operations are supported, where sendBuf and recvBuf point to the same address and the Reduce result is written back to the input buffer directly. The current CCU/AIV engine algorithm supports inplace operations.
+- All communication operators in multiple communicators must be dispatched serially on each device. Out-of-order dispatch, multi-thread concurrent dispatch, and thread reentrancy are not supported.
+- On the same device, the dispatch threads of all communication operators in the same communicator must use the same context.
 
 ## Example
 
 ```c
-// Allocate device memory for collective communication operations.
+// Allocate device memory for the collective communication operation.
 void *sendBuf = nullptr;
 void *recvBuf = nullptr;
 uint64_t count = 8;
@@ -122,14 +127,14 @@ HcclCommInitRootInfo(rankSize, &rootInfo, deviceId, &hcclComm);
 aclrtStream stream;
 aclrtCreateStream(&stream);
 
-// Execute Reduce. Add the sendBuf data of all ranks at corresponding positions, and send the result to the recvBuf of the root node.
+// Perform Reduce: Add the sendBuf values at the corresponding positions of all ranks, and send the result to the recvBuf of the root node.
 HcclReduce(sendBuf, recvBuf, count, HCCL_DATA_TYPE_FP32, HCCL_REDUCE_SUM, rootRank, hcclComm, stream);
-// Block and wait for the collective communication tasks in the task stream to complete.
+// Block and wait for the collective communication tasks in the stream to complete.
 aclrtSynchronizeStream(stream);
 
 // Release resources.
-aclrtFree(sendBuf);          // Free device-side memory.
-aclrtFree(recvBuf);          // Free device-side memory.
+aclrtFree(sendBuf);          // Free the device memory.
+aclrtFree(recvBuf);          // Free the device memory.
 aclrtDestroyStream(stream);  // Destroy the stream.
 HcclCommDestroy(hcclComm);   // Destroy the communicator.
 ```

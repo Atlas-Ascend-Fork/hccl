@@ -4,15 +4,15 @@
 
 This section provides the communication operator support status for the Atlas training products.
 
-- Single-Operator Zero-Copy: To reduce memory copy overhead, HCCL can directly operate on the memory passed by the service, thereby improving communication performance.
-- Communication Operator Re-execution: When a network failure causes a communication interruption, HCCL attempts to re-execute the communication operator, thereby improving communication stability.
-- Deterministic Computation: Under the same hardware and input conditions, reduction-type communication operators produce the same output across multiple executions.
+- Single-operator zero-copy: To reduce memory copy overhead, HCCL can directly operate on the memory passed by the service, thereby improving communication performance.
+- Communication operator re-execution: When a network failure causes a communication interruption, HCCL attempts to re-execute the communication operator, thereby improving communication stability.
+- Deterministic computation: Under the same hardware and input conditions, reduction-type communication operators produce the same output across multiple executions.
 
-> [!NOTE]Note
+> [!NOTE]
 >
 > - For Atlas training products, communication operators support only HOST expansion.
 > - In the tables in this section, "√" indicates supported, "×" indicates not supported, and "NA" indicates not applicable. Atlas training products do not support single-operator zero-copy or re-execution.
-> - Operators and network operation modes not listed are not supported.
+> - Operators and network running modes not listed are not supported.
 
 <table><thead align="left"><tr><th><p>Operator</p></th>
 <th><p>Network Running Mode</p></th>

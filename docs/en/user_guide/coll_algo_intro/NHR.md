@@ -1,6 +1,6 @@
 # NHR
 
-<!-- md-trans-meta sourceCommit=unknown translatedAt=2026-09-02T07:40:28.075Z pushedAt=2026-09-04T02:41:38.548Z -->
+<!-- md-trans-meta sourceCommit=unknown translatedAt=2026-11-09T03:21:55.097Z pushedAt=2026-11-10T09:37:13.961Z nl=2 -->
 
 ## Algorithm Description
 
@@ -12,12 +12,12 @@ The maximum communication traffic of this algorithm is concentrated between phys
 
 When the rank size is an integer power of 2 (taking rank size = 4 as an example), the communication process of the NHR algorithm is shown in the following figure. It can be seen that the number of data copies sent and received at each step is 1, because data slices with contiguous addresses can be sent continuously.
 
-**Figure 1** NHR algorithm communication process when rank size is 4
+**Figure 1** NHR algorithm communication process when rank size is 4 
 ![](figures/nhr_algo_4rank_flow.png "NHR algorithm communication process when rank size is 4")
 
 When the rank size is not an integer power of 2 (taking rank size 5 as an example), the NHR algorithm communication process is shown in the following figure. Most data slices can be sent and received continuously, and only a few data slices between cards are discrete.
 
-**Figure 2** NHR algorithm communication process when rank size is 5
+**Figure 2** NHR algorithm communication process when rank size is 5 
 ![](figures/nhr_algo_5rank_flow.png "NHR algorithm communication process when rank size is 5")
 
 The NHR algorithm is also applicable to star or fat-tree topology interconnects, and the time complexity of the algorithm is $⌈log_2⁡N⌉$.

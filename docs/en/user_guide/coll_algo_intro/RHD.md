@@ -1,6 +1,6 @@
 # RHD
 
-<!-- md-trans-meta sourceCommit=unknown translatedAt=2026-09-02T07:42:39.954Z pushedAt=2026-09-04T08:05:27.547Z -->
+<!-- md-trans-meta sourceCommit=unknown translatedAt=2026-11-09T03:22:31.388Z pushedAt=2026-11-10T11:47:01.652Z nl=2 -->
 
 ## Algorithm Description
 

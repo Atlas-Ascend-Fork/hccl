@@ -1,14 +1,14 @@
 # HCCL_MULTI_QP_THRESHOLD
 
-<!-- md-trans-meta sourceCommit=unknown translatedAt=2026-09-12T09:44:51.686Z pushedAt=2026-09-18T08:03:58.210Z -->
+<!-- md-trans-meta sourceCommit=unknown translatedAt=2026-11-06T09:47:39.435Z pushedAt=2026-11-16T06:28:10.180Z nl=2 -->
 
-## Description
+## Function
 
-When multi-QP communication is used for RDMA communication between ranks, you can use this environment variable to set the smallest data size shared by each QP.
+When multi-QP communication is used for RDMA communication between ranks, you can use this environment variable to set the threshold of minimum data volume shared by each QP.
 
 This environment variable must be an integer. Range: [1, 8192]. Default: 512. Unit: KB.
 
-- If "(Data volume per communication between ranks/Value of HCCL_RDMA_QPS_PER_CONNECTION) < Value of HCCL_MULTI_QP_THRESHOLD", HCCL automatically reduces the number of QPs during execution so that the data volume shared by each QP is greater than or equal to the value of `HCCL_MULTI_QP_THRESHOLD`. For example:
+- If (Data volume per communication between ranks/Value of HCCL_RDMA_QPS_PER_CONNECTION) < Value of HCCL_MULTI_QP_THRESHOLD, HCCL automatically reduces the number of QPs during execution so that the data volume shared by each QP is greater than or equal to the value of `HCCL_MULTI_QP_THRESHOLD`. For example:
 
     The data volume per communication between ranks is 1 MB, HCCL_RDMA_QPS_PER_CONNECTION is set to 4, and HCCL_MULTI_QP_THRESHOLD is set to 512. In this case, each QP is required to share at least 512 KB of data. During HCCL execution, the number of QPs is reduced to 2, and only 2 QPs are used for data transmission between ranks.
 
@@ -31,13 +31,13 @@ This environment variable supports only single-operator calls and does not suppo
 ## Applicable Products
 
 <!-- npu="950" id1 -->
-- 950PR/950DT: Supported
+- Ascend 950PR&950DT products: Supported
 <!-- end id1 -->
 <!-- npu="A3" id2 -->
-- Atlas A3 training products/Atlas A3 inference products: Supported
+- Atlas A3 products: Supported
 <!-- end id2 -->
 <!-- npu="910b" id3 -->
-- Atlas A2 training products/Atlas A2 inference products: Supported
+- Atlas A2 products: Supported
 <!-- end id3 -->
 <!-- npu="910" id4 -->
 - Atlas training products: Not supported

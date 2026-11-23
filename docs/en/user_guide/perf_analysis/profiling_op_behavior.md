@@ -1,10 +1,10 @@
-# Analyzing Communication Operator Behavior from Profile Data
+# Communication Operator Behavior Analysis in Profile Data
 
-<!-- md-trans-meta sourceCommit=unknown translatedAt=2026-09-12T11:04:40.681Z pushedAt=2026-09-18T08:03:58.288Z -->
+<!-- md-trans-meta sourceCommit=unknown translatedAt=2026-11-06T09:51:21.859Z pushedAt=2026-11-16T06:28:10.268Z nl=2 -->
 
 ## Communication Operator Dispatch
 
-Communication operators are dispatched at the CANN layer in the profile data. As shown in the figure, one `AscendCL@OpType::ALLGATHER` corresponds to one AllGather operator dispatch:
+A communication operator is dispatched at the CANN layer in the profile data. As shown in the figure, an "AscendCL@OpType::ALLGATHER" corresponds to one dispatch of the AllGather operator:
 
 ![Communication operator dispatch](figures/comm_op_dispatch.png)
 
@@ -23,23 +23,23 @@ The execution of communication operators corresponds to the Communication (HCCL)
 - `Plane 0-X`: different communication streams. Each plane corresponds to a communication stream. HCCL communication operator orchestration leverages multi-stream concurrency to fully utilize HCCS physical link resources.
 - `hcom_allReduce_xx`: the execution flow of a communication operator. In the detailed information, you can see the latency, data volume, and data type of the communication operator.
 
-Since a communication operator is orchestrated from multiple notify and memcpy tasks, you need to collect at least level 1 profile data to display specific communication task orchestration information in profiling.**
+A communication operator is orchestrated by multiple notify sync tasks and memcpy tasks. To display the specific communication task orchestration details in profiling, collect at least level 1 profile data.
 
 ## Synchronization Tasks
 
 - Notify Record: a task that sets the notify register to 1.
 - Notify Wait: a task that waits for the notify register to become 1 and then clears it to 0.
-- RDMASend: an inter-node RoCE synchronization task that sets the peer notify register to 1.
+- RDMASend: an inter-server RoCE sync task that sets the peer notify register to 1.
 
-For synchronization tasks, you can also obtain the task duration, notify_id, local end (src rank), and peer end (dst rank) from the task details.
+For sync tasks, you can also obtain the task duration, notify_id, local end (src rank), and peer end (dst rank) from the task details.
 
 ![Synchronization tasks](figures/syn_task.png)
 
 ## Data Communication Task
 
-- **Memcpy**: a memory copy task for intra-node or intra-chip memory copy.
+- **Memcpy**: a memory copy task for intra-server or intra-chip memory copy.
 - **Reduce_Inline**: a memory copy task, which completes on-the-fly reduction computation while copying data.
-- **RDMASend**: an inter-node RoCE communication task, which corresponds to the inter-node memory copy task.
+- **RDMASend**: an inter-server RoCE communication task, which corresponds to the inter-server memory copy task.
 
 For data communication tasks, you can also obtain the task duration, local end (src rank) and peer end (dst rank), data volume (size), bandwidth, and other details from the task details.
 
@@ -47,5 +47,5 @@ For data communication tasks, you can also obtain the task duration, local end (
 
 > [!NOTE]
 >
-> - In the profile data, an RDMASend task corresponds to either a synchronization task or a data communication task. You can distinguish between them by analyzing the data volume. The data volume of a synchronization task is fixed at 4 bytes, while the data volume of a data communication task is subject to the actual communication volume.
-> - If an RDMASend task is a data communication task, its execution duration is not the actual communication duration, but the duration of dispatching the WQE of the communication task to the QP queue. The actual communication duration can be calculated based on the data volume and bandwidth, or obtained by referring to the duration of the next notify wait task that immediately follows it.
+> - In Profiling data, an RDMASend task corresponds to either a synchronization task or a data communication task. Distinguish them by data volume: a synchronization task has a fixed data volume of 4 bytes, while a data communication task uses the actual communication volume.
+> - If the RDMASend task is a data communication task, its execution time does not equal the actual communication time. It is only the time to dispatch the communication task's WQE to the QP queue. Calculate the actual communication time from the data volume and bandwidth, or refer to the time of the next notify wait task that immediately follows.

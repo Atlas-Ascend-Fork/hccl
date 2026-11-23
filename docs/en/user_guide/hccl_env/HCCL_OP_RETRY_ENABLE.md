@@ -1,8 +1,8 @@
 # HCCL_OP_RETRY_ENABLE
 
-<!-- md-trans-meta sourceCommit=unknown translatedAt=2026-09-12T09:59:57.173Z pushedAt=2026-09-18T08:03:58.218Z -->
+<!-- md-trans-meta sourceCommit=unknown translatedAt=2026-11-06T09:48:11.827Z pushedAt=2026-11-16T06:28:10.191Z nl=2 -->
 
-## Description
+## Function
 
 Configures whether to enable retry for HCCL operators. HCCL operator retry is performed at the **communicator** granularity. When a communication operator reports an SDMA or RDMA CQE error during execution, HCCL retries the execution.
 
@@ -11,7 +11,7 @@ In a cluster, hardware intermittent disconnections may occur, causing communicat
 **Figure 1**  Retry flow diagram  
 ![Retry flow diagram](figures/reexec_flow_diagram.png)
 
-Major operations:
+Major steps:
 
 1. Fault discovery: The AI CPU detects a fault signal and notifies the host to prepare for the retry.
 2. Cluster management: The host exchanges information through the Host Socket and determines whether the current faulty operator meets a series of retry conditions. For details, see [Retry Instructions](#retry-instructions).
@@ -37,7 +37,7 @@ In addition, you can configure the wait time before the first retry, the maximum
 
 **Configuration recommendations:**
 
-- Enabling retry incurs a certain performance loss. For Atlas A3 training products/Atlas A3 inference products, inter-server and inter-SuperPoD communication passes through optical interconnection domains, which have lower stability. You are advised to enable HCCL retry.
+- Enabling retry will incur a certain performance loss. For Atlas A3 products, inter-server and inter-SuperPoD communication passes through the optical interconnection domain. Such communication is low in stability. Therefore, you are advised to enable HCCL retry.
 - This environment variable must be set consistently across all SuperPoDs. Otherwise, inter-SuperPoD link establishment will time out.
 - When retry is enabled, the number of communicators should not exceed 5. Otherwise, communication operators may occupy all AI CPU cores, preventing computation operator execution on the AI CPU and causing service exceptions.
 
@@ -62,40 +62,40 @@ When enabling HCCL retry, the following constraints must be met; otherwise, retr
     - In-place operations: The operator's input and output share the same memory block, for example, the [ReduceScatter](https://pytorch.org/docs/stable/distributed.html#torch.distributed.reduce_scatter)/[AllGather](https://pytorch.org/docs/stable/distributed.html#torch.distributed.all_gather) operators in PyTorch.
     - Graph mode: Communication can be performed directly on the operator's input and output. For example, for the [AllReduce](https://pytorch.org/docs/stable/distributed.html#torch.distributed.all_reduce) operator in PyTorch, its input tensor serves as both the operator's input and output. During the operator's communication process, after partial results are written, the tensor content changes. If retry is performed on the corrupted input, incorrect computation results will be obtained.
 
-4. When a fault occurs, all ranks in the communicator stop at the same communication operator. If different ranks stop at different communication operators, retry cannot be performed.
+4. When a fault occurs, all ranks in the communicator must stop at the same communication operator. If different ranks stop at different communication operators, retry cannot be performed.
 
-    The moment of fault occurrence is unpredictable. When a fault occurs, the state of each rank in the entire communicator affects the success rate of retry. Taking the communicator shown in the following figure as an example, which contains three ranks, [Table 1](#table1) lists the retry status when faults occur at different moments.
+    The moment of fault occurrence is unpredictable. When a fault occurs, the state of each rank in the entire communicator is related to the success rate of retry. Taking the communicator shown in the following figure as an example, which contains three ranks, [Table 1](#table1) lists the retry results when faults occur at different moments.
 
     **Figure 2** Communicator fault diagram 1  
     ![Communicator fault diagram 1](figures/comm_domain_fault_1.png)
 
     **Table 1** Retry status upon communicator fault<a id="table1"></a>
 
-    | Fault Occurrence Time | Retry Allowed | Operator for Retry |
+    | Fault Occurrence Time | Retry Supported | Operator for Retry |
     | --- | --- | --- |
-    | A | Yes | HCCL OP1.<br>Since the computation operator cannot detect the link fault, the fault is detected only when the communication operator HCCL OP1 is executed. At this point, all three ranks stop at HCCL OP1, meeting the retry condition. The retry starts. |
-    | B | Yes | HCCL OP1.<br>Rank0 and rank2 continue execution until reaching the communication operator HCCL OP1, and rank1 also stops at HCCL OP1, meeting the retry condition. The retry starts. |
+    | A | Yes | HCCL OP1.<br>Computation operators cannot detect link faults. The fault is detected only when execution reaches the communication operator HCCL OP1. At this point, all three ranks stop at HCCL OP1, which satisfies the retry condition and starts retry. |
+    | B | Yes | HCCL OP1.<br>rank0 and rank2 continue execution until reaching the communication operator HCCL OP1, and rank1 also stops at HCCL OP1, which satisfies the retry condition and starts retry. |
     | C | Yes | HCCL OP1. |
-    | D | No | HCCL OP1 of rank0 and rank1 has already completed. When the fault occurs at moment D, they continue execution until reaching HCCL OP2, while rank2 remains stopped at HCCL OP1, failing to meet the retry condition. |
-    | E | Yes | HCCL OP3.<br>All three ranks continue execution and eventually stop at HCCL OP3, meeting the retry condition. The retry starts. |
+    | D | No | The HCCL OP1 of rank0 and rank1 has been executed. When the fault occurs at time D, rank0 and rank1 continue execution until reaching HCCL OP2, while rank2 still stops at HCCL OP1. The retry condition is not satisfied. |
+    | E | Yes | HCCL OP3.<br>All three ranks continue execution and finally stop at HCCL OP3, which satisfies the retry condition and starts retry. |
 
     The following explains why collective communication cannot fully guarantee that all ranks stop at the same communication operator when a fault occurs, using the common collective communication algorithm Recursive Halving-Doubling (RHD) as an example.
 
     **Figure 3** Communicator fault diagram 2  
     ![Communicator fault diagram 2](figures/comm_domain_fault_2.png)
 
-    Four AI servers, each with one rank, form a four-rank communicator. If the fault happens to occur after the first step (data exchange) of the HD algorithm, the following situation arises:
+    Four AI servers, each with one rank, form a four-rank communicator. If the fault happens to occur after the first step (data exchange) of the RHD algorithm, the following situation arises:
 
     rank2 and rank3 can complete normally, while rank0 and rank1 cannot. Subsequent computation operators or communication operators on rank2 and rank3 may use arbitrary memory, and the corresponding context information cannot be found on rank2 and rank3 during retry. Therefore, if the fault occurrence moment is as shown in the figure above, retry cannot be performed.
 
 5. Check whether the host-side socket network communication is normal. During retry, host-side socket communication is used for status negotiation among devices in the communicator. If the socket network is faulty, retry cannot be performed.
-6. Ensure that the faulty link has recovered, for example, route convergence is successful, the optical module is rectified from an intermittent disconnection, or the communication is restored by using the standby NIC. If the faulty link cannot be recovered, the communication task will still fail when executed again. When the retry count exceeds the maximum retransmission count (see [HCCL_OP_RETRY_PARAMS](HCCL_OP_RETRY_PARAMS.md)), the retry fails.
+6. Ensure that the faulty link has recovered, for example, route convergence is successful, the optical module has recovered from an intermittent disconnection, or the communication is switched to the standby NIC. If the faulty link cannot be recovered, the communication task will still fail when executed again. When the retry count exceeds the maximum retransmission count (see [HCCL_OP_RETRY_PARAMS](HCCL_OP_RETRY_PARAMS.md)), the retry fails.
 
 > [!NOTE]
 >
-> - If an ERROR message with the keyword `[OpRetry]...timeout` appears in the host-side debug log, it indicates a host-side socket communication anomaly during HCCL retry. In this case, collect the logs of all nodes in the communicator to further locate the fault.
-> - If an ERROR message with the keyword `can not retry` appears in the host-side debug log, it indicates that the current situation does not meet the HCCL retry conditions.
-> The default storage path for debug logs generated by the host-side applications is `$HOME/ascend/log/debug/plog/`.
+> - If an ERROR message with the keyword "\[OpRetry\]...timeout" appears in the host-side debug log, it indicates a host-side socket communication anomaly during HCCL retry. In this case, collect the logs of all nodes in the communicator to further locate the fault.
+> - If an ERROR message with the keyword "can not retry" appears in the host-side debug log, it indicates that the current situation does not meet the HCCL retry conditions.
+> The default storage path for debug logs generated by the host-side applications is $HOME/ascend/log/debug/plog/.
 
 ## Rail-failover Communication Instructions
 
@@ -115,7 +115,7 @@ When enabling HCCL retry, the following constraints must be met; otherwise, retr
 
     If the two Dies of the same NPU are assigned to two different training or inference tasks, a fault in one task will borrow the NIC of the other task, causing a certain degree of performance degradation in both tasks.
 
-5. The same NPU allows only one rail failover, and switchback is not allowed.
+5. The same NPU allows only once rail failover, and switchback is not allowed.
 
     As shown in [Figure 5](#figure5), in Diagram 1, the communication link between NPU0 and NPU1 is faulty, and the standby link is enabled. Rail failover occurs, and communication proceeds normally. If the fault shown in Diagram 2 occurs again, rail failover is no longer supported, and the system exits with an error.
 
@@ -135,16 +135,16 @@ If error `[OpRetryConnection][RecvAckTag] Recv unmatched ack` occurs after retry
 2. If the error persists, use [HCCL_IF_BASE_PORT](HCCL_IF_BASE_PORT.md) to modify the default port used by HCCL, and run `sysctl -w net.ipv4.ip_local_reserved_ports` to reserve the specified ports.
 
     ```bash
-    # For example, specify 16 consecutive ports starting from port 17777 for HCCL.
+    # For example, specify that HCCL uses 16 consecutive ports starting from port 17777.
     export HCCL_IF_BASE_PORT=17777
-    # Reserve a total of 16 ports: 17777-17792
+    # Reserve 16 ports from 17777 to 17792.
     sysctl -w net.ipv4.ip_local_reserved_ports=17777-17792
     ```
 
 ## Other Constraints
 
 - If you call the HCCL C API to initialize a communicator with specific configurations and configure whether to enable retry for HCCL operators through `hcclRetryEnable` of `HcclCommConfig`, the communicator-level configuration takes precedence.
-- Enabling retry will disable calling the `HcclCreateSubCommConfig` API to split a sub-communicator in multiple processes or threads on a single device.
+- Enabling retry does not support calling the `HcclCreateSubCommConfig` API to split a sub-communicator in multiple processes or threads on a single device.
 
 ## Impact of Retry on Network Performance
 
@@ -153,13 +153,13 @@ See [Impact of Communication Operator Retry on Overall Network Performance](comm
 ## Applicable Products
 
 <!-- npu="950" id2 -->
-- 950PR/950DT: Not supported
+- Ascend 950PR&950DT products: Not supported
 <!-- end id2 -->
 <!-- npu="A3" id1 -->
-- Atlas A3 training products/Atlas A3 inference products: Supported
+- Atlas A3 products: Supported
 <!-- end id1 -->
 <!-- npu="910b" id3 -->
-- Atlas A2 training products/Atlas A2 inference products: Not supported
+- Atlas A2 products: Not supported
 <!-- end id3 -->
 <!-- npu="910" id4 -->
 - Atlas training products: Not supported

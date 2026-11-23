@@ -1,8 +1,8 @@
 # HCCL_WHITELIST_FILE
 
-<!-- md-trans-meta sourceCommit=unknown translatedAt=2026-09-12T10:29:16.097Z pushedAt=2026-09-18T08:03:58.249Z -->
+<!-- md-trans-meta sourceCommit=unknown translatedAt=2026-11-06T09:49:14.888Z pushedAt=2026-11-16T06:28:10.221Z nl=2 -->
 
-## Description
+## Function
 
 When communication trustlist verification is enabled through HCCL_WHITELIST_DISABLE, use this environment variable to specify the path to the HCCL communication trustlist configuration file. Only IP addresses in the communication trustlist are allowed to perform collective communication.
 
@@ -33,13 +33,13 @@ None.
 ## Applicable Products
 
 <!-- npu="950" id3 -->
-- 950PR/950DT: Supported
+- Ascend 950PR&950DT products: Supported
 <!-- end id3 -->
 <!-- npu="A3" id4 -->
-- Atlas A3 training products/Atlas A3 inference products: Supported
+- Atlas A3 products: Supported
 <!-- end id4 -->
 <!-- npu="910b" id5 -->
-- Atlas A2 training products/Atlas A2 inference products: Supported
+- Atlas A2 products: Supported
 <!-- end id5 -->
 <!-- npu="910" id1 -->
 - Atlas training products: Supported

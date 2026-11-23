@@ -1,17 +1,17 @@
 # HcclRecv
 
-<!-- md-trans-meta sourceCommit=unknown translatedAt=2026-09-12T08:07:57.062Z pushedAt=2026-09-18T08:03:58.127Z -->
+<!-- md-trans-meta sourceCommit=unknown translatedAt=2026-11-06T09:44:08.378Z pushedAt=2026-11-16T06:28:10.082Z nl=2 -->
 
 ## Applicable Products
 
 <!-- npu="950" id1 -->
-- 950PR/950DT: Supported
+- Ascend 950PR&950DT products: Supported
 <!-- end id1 -->
 <!-- npu="A3" id2 -->
-- Atlas A3 training products/Atlas A3 inference products: Supported
+- Atlas A3 products: Supported
 <!-- end id2 -->
 <!-- npu="910b" id3 -->
-- Atlas A2 training products/Atlas A2 inference products: Supported
+- Atlas A2 products: Supported
 <!-- end id3 -->
 <!-- npu="310p" id4 -->
 - Atlas inference products: Not supported
@@ -20,7 +20,12 @@
 - Atlas training products: Supported
 <!-- end id5 -->
 
-## Description
+<!-- npu="910b" id6 -->
+> [!NOTE]
+> For Atlas A2 products, only Atlas 800T A2, Atlas 900 A2 PoD, and Atlas 200T A2 Box16 are supported.
+<!-- end id6 -->
+
+## Function
 
 Point-to-point communication Receive operation API, which receives data from the source node to the specified location on the current node.
 
@@ -34,42 +39,42 @@ HcclResult HcclRecv(void* recvBuf, uint64_t count, HcclDataType dataType, uint32
 
 | Parameter | Input/Output | Description |
 | --- | --- | --- |
-| recvBuf | Output | Address of the buffer for receiving data. |
-| count | Input | Number of received data elements. |
-| dataType | Input | Data type of the received data, of [HcclDataType](https://gitcode.com/cann/hcomm/blob/master/docs/en/api_ref/comm_mgr_c/data_type_definition/HcclDataType.md) type.<br>Different models support different data types. For details, see [Supported Data Types](#supported-data-types). |
+| recvBuf | Output | Address of the buffer to receive data. |
+| count | Input | Number of data elements to receive. |
+| dataType | Input | Type of the data to receive, of the [HcclDataType](https://gitcode.com/cann/hcomm/blob/master/docs/en/api_ref/comm_mgr_c/data_type_definition/HcclDataType.md) type.<br>Supported data types vary by product. For details, see [Supported Data Types](#supported-data-types).|
 | srcRank | Input | Rank ID of the data sender in the communicator. |
-| comm | Input | Communicator for the collective communication operation. |
+| comm | Input | Communicator where the collective communication operation is performed. |
 | stream | Input | Stream used by the current rank. |
 
 ### Supported Data Types
 
 <!-- npu="950" id10 -->
-- For 950PR/950DT, supported data types: int8, uint8, int16, uint16, int32, uint32, int64, uint64, float8-e5m2, float8-e4m3, float8-e8m0, hifloat8, float16, float32, float64, bfp16.
+- For Ascend 950PR&950DT products, supported data types: int8, uint8, int16, uint16, int32, uint32, int64, uint64, float8-e5m2, float8-e4m3, float8-e8m0, hifloat8, float16, float32, float64, bfp16.
 <!-- end id10 -->
 <!-- npu="A3" id11 -->
-- For Atlas A3 training products/Atlas A3 inference products, supported data types: int8, uint8, int16, uint16, int32, uint32, int64, uint64, float16, float32, float64, bfp16.
+- For Atlas A3 products, supported data types: int8, uint8, int16, uint16, int32, uint32, int64, uint64, float16, float32, float64, bfp16.
 <!-- end id11 -->
 <!-- npu="910b" id12 -->
-- For Atlas A2 training products/Atlas A2 inference products, supported data types: int8, uint8, int16, uint16, int32, uint32, int64, uint64, float16, float32, float64, bfp16.
+- For Atlas A2 products, supported data types: int8, uint8, int16, uint16, int32, uint32, int64, uint64, float16, float32, float64, bfp16.
 <!-- end id12 -->
 <!-- npu="910" id13 -->
 - For Atlas training products, supported data types: int8, uint8, int16, uint16, int32, uint32, int64, uint64, float16, float32, float64.
 <!-- end id13 -->
 
-## Return Value
+## Return Values
 
 [HcclResult](https://gitcode.com/cann/hcomm/blob/master/docs/en/api_ref/comm_mgr_c/data_type_definition/HcclResult.md)
 
 | Return Value | Description |
 | --- | --- |
-| HCCL_SUCCESS | API call success. |
-| HCCL_E_PTR | A passed pointer parameter is null, for example, comm or recvBuf is nullptr. |
-| HCCL_E_PARA | A passed parameter is invalid, for example, count exceeds the upper limit or srcRank is out of range. |
-| HCCL_E_NOT_SUPPORT | The operation is not supported. For example, dataType is invalid or not supported by the current model, or self-send and self-receive is not supported when srcRank equals the current rank. |
+| HCCL_SUCCESS | The API call succeeds. |
+| HCCL_E_PTR | An input pointer parameter is null, for example, comm or recvBuf is nullptr. |
+| HCCL_E_PARA | An input parameter is invalid, for example, count exceeds the upper limit or srcRank is out of range. |
+| HCCL_E_NOT_SUPPORT | The operation is not supported, for example, the current product model does not support it, dataType is invalid, or self-send and self-receive is not supported when srcRank equals the local rank. |
 | HCCL_E_INTERNAL | Internal error. |
-| HCCL_E_UNAVAIL | The resource is unavailable, e.g., an exception occurs during CCU resource reuse (reused threads are empty, or the thread count exceeds the limit). |
-| HCCL_E_RUNTIME | Failed to call the underlying runtime API (e.g., memory copy or memory reset). |
-| HCCL_E_MEMORY | Memory allocation or operation failed. |
+| HCCL_E_UNAVAIL | A resource is unavailable, for example, a CCU resource reuse exception (null reuse thread or excess threads). |
+| HCCL_E_RUNTIME | A call to an underlying runtime API (for example, memory copy or memory zeroing) fails. |
+| HCCL_E_MEMORY | Memory allocation or operation fails. |
 
 ## Constraints
 
@@ -77,11 +82,12 @@ The HcclSend and HcclRecv APIs use a synchronous call approach. They work in pai
 
 ![](figures/send_recv.png)
 
-- Must serialize the calls to all communication operators in multiple communicators on each device. Out-of-order/multi-threaded concurrent calls and thread reentrancy are not allowed.
-- On the same device, the threads that dispatch all collective communication operators in the same communicator must use the same context.
+- All communication operators in multiple communicators must be dispatched serially on each device. Out-of-order dispatch, multi-thread concurrent dispatch, and thread reentrancy are not supported.
+- On the same device, the dispatch threads of all communication operators in the same communicator must use the same context.
 <!-- npu="950" id14 -->
-- For 950PR/950DT, self receive is not supported. `HCCL_E_NOT_SUPPORT` is returned when `srcRank` equals the current rank.
+- For Ascend 950PR&950DT products, self receive is not supported. `HCCL_E_NOT_SUPPORT` is returned when `srcRank` equals the current rank.
 <!-- end id14 -->
+
 
 ## Example
 
@@ -100,28 +106,28 @@ HcclCommInitRootInfo(rankSize, &rootInfo, deviceId, &hcclComm);
 aclrtStream stream;
 aclrtCreateStream(&stream);
 
-// Perform the Send/Recv operations. Devices 0/2/4/6 send data, and devices 1/3/5/7 receive data.
-// HcclSend and HcclRecv are called synchronously and must be used in pairs.
+// Perform Send/Recv operations. Devices 0/2/4/6 send data, and devices 1/3/5/7 receive data.
+// HcclSend and HcclRecv are synchronous APIs and must be used in pairs.
 if (deviceId % 2 == 0) {
-    // Allocate device memory to store the input data.
+    // Allocate device memory for storing input data.
     aclrtMalloc(&sendBuf, mallocSize, ACL_MEM_MALLOC_HUGE_ONLY);
     // Initialize the input data.
     aclrtMemcpy(sendBuf, mallocSize, hostBuf, mallocSize, ACL_MEMCPY_HOST_TO_DEVICE);
     // Perform the Send operation.
     HcclSend(sendBuf, count, HCCL_DATA_TYPE_FP32, deviceId + 1, hcclComm, stream);
 } else {
-    // Allocate device memory to store the received data.
+    // Allocate device memory for receiving data.
     aclrtMalloc(&recvBuf, mallocSize, ACL_MEM_MALLOC_HUGE_ONLY);
     // Perform the Recv operation.
     HcclRecv(recvBuf, count, HCCL_DATA_TYPE_FP32, deviceId - 1, hcclComm, stream);
 }
 
-// Block and wait for the collective communication task in the task stream to complete.
+// Block and wait until the collective communication tasks in the task stream complete.
 aclrtSynchronizeStream(stream);
 
 // Release resources.
-aclrtFree(sendBuf);          // Free device-side memory.
-aclrtFree(recvBuf);          // Free device-side memory.
-aclrtDestroyStream(stream);  // Destroy the task stream.
+aclrtFree(sendBuf);          // Free the device memory.
+aclrtFree(recvBuf);          // Free the device memory.
+aclrtDestroyStream(stream);  // Destroy the stream.
 HcclCommDestroy(hcclComm);   // Destroy the communicator.
 ```

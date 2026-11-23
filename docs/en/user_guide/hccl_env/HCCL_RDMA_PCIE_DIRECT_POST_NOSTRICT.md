@@ -1,10 +1,10 @@
 # HCCL_RDMA_PCIE_DIRECT_POST_NOSTRICT
 
-<!-- md-trans-meta sourceCommit=unknown translatedAt=2026-09-12T10:07:30.574Z pushedAt=2026-09-18T08:03:58.223Z -->
+<!-- md-trans-meta sourceCommit=unknown translatedAt=2026-11-06T09:48:12.232Z pushedAt=2026-11-16T06:28:10.194Z nl=2 -->
 
-## Description
+## Function
 
-In multi-node communication where the host OS small-page memory page table size is not 4 KB, when communication operator dispatch performance is host-bound, you can set this environment variable to submit RDMA tasks via PCIe Direct, thereby improving communication operator dispatch performance.
+In multi-server communication where the host OS small-page memory page table size is not 4 KB, when communication operator dispatch performance is host-bound, you can set this environment variable to submit RDMA tasks via PCIe Direct, thereby improving communication operator dispatch performance.
 
 This environment variable supports the following value options:
 
@@ -30,21 +30,21 @@ export HCCL_RDMA_PCIE_DIRECT_POST_NOSTRICT=TRUE
 
 ## Constraints
 
-When using this environment variable, the context described in [Description](#description) must be met, that is:
+When using this environment variable, the context described in [Function](#function) must be met, that is:
 
-- Multi-node communication
+- Multi-server communication
 - The host OS small-page memory page table size is not 4 KB.
 
 ## Applicable Products
 
 <!-- npu="950" id1 -->
-- 950PR/950DT: Not supported
+- Ascend 950PR&950DT products: Not supported
 <!-- end id1 -->
 <!-- npu="A3" id2 -->
-- Atlas A3 training products/Atlas A3 inference products: Not supported
+- Atlas A3 products: Not supported
 <!-- end id2 -->
 <!-- npu="910b" id3 -->
-- Atlas A2 training products/Atlas A2 inference products: Supported
+- Atlas A2 products: Supported
 <!-- end id3 -->
 <!-- npu="910" id4 -->
 - Atlas training products: Not supported

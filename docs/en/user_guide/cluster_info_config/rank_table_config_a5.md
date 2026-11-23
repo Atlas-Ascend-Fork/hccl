@@ -1,10 +1,10 @@
-# Rank Table Configuration Resource Information (Ascend 950PR/Ascend 950DT)
+# Rank Table Configuration Resource Information (Ascend 950PR&950DT Products)
 
-<!-- md-trans-meta sourceCommit=unknown translatedAt=2026-09-02T07:34:31.681Z pushedAt=2026-09-11T02:09:42.629Z -->
+<!-- md-trans-meta sourceCommit=unknown translatedAt=2026-11-09T03:21:44.480Z pushedAt=2026-11-10T08:50:51.995Z nl=2 -->
 
-For Ascend 950PR/Ascend 950DT, the rank table file must be used together with the topology file to initialize the HCCL communicator.
+For Ascend 950PR&950DT products, the rank table file must be used together with the topology file to initialize the HCCL communicator.
 
-> [!NOTE]Note
+> [!NOTE]
 >
 > - The rank table file supports a maximum size of 1 GB.
 > - The rank table file is in JSON format. The comments in the JSON file examples shown in this section are only for ease of understanding. Delete the comments in the JSON file during actual use.
@@ -33,7 +33,7 @@ The topology file is in JSON format. A configuration example is shown below:
             "protocols": ["UB_CTP"],
             "local_a": 0,              // NPU0 shown in the preceding figure
             "local_a_ports": ["1/0"],  // The intra-server connection port is port 0 of Die1
-            "local_b": 1,              // NPU1 shown in the preceding figure
+            "local_b": 1,              // NPU1 shown in the preceding figure 
             "local_b_ports": ["1/0"],  // The intra-server connection port is port 0 of Die1
             "topo_instance_id": 0,
             "topo_type": "1DMESH",
@@ -43,7 +43,7 @@ The topology file is in JSON format. A configuration example is shown below:
             "link_type": "PEER2NET",
             "protocols": ["UB_CTP"],
             "local_a": 0,             // NPU0 shown in the preceding figure
-            "local_a_ports": ["0/4","0/5","0/6","0/7","1/5","1/6"],  // The inter-server connection ports are ports 4, 5, 6, and 7 of Die0, and ports 5 and 6 of Die1
+            "local_a_ports": ["0/4","0/5","0/6","0/7","1/5","1/6"],  // The inter-server connection ports are ports 4, 5, 6, and 7 of Die 0, and ports 5 and 6 of Die 1.
             "topo_instance_id": 0,
             "topo_type": "CLOS",
             "position": "DEVICE"
@@ -52,7 +52,7 @@ The topology file is in JSON format. A configuration example is shown below:
             "link_type": "PEER2NET",
             "protocols": ["UB_CTP"],
             "local_a": 1,             // Inter-server connection
-            "local_a_ports": ["0/4","0/5","0/6","0/7","1/5","1/6"],  // Inter-server connection ports are ports 4, 5, 6, and 7 of Die0, and ports 5 and 6 of Die1.
+            "local_a_ports": ["0/4","0/5","0/6","0/7","1/5","1/6"],  // The inter-server connection ports are ports 4, 5, 6, and 7 of Die 0, and ports 5 and 6 of Die 1.
             "topo_instance_id": 0,
             "topo_type": "CLOS",
             "position": "DEVICE"
@@ -73,7 +73,7 @@ The network topology file configuration is described as follows:
 | edge_list |  | Mandatory.<br>List of physical connection edges. |
 |  | net_layer | Mandatory.<br>Network layer to which the current physical link belongs. Value range: `[0, 7]`. |
 |  | link_type | Mandatory.<br>Connection type of the current physical link. Supported values:<br>  - `PEER2PEER`<br>  - `PEER2NET` |
-|  | protocols | Mandatory.<br>List of protocols supported by the current link. Supported values:<br>  - `UB_CTP`<br>  - `UB_TP`<br>  - `ROCE`<br>  - `HCCS`<br>  - `TCP`<br>  - `UB_MEM`<br>  - `UBOE` |
+|  | protocols | Mandatory.<br>List of protocols supported by the current link. Supported values:<br>  - UB_CTP<br>  - UB_RTP<br>  - ROCE<br>  - HCCS<br>  - TCP<br>  - UB_MEM<br>  - UBOE |
 |  | local_a | Mandatory.<br>Physical ID of the NPU at one end of the communication link.<br>This ID must exist in `peer_list`. |
 |  | local_a_ports | Mandatory.<br>List of ports on the `local_a` NPU used for the communication link at this layer. String type, 1–32 characters. Each port is formatted as `Die ID/Port ID`.<br>Example: `"local_a_ports": ["1/0"]` indicates port 0 of Die 1. |
 |  | local_b | Mandatory.<br>Physical ID of the NPU at the other end of the communication link.<br>This ID must exist in `peer_list`. |
@@ -84,11 +84,11 @@ The network topology file configuration is described as follows:
 
 ## Rank Table File Configuration
 
-The following example uses two AI Servers, each with two NPUs, to demonstrate the rank table configuration for the IPv4 address type:
+The following example uses two AI servers, each with two NPUs, to demonstrate the rank table configuration for the IPv4 address type:
 
 ```json
 {
-    "status": "completed",         // Rank table availability flag. "completed" indicates available.
+    "status": "completed",         // Rank table availability flag. "completed" indicates that the rank table is available.
     "version": "2.0",
     "rank_count": 4,
     "rank_list": [
@@ -108,7 +108,7 @@ The following example uses two AI Servers, each with two NPUs, to demonstrate th
                         {
                             "addr_type": "IPV4",
                             "addr": "172.16.0.10",
-                            "ports": ["1/0"]        // Connection port is port 0 of Die1.
+                            "ports": ["1/0"]        // The connection port is port 0 of Die 1.
                         }
                     ]
                 },{
@@ -120,12 +120,12 @@ The following example uses two AI Servers, each with two NPUs, to demonstrate th
                         {
                             "addr_type": "IPV4",
                             "addr": "172.16.0.15",
-                            "ports": ["0/4","0/5","0/6","0/7"],  // Connection ports are ports 4, 5, 6, and 7 of Die0.
+                            "ports": ["0/4","0/5","0/6","0/7"],  // The connection ports are ports 4, 5, 6, and 7 of Die 0.
                             "plane_id": "plane0"
                         },{
                             "addr_type": "IPV4",
                             "addr": "172.16.0.5",
-                            "ports": ["1/5","1/6"],  // Connection ports are ports 5 and 6 of Die1.
+                            "ports": ["1/5","1/6"],  // The connection ports are ports 5 and 6 of Die 1.
                             "plane_id": "plane1"
                         }
                     ]
@@ -264,45 +264,45 @@ The following uses two NPUs as an example to show the rank table configuration o
     "rank_count": 2,
     "rank_list": [
         {
-            "rank_id": 0,            // Unique rank identifier
-            "device_id": 0,          // Physical NPU ID
-            "local_id": 0,           // Unique NPU identifier in the current AI server
+            "rank_id": 0,            // Unique identifier of the rank.
+            "device_id": 0,          // Physical ID of the NPU.
+            "local_id": 0,           // Unique identifier of the NPU in the current AI server.
             "level_list": [
                 {
-                    "net_layer": 0,  // Device-side connection
+                    "net_layer": 0,  // Device-side connection.
                     "net_instance_id": "superpod_0_0",
                     "net_type": "TOPO_FILE_DESC",
                     "net_attr": "",
                     "rank_addr_list": [
                         {
                             "addr_type": "EID",
-                            "addr": "000000000000000000100000dfdf0020",  // EID obtained by querying with HCCN TOOL
-                            "ports": ["0/4"],                            // Connected to port 4 of Die0
+                            "addr": "000000000000000000100000dfdf0020",  // EID obtained by querying with HCCN TOOL.
+                            "ports": ["0/4"],                            // Connected port is port 4 of Die0.
                             "plane_id": "plane0"
                         },
                         {
                             "addr_type": "EID",
-                            "addr": "000000000000000000100000dfdf0028",  // EID obtained by querying with HCCN TOOL
-                            "ports": ["0/5"],                            // Connected to port 5 of Die0
+                            "addr": "000000000000000000100000dfdf0028",  // EID obtained by querying with HCCN TOOL.
+                            "ports": ["0/5"],                            // The connection port is port 5 of Die0.
                             "plane_id": "plane0"
                         },
                         {
                             "addr_type": "EID",
-                            "addr": "000000000000000000100000dfdf0030",  // EID obtained by querying with HCCN TOOL
-                            "ports": ["0/6"],                            // Connected to port 6 of Die0
+                            "addr": "000000000000000000100000dfdf0030",  // EID obtained by querying with HCCN TOOL.
+                            "ports": ["0/6"],                            // The connection port is port 6 of Die0.
                             "plane_id": "plane0"
                         }
                     ]
                 },
                 {
-                    "net_layer": 3,  // Host-side connection
+                    "net_layer": 3,  // Connection on the host
                     "net_instance_id": "cluster",
                     "net_type": "CLOS",
                     "net_attr": "",
                     "rank_addr_list": [
                         {
                             "addr_type": "IPV4",
-                            "addr": "192.168.100.101",  // IPv4 address obtained on the host using ifconfig -a
+                            "addr": "192.168.100.101",  // IPv4 address obtained on the host by running ifconfig -a
                             "ports": ["d2h"],           // Host NIC port
                             "plane_id": "plane0"
                         }
@@ -313,44 +313,44 @@ The following uses two NPUs as an example to show the rank table configuration o
         {
             "rank_id": 1,            // Unique rank identifier
             "device_id": 1,          // Physical NPU ID
-            "local_id": 1,           // Unique NPU identifier in the current AI server
+            "local_id": 1,           // Unique identifier of the NPU in the current AI server
             "level_list": [
                 {
-                    "net_layer": 0,  // Device-side connection
+                    "net_layer": 0,  // Connection on the device
                     "net_instance_id": "superpod_0_0",
                     "net_type": "TOPO_FILE_DESC",
                     "net_attr": "",
                     "rank_addr_list": [
                         {
                             "addr_type": "EID",
-                            "addr": "000000000000000000100000dfdf0021",  // EID obtained through HCCN TOOL query
-                            "ports": ["0/4"],                            // Connected to port 4 of Die0
+                            "addr": "000000000000000000100000dfdf0021",  // EID obtained by querying with HCCN TOOL
+                            "ports": ["0/4"],                            // The connection port is port 4 of Die0
                             "plane_id": "plane0"
                         },
                         {
                             "addr_type": "EID",
-                            "addr": "000000000000000000100000dfdf0029",  // EID obtained through HCCN TOOL query
-                            "ports": ["0/5"],                            // Connected to port 5 of Die0
+                            "addr": "000000000000000000100000dfdf0029",  // EID obtained by querying with HCCN TOOL
+                            "ports": ["0/5"],                            // The connection port is port 5 of Die0.
                             "plane_id": "plane0"
                         },
                         {
                             "addr_type": "EID",
-                            "addr": "000000000000000000100000dfdf0031",  // EID obtained through HCCN TOOL query
-                            "ports": ["0/6"],                            // Connected to port 6 of Die0
+                            "addr": "000000000000000000100000dfdf0031",  // EID obtained by querying through HCCN TOOL.
+                            "ports": ["0/6"],                            // The connection port is port 6 of Die0.
                             "plane_id": "plane0"
                         }
                     ]
                 },
                 {
-                    "net_layer": 3,  // Host-side connection
+                    "net_layer": 3,  // Host-side connection.
                     "net_instance_id": "cluster",
                     "net_type": "CLOS",
                     "net_attr": "",
                     "rank_addr_list": [
                         {
                             "addr_type": "IPV4",
-                            "addr": "192.168.100.102",  // IPv4 address obtained on the host using ifconfig -a
-                            "ports": ["d2h"],           // Host NIC port
+                            "addr": "192.168.100.102",  // IPv4 address obtained on the host by running ifconfig -a.
+                            "ports": ["d2h"],           // Host NIC port.
                             "plane_id": "plane0"
                         }
                     ]
@@ -377,7 +377,7 @@ The following table describes the rank table file configuration:
 |  | level_list |  |  | Mandatory.<br>Resource information of the rank at each network layer.<br>The array length must not exceed 8. |
 |  |  | net_layer |  | Mandatory.<br>Network layer. Value range: `[0, 7]`.<br>`net_layer` must be numbered starting from `0` and arranged in ascending order. |
 |  |  | net_instance_id |  | Mandatory.<br>Instance ID at this network layer. User-defined and must be unique within the same `net_layer`. Length must not exceed 1024 characters. |
-|  |  | net_type |  | Mandatory.<br>Network type of this layer.<br>When `net_layer` is set to `0`, this parameter can only be set to `TOPO_FILE_DESC`, indicating that the network is described via a topology file.<br>When `net_layer` is set to a non-zero value, this parameter supports the following values:<br>  - `CLOS`: All nodes are reachable, e.g., a fat-tree structure connected through switches.<br>  - `TOPO_FILE_DESC`: The network type is described via a topology file.
+|  |  | net_type |  | Mandatory.<br>Network type of this network layer.<br>When `net_layer` is set to `0`, this parameter can only be set to `TOPO_FILE_DESC`, indicating that the network is described via a topology file.<br>When `net_layer` is set to a non-zero value, this parameter supports the following values:<br>  - `CLOS`: All nodes are reachable, e.g., a fat-tree structure connected through switches.<br>  - `TOPO_FILE_DESC`: The network type is described via a topology file.
 |  |  | net_attr |  | Optional.<br>Reserved field for additional information about this network layer. |
 |  |  | rank_addr_list |  | Mandatory.<br>Network address information used by the current rank at this network layer.<br>The array length must not exceed 24. Each Die must be configured separately. |
 |  |  |  | addr_type | Mandatory.<br>Address type of the current rank. Supported values:<br>  - `EID`: Obtain the EID using HCCN TOOL.<br>  - `IPv4`: Host NIC only. Obtain it on the host using `ifconfig -a`. Configure the NIC that has a one-hop PCIe-SW connection to the NPU.<br>  - `IPv6`: Host NIC only. Obtain it on the host using `ifconfig -a`. Configure the NIC that has a one-hop PCIe-SW connection to the NPU. |

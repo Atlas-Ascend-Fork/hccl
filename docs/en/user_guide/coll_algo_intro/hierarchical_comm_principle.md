@@ -1,6 +1,6 @@
 # Hierarchical Communication Principles
 
-<!-- md-trans-meta sourceCommit=unknown translatedAt=2026-09-02T07:36:15.767Z pushedAt=2026-09-03T11:42:41.387Z -->
+<!-- md-trans-meta sourceCommit=unknown translatedAt=2026-11-09T03:21:30.630Z pushedAt=2026-11-10T09:36:29.249Z nl=2 -->
 
 The following uses the communication operators ReduceScatter, AllGather, and AllReduce as examples to introduce the hierarchical communication flow.
 

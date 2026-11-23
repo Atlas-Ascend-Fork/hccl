@@ -1,6 +1,6 @@
 # Related Concepts
 
-<!-- md-trans-meta sourceCommit=unknown translatedAt=2026-09-02T08:00:06.533Z pushedAt=2026-09-07T10:00:54.247Z -->
+<!-- md-trans-meta sourceCommit=unknown translatedAt=2026-11-09T03:29:22.496Z pushedAt=2026-11-12T08:45:49.060Z nl=2 -->
 
 Before using this document, it is recommended that readers familiarize themselves with HCCL-related concepts.
 

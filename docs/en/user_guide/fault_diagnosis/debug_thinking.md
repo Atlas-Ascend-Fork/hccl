@@ -1,14 +1,14 @@
 # Troubleshooting Approach
 
-<!-- md-trans-meta sourceCommit=unknown translatedAt=2026-09-08T03:33:03.898Z pushedAt=2026-09-11T03:09:00.031Z -->
+<!-- md-trans-meta sourceCommit=unknown translatedAt=2026-11-09T03:26:44.050Z pushedAt=2026-11-11T07:43:41.555Z nl=2 -->
 
 ## Prerequisites
 
 Before performing fault localization, ensure that you are familiar with basic HCCL concepts and auxiliary fault localization functions.
 
-For HCCL, fault codes cover most common issues. If the error message does not contain fault code information, or if the fault code is EI9999, the issue may be a relatively rare fault scenario or an internal HCCL problem. In such cases, analyze the issue based on the actual CANN logs and code. If the issue cannot be resolved, contact technical support.
+For HCCL, error codes cover most common issues. If the error message does not contain error code information, or if the error code is EI9999, the issue may be a relatively rare fault scenario or an internal HCCL problem. In such cases, analyze the issue based on the actual CANN logs and code. If the issue cannot be resolved, contact technical support.
 
-For issues without a clear first reported error, when performing fault localization in a large cluster, it is necessary to sort out the behavior of each rank and identify the root node through the dependencies between ranks. To address this challenge, HCCL provides the link establishment root node localization capability and the cluster heartbeat capability, and it outputs diagnostic results for common issues. For related principles, see [Link Establishment Failure Troubleshooting Approach](./param_link_stage.md#troubleshooting-approach-for-link-setup-failures) and [Cluster Heartbeat Mechanism](./task_exec_stage.md#cluster-heartbeat-mechanism).
+For issues without a clear first reported error, when performing fault localization in a large cluster, it is necessary to sort out the behavior of each rank and identify the root node through the dependencies between ranks. To address this challenge, HCCL provides the link setup root node localization capability and the cluster heartbeat capability, and it outputs diagnostic results for common issues. For related principles, see [Link Setup Failure Troubleshooting Approach](./param_link_stage_troubleshooting.md#troubleshooting-approach-for-link-setup-failures) and [Cluster Heartbeat Mechanism](./_dump_cluster_heartbeat_mechanism.md#cluster-heartbeat-mechanism).
 
 This document is applicable to the following scenarios:
 
@@ -18,29 +18,17 @@ This document is applicable to the following scenarios:
 
 ### Fault Diagnosis-Related Environment Variables
 
-- [HCCL_CONNECT_TIMEOUT](../hccl_env/HCCL_CONNECT_TIMEOUT.md), [HCCL_EXEC_TIMEOUT](../hccl_env/HCCL_EXEC_TIMEOUT.md)
+- [HCCL_CONNECT_TIMEOUT](../hccl_env/HCCL_CONNECT_TIMEOUT.md), and [HCCL_EXEC_TIMEOUT](../hccl_env/HCCL_EXEC_TIMEOUT.md)
 
-  Timeout durations for HCCL during the link establishment phase and the execution phase. It is recommended that the value configured for HCCL_CONNECT_TIMEOUT be smaller than that for HCCL_EXEC_TIMEOUT, so that the first error information can be correctly reported in complex scenarios, thereby distinguishing whether the blocking of an abnormal service process is caused by the local end or the remote end.
+  Timeout durations for HCCL during the link setup phase and the execution phase. It is recommended that the value configured for HCCL_CONNECT_TIMEOUT be smaller than that for HCCL_EXEC_TIMEOUT, so that the first error information can be correctly reported in complex scenarios, thereby distinguishing whether the blocking of an abnormal service process is caused by the local end or the remote end.
 
 - [HCCL_ENTRY_LOG_ENABLE](../hccl_env/HCCL_ENTRY_LOG_ENABLE.md)
 
   A switch for recording HCCL operator-level input parameters. When the root cause of a cluster behavior consistency issue cannot be identified through other means, this environment variable can be enabled to record the collective communication behavior on different ranks, and cross-card horizontal comparison can be used to assist in locating the point where the behavior divergence is introduced.
 
-    <!-- npu="A3,910b" id1 -->
 - [HCCL_DEBUG_CONFIG](../hccl_env/HCCL_DEBUG_CONFIG.md)
 
-    HCCL module-level log switch. During operator development and debugging, this configuration can be used to analyze log information such as algorithm selection and task orchestration within the operator.
-
-    This environment variable is supported only on the following products:
-
-    <!-- npu="A3" id2 -->
-    Atlas A3 training products/Atlas A3 inference products
-    <!-- end id2 -->
-
-    <!-- npu="910b" id3 -->
-    Atlas A2 training products/Atlas A2 inference products
-    <!-- end id3 -->
-    <!-- end id1 -->
+  HCCL module-level log switch. During operator development and debugging, this configuration can be used to analyze log information such as algorithm selection and task orchestration within the operator.
 
 - [HCCL_DFS_CONFIG](../hccl_env/HCCL_DFS_CONFIG.md)
 
@@ -51,8 +39,23 @@ This document is applicable to the following scenarios:
 HCCL log information is recorded in CANN logs. For details about CANN logs, see *[Log Reference](https://hiascend.com/en/document/redirect/CannCommunitylogref)*.
 
 - When HCCL reports an error, key fault information is printed in the debug directory of CANN logs. In addition, in some service scenarios where training frameworks are used, HCCL also prints key error information in the service logs.
-- In the run directory of CANN logs, HCCL records some key runtime logs by default, such as communicator initialization and destruction (printed by default) and communication operator dispatch (requires the `HCCL_ENTRY_LOG_ENABLE` environment variable to be enabled). Examples of key logs are as follows:
+- In the run directory of CANN logs, HCCL records some key run logs by default, such as communicator initialization and destruction (printed by default) and communication operator dispatch (requires the `HCCL_ENTRY_LOG_ENABLE` environment variable to be enabled). Examples of key logs are as follows:
   - Communicator initialization:
+
+    <!-- npu="950" id13 -->
+    For Ascend 950PR&950DT products, the log example is as follows:
+
+    ```text
+    Entry-HcclGetRootInfo V950
+    Entry-HcclCommInitRootInfo V950, rankId[0], rankNum[16].
+    ```
+
+    - rankId: Rank ID of the current rank within the communicator.
+    - rankNum: Communicator size.
+    <!-- end id13 -->
+
+    <!-- npu="A3,910b" id12 -->
+    For Atlas A3 products and Atlas A2 products, the log example is as follows:
 
     ```text
     Entry-HcclGetRootInfo:rootInfo[0x7fffcd65f130], deviceLogicId[0]
@@ -63,14 +66,47 @@ HCCL log information is recorded in CANN logs. For details about CANN logs, see 
     - rank: Rank number of the current rank within the communicator.
     - rootinfo: Information about the root node.
     - identifier: Name of the communicator.
+    <!-- end id12 -->
 
   - Communicator destruction:
+
+    <!-- npu="950" id15 -->
+    For Ascend 950PR&950DT products, the log example is as follows, where `comm` indicates the communicator name:
+
+    ```text
+    Entry-HcclCommDestroy V950 comm[group_name_0]
+    ```
+    <!-- end id15 -->
+
+    <!-- npu="A3,910b" id14 -->
+    For Atlas A3 products and Atlas A2 products, the log example is as follows:
 
     ```text
     Entry-HcclCommDestroy: op_base comm destroy begin
     ```
+    <!-- end id14 -->
 
   - Communication operator dispatch (requires enabling the HCCL_ENTRY_LOG_ENABLE environment variable):
+
+    <!-- npu="950" id17 -->
+    For Ascend 950PR&950DT products, the log example is as follows:
+
+    ```text
+    Entry-HcclAllReduce: tag[AllReduce_127.10.0.1%eth1_30000_0_1736576907435382], sendBuf[0x12e7bf550000], recvBuf[0x12e7bf550000], count[531260224], dataType[float32], reduceOp[sum], streamId[5], deviceId[0]
+    ```
+
+    - tag: Communication operator identifier.
+    - sendBuf: Input data address pointer.
+    - recvBuf: Output data address pointer.
+    - count: Data volume.
+    - dataType: Data type.
+    - reduceOp: Reduce computation type.
+    - streamId: Stream on which the communication operator is executed.
+    - deviceId: Device logical ID delivered by the communication operator.
+    <!-- end id17 -->
+
+    <!-- npu="A3,910b" id16 -->
+    For Atlas A3 products and Atlas A2 products, the log example is as follows:
 
     ```text
     Entry-HcclAllReduce: tag[AllReduce_127.10.0.1%eth1_30000_0_1736576907435382], sendBuf[0x12e7bf550000], recvBuf[0x12e7bf550000], count[531260224], dataType[float32], op[sum], localRank[0], streamId[5],comm[0x331c9c00], deviceLogicId[0]
@@ -82,19 +118,38 @@ HCCL log information is recorded in CANN logs. For details about CANN logs, see 
     - count: Data volume.
     - dataType: Data type.
     - op: Reduce computation type.
-    - localRank: Local rank number.
+    - localRank: Local rank ID.
     - streamId: Stream on which the communication operator is executed.
-    - comm: Communicator pointer.
-    - deviceLogicid: Device logical ID delivered by the communication operator.
+    - comm: Communicator handle.
+    - deviceLogicId: Device logical ID delivered by the communication operator.
+    <!-- end id16 -->
 
-  - To facilitate quick retrieval and identification of communicator and local information, HCCL provides quick retrieval keywords: `Communicator Key Info` and `LocalRank Key Info`.
+  - To facilitate quick retrieval and identification of communicator, local end, and link information, HCCL provides quick retrieval keywords: `Communicator Key Info`, `LocalRank Key Info`, and `LinkInfo`.
+
+    <!-- npu="950" id19 -->
+    For Ascend 950PR&950DT products, the log example is as follows:
+
+    ```text
+    [Communicator Key Info]identifier[group_name_0] rankSize[8] comm[0x331c9c00]
+    [LocalRank Key Info]userRank[3] deviceLogicId[1]
+    [LinkInfo]userRank[3] remoteRank[4] localProtocol[6] remoteProtocol[6] engine[AICPU_TS] channel[1/1]
+    ```
+
+    - Communicator key information: `identifier[communicator name]`, `rankSize[communicator size]`, `comm[communicator handle]`.
+    - Local end key information: `userRank[rank ID in the communicator]`, `deviceLogicId[device logical ID]`.
+    - Link key information: `userRank[local rank ID]`, `remoteRank[remote rank ID]`, `localProtocol[local communication protocol]`, `remoteProtocol[remote communication protocol]`, `engine[communication engine]`, `channel[current channel number/total number of channels]`.
+    <!-- end id19 -->
+
+    <!-- npu="A3,910b" id18 -->
+    For Atlas A3 products and Atlas A2 products, the log examples are as follows:
+
     - For example, executing `grep -r "Communicator Key Info"` yields the following information:
 
       ```text
       run/plog/plog-858941_20251210195327204.log:[INFO] HCCL(858941,all_reduce_test):2025-12-10-19:53:28.131.350 [hccl_communicator_attrs.cc:327] [858941][Communicator Key Info]identifier[127.0.0.1%enp_60000_0_1765367607599032] rankSize[8] serverNum[1] moduleNum[1] superPodNum[0] multiModuleDiffDeviceNumMode[0] multiSuperPodDiffServerNumMode[0]
       ```
 
-      Communicator key information: `identifier[communicator name]`, `rankSize[communicator size]`, `serverNum[number of servers within communicator]`, `moduleNum[number of modules within communicator]`, `superPodNum[number of super pods within communicator]`, `multiModuleDiffDeviceNumMode[Whether the device count differs between modules]`, `multiSuperPodDiffServerNumMode[Whether the server count differs between super pods]`. In the information, "1" indicates yes and "0" indicates no.
+      Communicator key information: `identifier[communicator name]`, `rankSize[communicator size]`, `serverNum[number of servers within communicator]`, `moduleNum[number of modules within communicator]`, `superPodNum[number of SuperPoDss within communicator]`, `multiModuleDiffDeviceNumMode[Whether the device count differs between modules]`, `multiSuperPodDiffServerNumMode[Whether the server count differs between SuperPoDss]`. In the information, "1" indicates yes and "0" indicates no.
 
     - For example, executing `grep -r "LocalRank Key Info"` yields the following information:
 
@@ -103,17 +158,32 @@ HCCL log information is recorded in CANN logs. For details about CANN logs, see 
       ```
 
       Local key information: `userRank[Rank number within communicator]`, `hostIp[host-side IP]`, `devicePhyId[physical ID]`, `server[node information]`, `deviceIp[device-side IP]`, `superPodId[superPod ID]`, `useSuperPodMode[Whether it is superPod mode]`, `isStandardCard[Whether it is a standard card scenario]`. In the information, "1" indicates yes, and "0" indicates no.
+    <!-- end id18 -->
 
   - To query the environment variables that have been successfully configured, their configured and effective values are printed in the `run/plog` directory of CANN logs.
+
+    <!-- npu="950" id9 -->
+    **For Ascend 950PR&950DT products**, you can search for the keyword `HCCL_ENV` to query the effective values and sources of environment variables (environment variables or default values). In some versions, you can search for `base_config` or `Env config` and view the following logs together with the environment variable names. When an environment variable configuration exception occurs, search for `[InitGroupStage][EnvConfig]` and refer to [Environment Variable Configuration Error Troubleshooting Approach](env_config_error_EI0001_troubleshooting.md).
+
+    ```text
+    [INFO] HCCL(229424,python3.8):2025-12-23-22:31:40.239.170[base_config.cc:33][229424][Init][EnvVarParam]Env config "HCCL_IF_IP" is not set. Default value is used.
+    [INFO] HCCL(229424,python3.8):2025-12-23-22:31:40.239.176[base_config.cc:33][229424][Init][EnvVarParam]Env config "HCCL_IF_BASE_PORT" is not set. Default value is used.
+    [INFO] HCCL(229424,python3.8):2025-12-23-22:31:40.239.181[base_config.cc:33][229424][Init][EnvVarParam]Env config "HCCL_SOCKET_IFNAME" is not set. Default value is used.
+    [INFO] HCCL(229424,python3.8):2025-12-23-22:31:40.239.187[base_config.cc:33][229424][Init][EnvVarParam]Env config "HCCL_WHITELIST_DISABLE" is not set. Default value is used.
+    [INFO] HCCL(229424,python3.8):2025-12-23-22:31:40.239.192[base_config.cc:33][229424][Init][EnvVarParam]Env config "HCCL_HOST_SOCKET_PORT_RANGE" is not set. Default value is used.
+    [INFO] HCCL(229424,python3.8):2025-12-23-22:31:40.239.197[base_config.cc:33][229424][Init][EnvVarParam]Env config "HCCL_SOCKET_FAMILY" is not set. Default value is used.
+    [INFO] HCCL(229424,python3.8):2025-12-23-22:31:40.239.206[base_config.cc:33][229424][Init][EnvVarParam]Env config "HCCL_CONNECT_TIMEOUT" is parsed.
+    ```
+    <!-- end id9 -->
 
     <!-- npu="A3,910b,910,310p" id8 -->
      For the following products, the actual effective values of environment variables for each process can be queried by searching for the keyword `HCCL_ENV`. For example, execute: `grep -r "HCCL_ENV" run/plog/plog-_xxx_.log`.
 
       <!-- npu="A3" id4 -->
-    - Atlas A3 training products/Atlas A3 inference products
+    - Atlas A3 products
       <!-- end id4 -->
       <!-- npu="910b" id5 -->
-    - Atlas A2 training products/Atlas A2 inference products
+    - Atlas A2 products
       <!-- end id5 -->
       <!-- npu="910" id6 -->
     - Atlas training products
@@ -155,25 +225,11 @@ HCCL log information is recorded in CANN logs. For details about CANN logs, see 
     ```
     <!-- end id8 -->
 
-    <!-- npu="950" id9 -->
-    **For Ascend 950PR/Ascend 950DT**, the currently configured environment variables can be queried by searching for the keyword "base_config".
-
-    ```text
-    [INFO] HCCL(229424,python3.8):2025-12-23-22:31:40.239.170[base_config.cc:33][229424][Init][EnvVarParam]Env config "HCCL_IF_IP" is not set. Default value is used. 
-    [INFO] HCCL(229424,python3.8):2025-12-23-22:31:40.239.176[base_config.cc:33][229424][Init][EnvVarParam]Env config "HCCL_IF_BASE_PORT" is not set. Default value is used. 
-    [INFO] HCCL(229424,python3.8):2025-12-23-22:31:40.239.181[base_config.cc:33][229424][Init][EnvVarParam]Env config "HCCL_SOCKET_IFNAME" is not set. Default value is used. 
-    [INFO] HCCL(229424,python3.8):2025-12-23-22:31:40.239.187[base_config.cc:33][229424][Init][EnvVarParam]Env config "HCCL_WHITELIST_DISABLE" is not set. Default value is used. 
-    [INFO] HCCL(229424,python3.8):2025-12-23-22:31:40.239.192[base_config.cc:33][229424][Init][EnvVarParam]Env config "HCCL_HOST_SOCKET_PORT_RANGE" is not set. Default value is used. 
-    [INFO] HCCL(229424,python3.8):2025-12-23-22:31:40.239.197[base_config.cc:33][229424][Init][EnvVarParam]Env config "HCCL_SOCKET_FAMILY" is not set. Default value is used. 
-    [INFO] HCCL(229424,python3.8):2025-12-23-22:31:40.239.206[base_config.cc:33][229424][Init][EnvVarParam]Env config "HCCL_CONNECT_TIMEOUT" is parsed. 
-    ```
-    <!-- end id9 -->
-
 ## Rapid Fault Localization and Delimitation Approach
 
 1. Determine whether the error is HCCL-related.
-    - For common error scenarios, HCCL reports error information and fault information in the service console logs. If a fault code such as `EI****` or `EJ****` is found in the service logs, the fault can be diagnosed based on the corresponding fault information, or the relevant sections can be checked in combination with the error information in the CANN logs. For the fault code list, see [HCCL-Related Fault Codes](#hccl-related-fault-codes).
-    - In addition to the fault code information printed on the console, HCCL prints ERROR-level logs of the HCCL component in the CANN logs. Therefore, if no error log of the HCCL component is found in the CANN logs, it is necessary to check whether there are error messages from other components. If no error is found, check whether the training script itself is abnormal, or whether there are other anomalies such as core dumps or process hangs.
+    - For common error scenarios, HCCL reports error information and fault information in the service console logs. If an error code such as `EI****` or `EJ****` is found in the service logs, the fault can be diagnosed based on the corresponding fault information, or the relevant sections can be checked in combination with the error information in the CANN logs. For the error code list, see [HCCL-Related Error Codes](#hccl-related-error-codes).
+    - In addition to the error code information printed on the console, HCCL prints ERROR-level logs of the HCCL component in the CANN logs. Therefore, if no error log of the HCCL component is found in the CANN logs, it is necessary to check whether there are error messages from other components. If no error is found, check whether the training script itself is abnormal, or whether there are other anomalies such as core dumps or process hangs.
 
 2. Collect all CANN logs.
 
@@ -193,44 +249,84 @@ HCCL log information is recorded in CANN logs. For details about CANN logs, see 
 
     - HCCL provides communicator creation interfaces and communication operator interfaces. Both types of interfaces are synchronously submitted and asynchronously executed. Therefore, the following scenarios can be distinguished:
         - If the service fails when calling the communicator creation interface, or if keywords such as `topoinfo` and `ranktable` appear in the error logs, refer to the [Communicator Initialization Phase](comm_domain_init_stage.md) chapter for further troubleshooting.
-        - If the service fails when calling the communication operator interface, or if the keyword `transport` appears in the error logs, refer to the [Parameter Plane Establishment Phase](param_link_stage.md) chapter for further troubleshooting.
-        - If both the communicator creation interface and the communication operator submission succeed, but an HCCL operator execution failure occurs during stream synchronization, or if keywords such as "TaskExceptionHandler", "FFTS+ run failed", or "Task run failed" appear in the error logs, refer to the [Task Dispatch and Execution Phase](task_exec_stage.md) chapter for further troubleshooting.
+        - If the service fails when calling the communication operator interface, or if the keyword `transport` appears in the error logs, refer to the [Parameter Plane Link Setup Phase](_dump_param_link_stage.md) chapter for further troubleshooting.
+        - If both the communicator creation interface and the communication operator submission succeed, but an HCCL operator execution failure occurs during stream synchronization, or if keywords such as "TaskExceptionHandler", "FFTS+ run failed", or "Task run failed" appear in the error logs, refer to the [Task Dispatch and Execution Phase](_dump_task_exec_stage.md) chapter for further troubleshooting.
 
-            In addition to the key information from these three phases, if explicit error code information such as `EI0001` appears in the service console logs, you can directly locate the corresponding fault code in the subsequent content based on the error code and proceed with further troubleshooting.
+            In addition to the key information from these three phases, if explicit error code information such as `EI0001` appears in the service console logs, you can directly locate the corresponding error code in the subsequent content based on the error code and proceed with further troubleshooting.
 
 ### HCCL Multi-Level Retrieval Keywords
 
 | Primary Keyword | Secondary Retrieval Keyword | Fault Scenario |
 | --- | --- | --- |
-| InitGroupStage | EnvConfig | [Environment Variable Configuration Exception During Communicator Initialization](env_config_error_EI0001.md) |
-|                |RanktableConfig | [rankTable File Read Failure During Communicator Initialization](rank_table_load_fail.md) |
-|                |RanktableCheck | [Cluster Information Verification Failure During Communicator Initialization](cluster_info_verify_fail.md) |
-|                |RanktableDetect | [Cluster Information Detection Failure During Communicator Initialization](cluster_info_nego.md) |
-|                |Resource | Node resource initialization failure during communicator initialization |
-| InitChannelStage | ParameterConflict | [Parameter Consistency Verification Failure During Parameter Plane Link Establishment](./param_link_stage.md#parameter-consistency-check-ei0005) |
-|                |VersionConflict | HCCL version inconsistency verification failure during parameter plane link establishment |
-|                |Timeout | [Timeout Error During Parameter Plane Link Establishment](./param_link_stage.md#link-setup-timeout-ei0006) |
-| TaskExecStage | InvalidArgument | Input parameter verification failure during operator execution |
-|               |Not Supported | Unsupported scenario during operator execution |
-|               |Timeout | [Execution Timeout During Operator Execution](./task_exec_stage.md#troubleshooting-approach) |
-|               |RunFailed | [Execution Failure During Operator Execution](./task_exec_stage.md#task-exception-mechanism) |
-|               |HeartbeatAbnormal | [Heartbeat Abnormal Event Detected During Operator Execution](./task_exec_stage.md#cluster-heartbeat-mechanism) |  |
+| InitGroupStage | EnvConfig | [Environment Variable Configuration Error During Communicator Initialization](_dump_env_config_error_EI0001.md) |
+|                |RanktableConfig | [Rank Table File Reading Failure During Communicator Initialization](rank_table_file_read_fail_EI0004.md) |
+|                |RanktableCheck | [Rank Table Cluster Information Verification Failure During Communicator Initialization](_dump_cluster_info_verify_fail.md) |
+|                |RanktableDetect | [Cluster Information Detection Failure During Communicator Initialization](_dump_cluster_info_nego.md) |
+|                |Resource | Node Resource Initialization Failure During Communicator Initialization |
+| InitChannelStage | ParameterConflict | [Parameter Consistency Verification Failure During Parameter Plane Link Setup](./param_consistency_check_EI0005.md#parameter-consistency-check-ei0005) |
+|                |VersionConflict | HCCL Version Inconsistency Verification Failure During Parameter Plane Link Setup |
+|                |Timeout | [Timeout Error During Parameter Plane Link Setup](./link_timeout_EI0006.md#link-setup-timeout-ei0006) |
+| TaskExecStage | InvalidArgument | Input Parameter Verification Failure During Operator Execution |
+|               |Not Supported | Unsupported Scenario During Operator Execution |
+|               |Timeout | [Execution Timeout During Operator Execution](./task_exec_stage_troubleshooting.md#troubleshooting-approach) |
+|               |RunFailed | [Execution Failure During Operator Execution](./_dump_task_exception_mechanism.md#task-exception-mechanism) |
+|               |HeartbeatAbnormal | [Heartbeat Abnormal Event Detected During Operator Execution](_dump_cluster_heartbeat_mechanism.md#cluster-heartbeat-mechanism) |
 
-### HCCL-Related Fault Codes
+### HCCL-Related Error Codes
 
-| Fault Code | Fault Code Description |
+The table in this section is intended for quick search and does not serve as a complete list of error codes. For the complete definitions, symptoms, possible causes, and solutions of error codes, see *[HCCL Error Code Reference](https://gitcode.com/cann/hcomm/blob/master/docs/en/error_codes/README.md)*. For scenario-based troubleshooting guidance, see [Fault Diagnosis](README.md).
+
+<!-- npu="950" id10 -->
+The following plog keyword table applies only to Ascend 950PR&950DT products and can be used to quickly locate common faults of these products. The tertiary keyword is used to further identify the task execution mode or exception type, with values including `HOST`, `AICPU`, `AIV`, `CCU`, and `CQE ERROR`. If input argument verification and environment variable verification do not enter the task execution phase, no tertiary keyword is present.
+
+| Error Code or Scenario | Primary Keyword | Secondary Keyword | Tertiary Keyword |
+| --- | --- | --- | --- |
+| EI0001 environment variable configuration exception | InitGroupStage | EnvConfig | - |
+| EI0003 operator input argument verification failure | TaskExecStage | InvalidArgument | - |
+| EI0002 (HOST execution timeout) | TaskExecStage | Timeout | HOST |
+| Other HOST execution exceptions | TaskExecStage | RunFailed | HOST |
+| EI0002 (AICPU execution timeout) | TaskExecStage | Timeout | AICPU |
+| Other AICPU execution exceptions | TaskExecStage | RunFailed | AICPU |
+| Other AIV execution exceptions | TaskExecStage | RunFailed | AIV |
+| EI0002 (CCU execution timeout) | TaskExecStage | Timeout | CCU |
+| Other CCU execution exceptions | TaskExecStage | RunFailed | CCU |
+| CQE error | TaskExecStage | RunFailed | CQE ERROR |
+| CQE error detected by heartbeat | TaskExecStage | HeartbeatAbnormal | CQE ERROR |
+| EI0007 communicator initialization resource allocation failure | InitGroupStage | Resource | - |
+| EI0007 parameter plane resource allocation failure | InitChannelStage | Resource | - |
+| EI0009 transfer initialization failure | InitGroupStage | RunFailed | - |
+| EI0014 rankTable cluster configuration verification failure | InitGroupStage | RanktableCheck | - |
+| EI0015 exception during the cluster information negotiation phase | InitGroupStage | RanktableDetect | - |
+| EI0016 communicator configuration item verification failure | InitGroupStage | RanktableCheck | - |
+
+The error code descriptions are subject to the product scope indicated in the table. Multi-level search keywords are used to locate the fault phase and are not used to uniquely identify an error code. For Ascend 950PR&950DT products, both EI0014 and EI0016 belong to configuration verification during the communicator initialization phase, so they share the same search keywords. The specific cause must be distinguished by combining the error code and the error message.
+
+For example, you can use `grep -F '[TaskExecStage][InvalidArgument]'` to locate operator input argument verification errors, and use `grep -F '[TaskExecStage][Timeout][AICPU]'` to locate AICPU execution timeouts. `Communicator Key Info`, `LocalRank Key Info`, and `LinkInfo` are used to assist in searching for communicator, local rank, and link information, and can be combined as needed.
+
+<!-- end id10 -->
+
+<!-- npu="A3,910b" id11 -->
+The following error code description table applies to Atlas A3 products and Atlas A2 products.
+
+| Error Code | Error Code Description |
 | --- | --- |
-| EI0001 | [Environment Variable Configuration Error](env_config_error_EI0001.md) |
-| EI0002 | [Communication Operator Execution Timeout](./task_exec_stage.md#troubleshooting-approach) |
-| EI0003 | Collective communication operator input parameter verification failed |
-| EI0004 | [rankTable File Loading Failure](rank_table_load_fail.md) |
-| EI0005 | [Parameter Consistency Verification Failure](./param_link_stage.md#parameter-consistency-check-ei0005) |
-| EI0006 | [Communication Operator Parameter Plane Link Establishment Timeout](./param_link_stage.md#link-setup-timeout-ei0006) |
-| EI0007 | Resource initialization failed |
-| EI0008 | HCCL version mismatch, verification failed |
-| EI0011 | [QP Memory Resource Application Failure](./param_link_stage.md#qp-memory-resource-allocation-ei0011) |
-| EI0012 | [SDMA Task Exception During Operator Execution](./task_exec_stage.md#sdma-error-ei0012) |
-| EI0013 | [ROCE CQE ERROR Exception During Operator Execution](./task_exec_stage.md#sdma-error-ei0012) |
-| EI0014 | [Cluster Information Verification Failure](cluster_info_verify_fail.md) |
-| EI0015 | [Communicator Cluster Information Negotiation Phase Timeout](cluster_info_nego.md) |
-| EI0019 | [Server Node Port Binding Failure During Communicator Creation Phase](./cluster_info_nego.md#server-node-port-binding-failure-ei0019) or [Port Binding Failure During Parameter Plane Link Establishment Phase](./param_link_stage.md#parameter-plane-port-binding-failure-ei0019) |
+| EI0001 | [Environment Variable Configuration Error](_dump_env_config_error_EI0001.md) |
+| EI0002 | [Communication Operator Execution Timeout](task_exec_stage_troubleshooting.md#troubleshooting-approach) |
+| EI0003 | Collective communication operator input argument verification failure. Determine the cause based on the specific input argument in the error message. |
+| EI0004 | [Rank Table File Loading Failure](_dump_rank_table_load_fail.md) |
+| EI0005 | [Parameter Consistency Verification Failure](param_consistency_check_EI0005.md#parameter-consistency-check-ei0005) |
+| EI0006 | [Communication Operator Parameter Plane Link Setup Timeout](link_timeout_EI0006.md#link-setup-timeout-ei0006) |
+| EI0007 | Resource initialization failure. Determine the specific failure cause based on the error message. |
+| EI0008 | HCCL version inconsistency verification failure. Determine the cause based on the version information in the error message. |
+| EI0009 | Transfer initialization failure. Determine the specific failure cause based on the error message. |
+| EI0010 | Inter-card link setup failure within a server. Determine the specific failure cause based on the error message. |
+| EI0011 | [QP Memory Resource Allocation Failure](qp_mem_resource_apply_EI0011.md#qp-memory-resource-allocation-ei0011) |
+| EI0012 | [SDMA Task Exception During Operator Execution](./sdma_error_EI0012.md#sdma-error-ei0012) |
+| EI0013 | [ROCE CQE ERROR Exception During Operator Execution](./error_cqe_report_EI0013.md#error-cqe-error-report-ei0013) |
+| EI0014 | [Cluster Information Verification Failure](_dump_cluster_info_verify_fail.md) |
+| EI0015 | [Communicator Cluster Information Negotiation Phase Timeout](_dump_cluster_info_nego.md) |
+| EI0016 | [TLS Information Configuration Inconsistency](tls_info_config_inconsistent_EI0016.md) |
+| EI0019 | [Server Node Port Binding Failure During Communicator Creation](./server_node_port_bind_fail_EI0019.md#server-node-port-binding-failure-ei0019) or [Port Binding Failure During Parameter Plane Link Setup](./param_port_bind_fail_EI0019.md#parameter-plane-port-binding-failure-ei0019) |
+| EI9999 | HCCL internal error. Troubleshoot by combining CANN logs. If the issue persists, contact technical support. |
+
+<!-- end id11 -->

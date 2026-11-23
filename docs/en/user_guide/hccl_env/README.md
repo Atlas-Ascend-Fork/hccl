@@ -1,6 +1,6 @@
-# Environment Variables Reference
+# Environment Variables
 
-<!-- md-trans-meta sourceCommit=unknown translatedAt=2026-09-12T10:56:33.430Z pushedAt=2026-09-18T08:03:58.271Z -->
+<!-- md-trans-meta sourceCommit=unknown translatedAt=2026-11-06T09:50:41.079Z pushedAt=2026-11-16T06:28:10.248Z nl=2 -->
 
 - [Features](feature_related.md)
   - [HCCL_CONNECT_TIMEOUT](HCCL_CONNECT_TIMEOUT.md)
@@ -11,6 +11,7 @@
   - [HCCL_INTRA_ROCE_ENABLE](HCCL_INTRA_ROCE_ENABLE.md)
   - [HCCL_INTER_HCCS_DISABLE](HCCL_INTER_HCCS_DISABLE.md)
   - [HCCL_OP_EXPANSION_MODE](HCCL_OP_EXPANSION_MODE.md)
+  - [HCOMM_AICPU_TASK_CACHE_ENABLE](HCOMM_AICPU_TASK_CACHE_ENABLE.md)
   - [HCCL_DETERMINISTIC](HCCL_DETERMINISTIC.md)
   - [HCCL_LOGIC_SUPERPOD_ID](HCCL_LOGIC_SUPERPOD_ID.md)
 
@@ -22,6 +23,7 @@
   - [HCCL_MULTI_QP_THRESHOLD](HCCL_MULTI_QP_THRESHOLD.md)
   - [HCCL_ALG_MULTIPLE_DIMENSION_SPLIT_RATIO](HCCL_ALG_MULTIPLE_DIMENSION_SPLIT_RATIO.md)
   - [HCCL_UB_MULTI_CHANNEL_NUM](HCCL_UB_MULTI_CHANNEL_NUM.md)
+  - [HCCL_ALG_TUNER_PLUGIN](HCCL_ALG_TUNER_PLUGIN.md)
 
 - [Network](network_related.md)
   - [HCCL_IF_IP](HCCL_IF_IP.md)
@@ -55,5 +57,5 @@
 
 - [Reference](reference.md)
   - [Impact of Communication Operator Retry on Overall Network Performance](comm_retry_perf_impact.md)
-  - [Supported Communication Algorithms Between Servers](inter_server_algo_support.md)
-  - [Supported Communication Algorithms Between SuperPoDs](inter_superpod_algo_support.md)
+  - [Inter-Server Communication Algorithm Support List](inter_server_algo_support.md)
+  - [Inter-SuperPoD Communication Algorithm Support List](inter_superpod_algo_support.md)

@@ -1,8 +1,8 @@
 # HCCL_BUFFSIZE
 
-<!-- md-trans-meta sourceCommit=unknown translatedAt=2026-09-12T09:06:19.704Z pushedAt=2026-09-18T08:03:58.170Z -->
+<!-- md-trans-meta sourceCommit=unknown translatedAt=2026-11-06T09:45:51.868Z pushedAt=2026-11-16T06:28:10.126Z nl=2 -->
 
-## Description
+## Function
 
 This environment variable is used to control the size of the shared data buffer used by a communicator. It must be set to an integer greater than or equal to 1. The default value is 200, in MB.
 
@@ -10,7 +10,7 @@ In collective communication, each communicator has send and receive buffers of H
 
 The recommended config for LLMs is:
 
-\(MicrobatchSize \* SequenceLength \* hiddenSize \* sizeof \(DataType\) \)/\(1024\*1024\), rounded up.
+\(MicrobatchSize \* SequenceLength \* hiddenSize \* sizeof \(DataType\)\)/\(1024\*1024\), rounded up.
 
 This environment variable is typically used in the following cases:
 
@@ -37,13 +37,13 @@ If you call the HCCL C API to initialize a communicator with specific configurat
 ## Applicable Products
 
 <!-- npu="950" id3 -->
-- 950PR/950DT: Supported
+- Ascend 950PR&950DT products: Supported
 <!-- end id3 -->
 <!-- npu="A3" id4 -->
-- Atlas A3 training products/Atlas A3 inference products: Supported
+- Atlas A3 products: Supported
 <!-- end id4 -->
 <!-- npu="910b" id5 -->
-- Atlas A2 training products/Atlas A2 inference products: Supported
+- Atlas A2 products: Supported
 <!-- end id5 -->
 <!-- npu="910" id1 -->
 - Atlas training products: Supported

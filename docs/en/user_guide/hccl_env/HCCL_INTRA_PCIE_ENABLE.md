@@ -1,8 +1,8 @@
 # HCCL_INTRA_PCIE_ENABLE
 
-<!-- md-trans-meta sourceCommit=unknown translatedAt=2026-09-12T09:37:59.139Z pushedAt=2026-09-18T08:03:58.203Z -->
+<!-- md-trans-meta sourceCommit=unknown translatedAt=2026-11-06T09:47:24.861Z pushedAt=2026-11-16T06:28:10.174Z nl=2 -->
 
-## Description
+## Function
 
 Configures whether to use PCIe links for intra-server communication.
 
@@ -34,7 +34,7 @@ export HCCL_INTRA_PCIE_ENABLE=1
 <!-- npu="910b" id3 -->
 ## Constraints
 
-[Atlas 200T A2 Box16](https://support.huawei.com/enterprise/en/doc/EDOC1100318274/287e0458) has two modules, left and right, with devices 0 to 7 and devices 8 to 15 respectively. For this product:
+[Atlas 200T A2 Box16](https://support.huawei.com/enterprise/en/doc/EDOC1100318274/287e0458) has left and right modules, which house devices 0-7 and devices 8-15, respectively. For this product:
 
 **In single-node use cases**, when PCIe links are used for intra-server communication, if devices from both modules need to be used simultaneously, the two modules must use the same number of devices and be in the same plane, that is, device 0 and device 8, device 1 and device 9 (and so on) must be used together. When RoCE links are used for intra-server communication, this restriction does not apply.
 <!-- end id3 -->
@@ -42,16 +42,16 @@ export HCCL_INTRA_PCIE_ENABLE=1
 ## Applicable Products
 
 <!-- npu="950" id4 -->
-- 950PR/950DT: Not supported
+- Ascend 950PR&950DT products: Not supported
 <!-- end id4 -->
 <!-- npu="A3" id5 -->
-- Atlas A3 training products/Atlas A3 inference products: Not supported
+- Atlas A3 products: Not supported
 <!-- end id5 -->
 <!-- npu="910b" id2 -->
-- Atlas A2 training products/Atlas A2 inference products: [Atlas 200T A2 Box16](https://support.huawei.com/enterprise/en/doc/EDOC1100318274/287e0458) only
+- Atlas A2 products: Only [Atlas 200T A2 Box16](https://support.huawei.com/enterprise/en/doc/EDOC1100318274/287e0458) is supported.
 <!-- end id2 -->
 <!-- npu="910" id1 -->
-- Atlas training products: [Atlas 300T Pro](https://support.huawei.com/enterprise/en/ascend-computing/atlas-300t-pro-pid-256118195) only
+- Atlas training products: Only [Atlas 300T Pro](https://support.huawei.com/enterprise/en/ascend-computing/atlas-300t-pro-pid-256118195) is supported.
 <!-- end id1 -->
 <!-- npu="310p" id6 -->
 - Atlas inference products: Not supported

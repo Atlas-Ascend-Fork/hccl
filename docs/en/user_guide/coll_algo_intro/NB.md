@@ -1,6 +1,6 @@
 # NB
 
-<!-- md-trans-meta sourceCommit=unknown translatedAt=2026-09-02T07:40:12.215Z pushedAt=2026-09-04T02:32:47.656Z -->
+<!-- md-trans-meta sourceCommit=unknown translatedAt=2026-11-09T03:21:50.396Z pushedAt=2026-11-10T09:36:59.980Z nl=2 -->
 
 ## Algorithm Description
 

@@ -1,13 +1,13 @@
 # Configuring Resource Information via Environment Variables
 
-<!-- md-trans-meta sourceCommit=unknown translatedAt=2026-09-02T07:32:46.960Z pushedAt=2026-09-11T02:09:24.547Z -->
+<!-- md-trans-meta sourceCommit=unknown translatedAt=2026-11-09T03:20:10.563Z pushedAt=2026-11-09T06:26:42.590Z nl=2 -->
 
 In addition to configuring resource information through a rank table file, developers can also configure resource information using the combination of environment variables described in this section.
 
 The method of configuring resource information via environment variables is applicable only to the communicator initialization of TensorFlow framework networks and supports only the following products:
 
 <!-- npu="910b" id1 -->
-Atlas A2 training products/Atlas A2 inference products
+Atlas A2 products
 <!-- end id1 -->
 
 <!-- npu="910" id2 -->
@@ -37,12 +37,12 @@ export HCCL_SOCKET_FAMILY=AF_INET
 - CM_WORKER_IP: Specifies the NIC IP address used by the current node to communicate with the master. It must be in standard IPv4 or IPv6 format.
 - HCCL_SOCKET_FAMILY: **This environment variable is optional.** It controls the IP protocol version used by the device-side communication NIC. AF_INET indicates the IPv4 protocol, and AF_INET6 indicates the IPv6 protocol. **When not configured, the IPv4 protocol is used by default.**
 
-**NOTE**
+Note:
 
 - If the IP protocol specified by the environment variable HCCL_SOCKET_FAMILY does not match the actually obtained NIC information, the NIC information in the actual environment prevails.
     For example, if the environment variable HCCL_SOCKET_FAMILY is set to AF_INET6, but only IPv4 NICs exist on the device side, IPv4 NICs will actually be used.
 - When configuring cluster information using the environment variables described above, the environment variables RANK_TABLE_FILE, RANK_ID, and RANK_SIZE must not exist in the environment.
-- For Atlas A2 training products/Atlas A2 inference products, if the service involves a single-card multi-process scenario, it is recommended to configure the communication port used by HCCL on the NPU side through the environment variable [HCCL_NPU_SOCKET_PORT_RANGE](../hccl_env/HCCL_NPU_SOCKET_PORT_RANGE.md). Otherwise, port conflicts may occur. However, note that multiple processes will have a certain impact on resource overhead and communication performance. Configuration example:
+- For Atlas A2 products, if the service involves a single-card multi-process scenario, it is recommended to configure the communication port used by HCCL on the NPU side through the environment variable [HCCL_NPU_SOCKET_PORT_RANGE](../hccl_env/HCCL_NPU_SOCKET_PORT_RANGE.md). Otherwise, port conflicts may occur. However, note that multiple processes will have a certain impact on resource overhead and communication performance. Configuration example:
 
     ```bash
     export HCCL_NPU_SOCKET_PORT_RANGE="auto"
@@ -50,7 +50,7 @@ export HCCL_SOCKET_FAMILY=AF_INET
 
 ## Configuration Example
 
-Taking the scenario where the number of AI Server nodes for distributed training is 2 and the number of Devices is 16 as an example, each AI Server node has 8 Devices. Before starting the training process on each Device, configure the following environment variables in the corresponding shell window to set up the resource information.
+Taking the scenario where the number of AI server nodes for distributed training is 2 and the number of Devices is 16 as an example, each AI server node has 8 Devices. Before starting the training process on each Device, configure the following environment variables in the corresponding shell window to set up the resource information.
 
 - Node 0: This node is the Master node, responsible for cluster information management, resource allocation, and scheduling.
 

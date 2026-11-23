@@ -1,14 +1,14 @@
 # HCCL_UB_MULTI_CHANNEL_NUM
 
-<!-- md-trans-meta sourceCommit=unknown translatedAt=2026-09-12T10:26:04.464Z pushedAt=2026-09-18T08:03:58.244Z -->
+<!-- md-trans-meta sourceCommit=unknown translatedAt=2026-11-06T09:49:07.262Z pushedAt=2026-11-16T06:28:10.216Z nl=2 -->
 
-## Description
+## Function
 
-When UB protocol (CTP) and CLOS topology are used for communication, you can use this environment variable to set the number of channels established for the same EID pair.
+For communication using the CLOS topology and UB protocol (CTP/RTP), you can use this environment variable to configure the number of channels established between the same EID pair.
 
-This environment variable must be set to an integer. Value range: \[1, 16\]. Default: 1.
+This environment variable must be set to an integer ranging from 1 to 16, which defaults to `1`.
 
-Each channel is mapped to an independent jetty at the underlying layer. Multiple channels transfer data in parallel to improve communication bandwidth (similar to the RoCE multi-QP mechanism). The default value is `1`, indicating that the multi-channel feature is disabled.
+Each channel corresponds to an independent jetty at the underlying layer. Multiple channels move data in parallel to improve communication bandwidth (similar to the RoCE multi-QP mechanism). The default value `1` means multi-channel is disabled.
 
 ## Configuration Example
 
@@ -18,22 +18,22 @@ export HCCL_UB_MULTI_CHANNEL_NUM=4
 
 ## Constraints
 
-- This environment variable takes effect only when the pure CLOS topology (Level0Shape::CLOS) and UB protocol (CTP) are used and the algorithm runs on the AICPU engine. It does not take effect in links when they use a mesh topology, ubmem protocol, or PCIE. (On the CCU engine, multiple channels share the same jetty, so this environment variable does not take effect.)
-- This environment variable supports only collective communication operators (the communicator configuration is read through `HcclConfigGetInfo`). It does not support use cases where self-written test cases directly create channels.
-- If the value is beyond \[1, 16\], an error is reported during HCCL initialization or reading. (Error code EI0001 is reported during parsing, and HCCL_E_PARA is returned during reading.)
-- Each channel occupies hardware resources such as jetties. Setting too many channels may preempt the resources of other communicators. Set this variable properly (for example, `2` or `4`).
-- Note: Increasing the number of channels is beneficial only when a single jetty is the communication bandwidth bottleneck. If a single jetty has reached the link bandwidth limit, multiple channels provide no gain. Set this environment variable based on the performance verification result.
+- This environment variable takes effect only when CLOS topology and UB protocol (CTP/RTP) are used and the algorithm runs on the AICPU engine;
+- This environment variable supports only collective communication operators (the communicator configuration is read through HcclConfigGetInfo);
+- If the value is out of the range \[1,16\], an error is reported during HCCL initialization or value reading (fault code EI0001 is reported during parsing, and HCCL_E_PARA is returned during reading).
+- Each channel occupies hardware resources such as jetties. Setting an excessively large number of channels may squeeze the resources available to other communicators. Set the value as needed (for example, 2 or 4).
+- Performance notice: Increasing the number of channels brings benefits only when a single jetty throttles the communication bandwidth. If a single jetty has reached the link bandwidth limit, multiple channels bring no gain. Set this environment variable based on performance verification results.
 
 ## Applicable Products
 
 <!-- npu="950" id1 -->
-- 950PR/950DT: Supported
+- Ascend 950PR&950DT products: Supported
 <!-- end id1 -->
 <!-- npu="A3" id2 -->
-- Atlas A3 training products/Atlas A3 inference products: Not supported
+- Atlas A3 products: Not supported
 <!-- end id2 -->
 <!-- npu="910b" id3 -->
-- Atlas A2 training products/Atlas A2 inference products: Not supported
+- Atlas A2 products: Not supported
 <!-- end id3 -->
 <!-- npu="910" id4 -->
 - Atlas training products: Not supported

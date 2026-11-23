@@ -1,8 +1,8 @@
 # HCCL_NPU_SOCKET_PORT_RANGE
 
-<!-- md-trans-meta sourceCommit=unknown translatedAt=2026-09-12T09:48:10.546Z pushedAt=2026-09-18T08:03:58.213Z -->
+<!-- md-trans-meta sourceCommit=unknown translatedAt=2026-11-06T09:47:46.468Z pushedAt=2026-11-16T06:28:10.183Z nl=2 -->
 
-## Description
+## Function
 
 When a communicator is created based on root node information, you can use this environment variable to set the communication port used by HCCL on the NPU.
 
@@ -18,13 +18,13 @@ This environment variable can be set as a specific port, a port range, or the st
 ## Configuration Example
 
 ```bash
-// Method 1: Configure as a port range.
+//Method 1: Configure a port range.
 export HCCL_NPU_SOCKET_PORT_RANGE="61000-61050"
-// Method 2: Use a specific port number together with a port range, separated by commas (,).
+//Method 2: Use a specific port number together with a port range, separated by commas (,).
 export HCCL_NPU_SOCKET_PORT_RANGE="61000,61050-61100,61200-61210"
-// Method 3: Specify specific port numbers, separated by commas (,).
+//Method 3: Specify port numbers, separated by commas (,).
 export HCCL_NPU_SOCKET_PORT_RANGE="57000,57005,57007,58008,58100,58105,58107,58108"
-// Method 4: The OS dynamically allocates port numbers.
+//Method 4: The operating system dynamically allocates port numbers.
 export HCCL_NPU_SOCKET_PORT_RANGE="auto"
 ```
 
@@ -36,13 +36,13 @@ export HCCL_NPU_SOCKET_PORT_RANGE="auto"
 ## Applicable Products
 
 <!-- npu="950" id1 -->
-- 950PR/950DT: Supported
+- Ascend 950PR&950DT products: Supported
 <!-- end id1 -->
 <!-- npu="A3" id2 -->
-- Atlas A3 training products/Atlas A3 inference products: Supported
+- Atlas A3 products: Supported
 <!-- end id2 -->
 <!-- npu="910b" id3 -->
-- Atlas A2 training products/Atlas A2 inference products: Supported
+- Atlas A2 products: Supported
 <!-- end id3 -->
 <!-- npu="910" id4 -->
 - Atlas training products: Not supported

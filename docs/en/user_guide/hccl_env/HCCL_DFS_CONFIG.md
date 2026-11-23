@@ -1,8 +1,8 @@
 # HCCL_DFS_CONFIG
 
-<!-- md-trans-meta sourceCommit=unknown translatedAt=2026-09-12T09:16:29.739Z pushedAt=2026-09-18T08:03:58.180Z -->
+<!-- md-trans-meta sourceCommit=unknown translatedAt=2026-11-06T09:46:30.860Z pushedAt=2026-11-16T06:28:10.147Z nl=2 -->
 
-## Description
+## Function
 
 HCCL provides switch settings for detecting multiple faults, including connection faults, cluster heartbeat, and process hang. Enabling these switches allows you to quickly locate faults with clearly displayed fault information, facilitating timely troubleshooting.
 
@@ -30,14 +30,14 @@ This environment variable supports the following configuration items:
 
 - **inconsistent_check**: operator dispatch inconsistency detection switch.
 
-    This parameter supports three values: `on` (enables detection), `first` (checks only the first operator), and `off` (disables detection). Defaults to `first`.
+    This parameter has three value options: `on` (enables process-level operator dispatch inconsistency detection), `first` (performs consistency detection on only the first operator), and `off` (disables process-level operator dispatch inconsistency detection). The default value is `first`.
 
     This parameter enables operator dispatch inconsistency detection, but it causes a certain degree of performance degradation. Note that after disabling it, operator dispatch inconsistency issues are no longer actively detected and recorded.
 
     **NOTE**
-    - When this function is enabled, a data cache is generated, which occupies memory on the host.
+    - After this function is enabled, a data cache is generated, which occupies host memory.
     <!-- npu="A3,910b" id8 -->
-    - For Atlas A3 training products/Atlas A3 inference products and Atlas A2 training products/Atlas A2 inference products, this function does not support detection of the HcclBatchSendRecv operator or graph mode use cases.
+    - For the Atlas A3 products and Atlas A2 products, this function does not support detection of the HcclBatchSendRecv operator or graph mode use cases.
     <!-- end id8 -->
 
 <!-- npu="950" id5 -->
@@ -47,7 +47,7 @@ This environment variable supports the following configuration items:
 
     After disabling this switch, HCCL no longer records and retrieves detailed information about abnormal tasks, and maintenance and debugging information related to task execution exceptions becomes unavailable.
 
-    **Note**: This function is supported only on 950PR/950DT.
+    **Note**: This function currently supports only the Ascend 950PR&950DT products.
 <!-- end id5 -->
 
 <!-- npu="A3" id4 -->
@@ -56,11 +56,11 @@ This environment variable supports the following configuration items:
     The value ranges from 0 to 7200000, in ms, and defaults to `0`.
 
   - The value `0` disables the monitoring.
-  - When set to a value greater than `0`: Enables the monitoring. When the execution duration of a single task exceeds the configured value, the task information is printed and stored in `$HOME/ascend/log/run/device-*/`, with the log keyword `StreamTaskMonitor`. Timing restarts after printing, meaning that if the execution duration of a single task is a multiple of the configured value, multiple rounds of information are printed.
+  - When set to a value greater than "0": Enables the monitoring. When the execution duration of a single task exceeds the configured value, the task information is printed and stored in `$HOME/ascend/log/run/device-*/`, with the log keyword `StreamTaskMonitor`. Timing restarts after printing, meaning that if the execution duration of a single task is a multiple of the configured value, multiple rounds of information are printed.
 
-    **NOTE**
+    **Note**
 
-    1. This function currently works only on Atlas A3 training/inference products, and takes effect only when the communication operator expansion mode is AI_CPU.
+    1. This function currently supports only the Atlas A3 products and Ascend 950PR&950DT products, and takes effect only when the communication operator expansion mode is AI_CPU.
     2. This function is a diagnostic tool for exceptions. Enabling it affects service execution performance, so it is not recommended when no exceptions occur.
     3. A value less than 100 ms cannot guarantee functional completeness, and it may significantly impact service execution performance and functionality, potentially causing service execution failures.
     4. A small value may lead to a risk of log flooding in the `$HOME/ascend/log/run/device-*/` directory.
@@ -79,13 +79,13 @@ export HCCL_DFS_CONFIG="connection_fault_detection_time:30,cluster_heartbeat:on,
 ## Applicable Products
 
 <!-- npu="950" id1 -->
-- 950PR/950DT: Supported
+- Ascend 950PR&950DT products: Supported
 <!-- end id1 -->
 <!-- npu="A3" id2 -->
-- Atlas A3 training products/Atlas A3 inference products: Supported
+- Atlas A3 products: Supported
 <!-- end id2 -->
 <!-- npu="910b" id3 -->
-- Atlas A2 training products/Atlas A2 inference products: Supported
+- Atlas A2 products: Supported
 <!-- end id3 -->
 <!-- npu="910" id6 -->
 - Atlas training products: Not supported

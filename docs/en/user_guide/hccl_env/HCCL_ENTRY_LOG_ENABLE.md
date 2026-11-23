@@ -1,8 +1,8 @@
 # HCCL_ENTRY_LOG_ENABLE
 
-<!-- md-trans-meta sourceCommit=unknown translatedAt=2026-09-12T09:21:48.059Z pushedAt=2026-09-18T08:03:58.185Z -->
+<!-- md-trans-meta sourceCommit=unknown translatedAt=2026-11-06T09:46:39.443Z pushedAt=2026-11-16T06:28:10.152Z nl=2 -->
 
-## Description
+## Function
 
 This environment variable controls whether to print the call behavior logs of communication operators in real time.
 
@@ -26,13 +26,13 @@ Only used for single-operator calls of collective communication operators.
 ## Applicable Products
 
 <!-- npu="950" id3 -->
-- 950PR/950DT: Supported
+- Ascend 950PR&950DT products: Supported
 <!-- end id3 -->
 <!-- npu="A3" id4 -->
-- Atlas A3 training products/Atlas A3 inference products: Supported
+- Atlas A3 products: Supported
 <!-- end id4 -->
 <!-- npu="910b" id5 -->
-- Atlas A2 training products/Atlas A2 inference products: Supported
+- Atlas A2 products: Supported
 <!-- end id5 -->
 <!-- npu="910" id1 -->
 - Atlas training products: Supported

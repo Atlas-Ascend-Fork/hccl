@@ -1,5 +1,5 @@
 # Reliability
 
-<!-- md-trans-meta sourceCommit=unknown translatedAt=2026-09-12T10:58:31.326Z pushedAt=2026-09-18T08:03:58.276Z -->
+<!-- md-trans-meta sourceCommit=unknown translatedAt=2026-11-06T09:50:37.856Z pushedAt=2026-11-16T06:28:10.246Z nl=2 -->
 
-This section describes the environment variables related to HCCL communication reliability, covering communication operator retry enablement and retry parameter configuration, to improve fault tolerance during communication.
+This section describes the environment variables related to HCCL communication reliability, covering the enabling of communication operator retry and the configuration of retry parameters, to improve fault tolerance during communication.

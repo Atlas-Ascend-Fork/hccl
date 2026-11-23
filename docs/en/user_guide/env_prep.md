@@ -1,12 +1,12 @@
 # Environment Preparation
 
-<!-- md-trans-meta sourceCommit=unknown translatedAt=2026-09-02T08:06:07.746Z pushedAt=2026-09-07T10:01:09.701Z -->
+<!-- md-trans-meta sourceCommit=unknown translatedAt=2026-11-09T03:29:42.942Z pushedAt=2026-11-12T08:53:49.678Z nl=2 -->
 
 ## Installing Driver Firmware and CANN Software Package
 
-The use of the HCCL collective communication library and the development of communication operators depend on the driver firmware and CANN software package. For detailed installation steps, see *[CANN Software Installation Guide](https://hiascend.com/en/document/redirect/CannCommunityInstSoftware)*.
+The use of the HCCL collective communication library and the development of communication operators depend on the driver firmware and CANN software package. For detailed installation steps, see *[CANN Software Installation](https://hiascend.com/en/document/redirect/CannCommunityInstSoftware)*.
 
-> [!NOTE]Note
+> [!NOTE]
 > If only app development and compilation are performed without involving execution, the driver firmware package is not required.
 
 ## Setting Environment Variables

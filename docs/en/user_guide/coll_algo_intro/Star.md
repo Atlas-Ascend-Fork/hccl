@@ -1,6 +1,6 @@
 # Star
 
-<!-- md-trans-meta sourceCommit=unknown translatedAt=2026-09-02T07:43:35.657Z pushedAt=2026-09-04T08:12:04.949Z -->
+<!-- md-trans-meta sourceCommit=unknown translatedAt=2026-11-09T03:22:33.940Z pushedAt=2026-11-12T09:14:49.456Z nl=2 -->
 
 ## Algorithm Description
 

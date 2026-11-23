@@ -1,6 +1,6 @@
 # HCCL Collective Communication Library User Guide
 
-<!-- md-trans-meta sourceCommit=unknown translatedAt=2026-09-02T08:09:14.618Z pushedAt=2026-09-08T02:58:37.915Z -->
+<!-- md-trans-meta sourceCommit=unknown translatedAt=2026-11-09T03:30:40.668Z pushedAt=2026-11-12T09:08:36.233Z nl=2 -->
 
 - [HCCL Introduction](hccl_intro.md)
 - [Related Concepts](concepts.md)
@@ -16,11 +16,11 @@
     <!-- npu="A3,910b" id1 -->
   - [Recommended Service Configuration](recommended_config.md)
     <!-- end id1 -->
-  - [Collective Communication Algorithm Introduction<a name="sub_menu"></a>](./coll_algo_intro/README.md)
+  - [Introduction to Collective Communication Algorithms<a name="sub_menu"></a>](./coll_algo_intro/README.md)
   - [Communication Operator Support List<a name="sub_menu"></a>](./comm_ops_support_list/README.md)
 
 - [System Constraints and Limitations](constraints.md)
-- [API Reference](api_ref.md)
+- [API Reference<a npu_parse_enabled="true"></a>](api_ref.md)
   - [HCCL Header and Library File Description](../api_ref/hccl_header_and_lib.md)
   - [HCOMM Header and Library File Description](https://gitcode.com/cann/hcomm/blob/master/docs/en/api_ref/hcomm_header_and_lib.md)
   - [Communicator Management Interface (C Language)<a name="sub_menu"></a>](https://gitcode.com/cann/hcomm/blob/master/docs/en/api_ref/comm_mgr_c/README.md)

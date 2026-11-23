@@ -1,6 +1,6 @@
 # Algorithm Overview
 
-<!-- md-trans-meta sourceCommit=unknown translatedAt=2026-09-02T07:36:32.000Z pushedAt=2026-09-11T02:10:21.976Z -->
+<!-- md-trans-meta sourceCommit=unknown translatedAt=2026-11-09T03:21:30.493Z pushedAt=2026-11-10T09:32:32.717Z nl=2 -->
 
 For the same collective communication operator, different communication algorithms are often adopted depending on network topology, communication data volume, hardware resources, and other factors, so as to maximize cluster communication performance. HCCL provides topology algorithms such as Mesh, Ring, Recursive Halving-Doubling (RHD), Pairwise, and Pipeline for intra-server, inter-server, and inter-SuperPoD collective communication.
 
@@ -20,16 +20,16 @@ HCCL supports adaptive selection of the following algorithms for inter-server/in
 - Pairwise algorithm: A pairwise communication algorithm used only for AlltoAll, AlltoAllV, and AlltoAllVC operators. It has many communication steps (linear complexity) and relatively high latency, but can avoid the one-to-many phenomenon in the network (where one rank sends data to multiple ranks through the same port). It is suitable for scenarios with large communication data volumes where the one-to-many network phenomenon needs to be avoided.
 - AHC (Asymmetric Hierarchical Concatenate) algorithm: A hierarchical collective communication algorithm used only for ReduceScatter, AllGather, and AllReduce operators. It is suitable for scenarios where NPU distribution in the communicator has multiple levels and supports both symmetric and asymmetric NPU distribution across levels. The relative benefit is greater when bandwidth convergence exists between levels in the communicator.
 
-> [!NOTE]Note
+> [!NOTE]
 >
 > - To specify an inter-server or inter-SuperPoD communication algorithm, developers can set the environment variable [HCCL_ALGO](../hccl_env/HCCL_ALGO.md). Note that if an inter-server or inter-SuperPoD communication algorithm is specified through the HCCL_ALGO environment variable, the adaptive algorithm selection function will no longer take effect, and the user-specified algorithm will be used instead.
 > - For the operators and products supported by each algorithm, see the environment variable [HCCL_ALGO](../hccl_env/HCCL_ALGO.md).
 
 ## Special Notes
 
-- Grouped Full Mesh algorithm: A grouped fully connected communication algorithm used only for the AlltoAll, AlltoAllV, and AlltoAllVC operators on Atlas A3 training products/Atlas A3 inference products. In large-scale clusters, communication is completed in multiple groups with a certain degree of concurrency. Within a SuperPoD, the concurrency is high and latency is low; between SuperPoDs, the concurrency is low and latency is relatively high (to avoid the one-to-many  phenomenon in the network). This algorithm cannot be configured through the [HCCL_ALGO](../hccl_env/HCCL_ALGO.md) environment variable.
+- Grouped Full Mesh algorithm: A grouped fully connected communication algorithm used only for the AlltoAll, AlltoAllV, and AlltoAllVC operators on Atlas A3 products. In large-scale clusters, communication is completed in multiple groups with a certain degree of concurrency. Within a SuperPoD, the concurrency is high and latency is low; between SuperPoDs, the concurrency is low and latency is relatively high (to avoid the one-to-many phenomenon in the network). This algorithm cannot be configured through the [HCCL_ALGO](../hccl_env/HCCL_ALGO.md) environment variable.
 
-- NHR-HCF (NHR Highest Common Factor) algorithm: A greatest common divisor algorithm applicable only to Atlas A3 training products/Atlas A3 inference products. It takes effect by default in scenarios where the number of servers differs between SuperPoDs but the number of cards within each server is the same. This algorithm cannot be configured through the [HCCL_ALGO](../hccl_env/HCCL_ALGO.md) environment variable. The algorithm splits the communicator into multiple symmetrically distributed logical SuperPoDs by computing the greatest common divisor of the inter-SuperPoD server counts, and selects a communication algorithm based on the new logical topology. The relative benefit is greater in scenarios where the greatest common divisor of the inter-SuperPoD server counts is greater than 1.
+- NHR-HCF (NHR Highest Common Factor) algorithm: A greatest common divisor algorithm that applies only to Atlas A3 products. It takes effect by default in scenarios where the number of servers differs between SuperPoDs but the number of devices within each server is the same, and it cannot be configured through the [HCCL_ALGO](../hccl_env/HCCL_ALGO.md) environment variable. This algorithm divides the communicator into multiple symmetrically distributed logical SuperPoDs by calculating the greatest common divisor of the number of servers between SuperPoDs, and selects a communication algorithm based on the new logical topology. The relative benefit is greater in scenarios where the greatest common divisor of the number of servers between SuperPoDs is greater than 1.
 
 ## Time Consumption Evaluation
 
@@ -49,9 +49,9 @@ By leveraging network topology, collective communication algorithms optimize com
 
 HCCL typically divides the topology into two levels (intra-node/inter-node) or three levels (intra-node/inter-node/inter-SuperPoD), and executes collective communication hierarchically, with different bandwidths across different levels of links. Hierarchical communication enables communication task orchestration to be aligned with the network topology, thereby maximizing link utilization.
 
-Taking the single-operator mode and intra-node/inter-node two-level topology of Atlas A2 training products/Atlas A2 inference products as an example, the specific hierarchical communication process of each collective communication operator is shown in the following table:
+Taking the single-operator mode and the intra-node/inter-node two-level topology of Atlas A2 products as an example, the specific hierarchical communication process of each collective communication operator is shown in the following table:
 
-| Collective Communication Operator | Stage 1 | Stage 2 | Stage 3 |
+| Collective Communication Operator | Phase 1 | Phase 2 | Phase 3 |
 | --- | --- | --- | --- |
 | ReduceScatter | Inter-server ReduceScatter | Intra-server ReduceScatter | / |
 | ReduceScatterV | Inter-server ReduceScatterV | Intra-server ReduceScatterV | / |
@@ -65,4 +65,4 @@ Taking the single-operator mode and intra-node/inter-node two-level topology of 
 | AlltoAllV | Intra-server AlltoAllV | Inter-server AlltoAllV | / |
 | AlltoAllVC | Intra-server AlltoAllVC | Inter-server AlltoAllVC | / |
 
-For detailed hierarchical communication process examples, see [Hierarchical Communication Principle](hierarchical_comm_principle.md).
+For detailed hierarchical communication process examples, see [Hierarchical Communication Principles](hierarchical_comm_principle.md).
