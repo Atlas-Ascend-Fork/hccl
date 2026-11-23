@@ -52,6 +52,7 @@ namespace {
     OpParam MakeStrictSupportedParam()
     {
         OpParam param{};
+        param.opType = HcclCMDType::HCCL_CMD_ALLREDUCE;
         param.DataDes.dataType = HcclDataType::HCCL_DATA_TYPE_FP16;
         param.reduceType = HcclReduceOp::HCCL_REDUCE_SUM;
         return param;
@@ -87,6 +88,43 @@ namespace {
         param.DataDes.dataType = HcclDataType::HCCL_DATA_TYPE_FP16;
         param.reduceType = HcclReduceOp::HCCL_REDUCE_MAX;
         EXPECT_FALSE(IsNeedStrictModeForOrderPreserved(param, 4));
+    }
+
+    TEST(OrderPreservedCommonTest, KeepsReduceScatterVOutsideStrictGate)
+    {
+        OpParam param{};
+        param.opType = HcclCMDType::HCCL_CMD_REDUCE_SCATTER_V;
+        param.reduceType = HcclReduceOp::HCCL_REDUCE_SUM;
+        param.vDataDes = {nullptr, nullptr, HcclDataType::HCCL_DATA_TYPE_FP16};
+        SetCommDeterministicLevel(static_cast<uint32_t>(DeterministicEnableLevel::DETERMINISTIC_STRICT));
+        g_queriedComm = nullptr;
+
+        EXPECT_FALSE(IsNeedStrictModeForOrderPreserved(param, 4));
+        EXPECT_EQ(g_queriedComm, nullptr);
+    }
+
+    TEST(OrderPreservedCommonTest, RejectsNonReduceOpTypes)
+    {
+        OpParam param = MakeStrictSupportedParam();
+        SetCommDeterministicLevel(static_cast<uint32_t>(DeterministicEnableLevel::DETERMINISTIC_STRICT));
+
+        param.opType = HcclCMDType::HCCL_CMD_ALLGATHER;
+        EXPECT_FALSE(IsNeedStrictModeForOrderPreserved(param, 4));
+
+        param.opType = HcclCMDType::HCCL_CMD_BATCH_SEND_RECV;
+        EXPECT_FALSE(IsNeedStrictModeForOrderPreserved(param, 4));
+    }
+
+    TEST(OrderPreservedCommonTest, AcceptsSupportingReduceOpTypes)
+    {
+        OpParam param = MakeStrictSupportedParam();
+        SetCommDeterministicLevel(static_cast<uint32_t>(DeterministicEnableLevel::DETERMINISTIC_STRICT));
+
+        for (HcclCMDType opType :
+             {HcclCMDType::HCCL_CMD_ALLREDUCE, HcclCMDType::HCCL_CMD_REDUCE, HcclCMDType::HCCL_CMD_REDUCE_SCATTER}) {
+            param.opType = opType;
+            EXPECT_TRUE(IsNeedStrictModeForOrderPreserved(param, 4));
+        }
     }
 
 } // namespace

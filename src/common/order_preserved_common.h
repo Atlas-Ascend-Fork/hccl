@@ -103,8 +103,12 @@ InitOrderPreservedBaseParams(const OpParam& param, const AlgResourceCtxSerializa
 
 inline bool IsNeedStrictModeForOrderPreserved(const OpParam& opParam, u32 rankSize)
 {
+    if (opParam.opType != HcclCMDType::HCCL_CMD_ALLREDUCE && opParam.opType != HcclCMDType::HCCL_CMD_REDUCE
+        && opParam.opType != HcclCMDType::HCCL_CMD_REDUCE_SCATTER) {
+        return false;
+    }
     u8 deterministicLevel = GetDeterministicLevel(opParam.hcclComm);
-    HcclDataType dataType = opParam.DataDes.dataType;
+    const HcclDataType dataType = opParam.DataDes.dataType;
     HcclReduceOp reduceType = opParam.reduceType;
     return (deterministicLevel == static_cast<u8>(DeterministicEnableLevel::DETERMINISTIC_STRICT))
            && (dataType == HcclDataType::HCCL_DATA_TYPE_FP16 || dataType == HcclDataType::HCCL_DATA_TYPE_FP32
