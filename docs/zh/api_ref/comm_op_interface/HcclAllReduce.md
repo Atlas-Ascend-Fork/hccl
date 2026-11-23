@@ -74,7 +74,7 @@ HcclResult HcclAllReduce(void *sendBuf, void *recvBuf, uint64_t count, HcclDataT
 ### op说明
 
 <!-- npu="950" id14 -->
-- 针对Ascend 950PR&950DT系列产品，支持的操作类型为sum、prod、max、min，其中prod操作不支持int16、bfp16数据类型。
+- 针对Ascend 950PR&950DT系列产品，支持的操作类型为sum、prod、max、min，其中prod操作不支持int16、bfp16数据类型。prod归约针对fp16数据类型性能会有一定劣化。
 <!-- end id14 -->
 <!-- npu="A3" id15 -->
 - 针对Atlas A3系列产品，支持的操作类型为sum、prod、max、min，其中prod操作不支持int16、bfp16数据类型。
