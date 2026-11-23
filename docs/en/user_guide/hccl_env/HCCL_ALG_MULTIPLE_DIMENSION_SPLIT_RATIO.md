@@ -4,7 +4,7 @@
 
 ## Function
 
-This environment variable configures the data split ratio for the AllReduce, AllGather, ReduceScatter, Broadcast, and Reduce operators under a specific two-dimension parallel communication algorithm.
+This environment variable configures the data split ratio for the AllReduce, AllGather, ReduceScatter, Broadcast, Scatter, and Reduce operators under a specific two-dimension parallel communication algorithm.
 
 Two-dimension parallelism refers to the use case where intra-server communication (using the Mesh algorithm) and inter-server communication (using the NHR algorithm) run in parallel. In this case, HCCL splits the data to be communicated in each round into two slices, which take two parallel communication paths: one slice performs Mesh communication first and then NHR communication, and the other slice performs NHR communication first and then Mesh communication. This environment variable adjusts the sizes of the two data slices so that the longer communication path is assigned less data and the shorter path is assigned more data, thereby improving load balancing between the two paths.
 
@@ -12,8 +12,8 @@ Set this environment variable to a digit. Value range: \[0, 1\]. Default value: 
 
 Note the following:
 
-- This environment variable only acts on the allocation ratio of the two data slices for the AllReduce, AllGather, ReduceScatter, Broadcast, and Reduce operators when HCCL has already selected the two-dimension parallel communication algorithm. It is not used to select the communication algorithm.
-- For the AllReduce, ReduceScatter, Broadcast, and Reduce operators, the target split ratios of data slices 0 and 1 are *the value of this environment variable* and *1 - the value of this environment variable*. These ratios are opposite for an AllGather operator.
+- This environment variable only acts on the allocation ratio of the two data slices for the AllReduce, AllGather, ReduceScatter, Broadcast, Scatter, and Reduce operators when HCCL has already selected the two-dimension parallel communication algorithm. It is not used to select the communication algorithm.
+- For the AllReduce, ReduceScatter, Broadcast, Scatter, and Reduce operators, the target split ratios of data slices 0 and 1 are *the value of this environment variable* and *1 - the value of this environment variable*. These ratios are opposite for an AllGather operator.
 - During actual splitting, rounding or alignment is performed based on the data type size, alignment requirements, and tail block data volume. Therefore, the actual split ratios may deviate slightly from the configured values.
 - The split ratio explicitly configured for a communicator takes precedence over this environment variable. If neither is configured with a valid ratio, the system attempts to calculate the ratio adaptively based on link port information, and falls back to 0.5 if the calculation fails. If the level 0 topology is `MESH_1D_CLOS`, adaptive calculation is skipped and 0.5 applies directly. This applies to both AICPU and CCU. A valid explicitly configured ratio still takes effect as normal. If this environment variable is configured with a non-numeric value, the system returns an error when initializing the environment variable.
 - In general, keep the default value. Change it only when you confirm that the current task is in cross-chassis two-dimension communication and you need to tune performance for a specific network topology and data volume.
@@ -76,7 +76,7 @@ export HCCL_ALG_MULTIPLE_DIMENSION_SPLIT_RATIO=0.5
 
 ## Constraints
 
-- This environment variable takes effect only when the AllReduce, AllGather, ReduceScatter, Broadcast, and Reduce operators select the two-dimension parallel communication algorithm. If another communication algorithm is selected based on the current topology, data volume, data type, reduce type, or operator expansion mode, this environment variable does not take effect.
+- This environment variable takes effect only when the AllReduce, AllGather, ReduceScatter, Broadcast, Scatter, and Reduce operators select the two-dimension parallel communication algorithm. If another communication algorithm is selected based on the current topology, data volume, data type, reduce type, or operator expansion mode, this environment variable does not take effect.
 - Verify the performance against the actual networking and communication data volume before adjusting this environment variable. A split ratio that is too small or too large may cause unbalanced loads on the two data slices and degrade communication performance.
 
 ## Applicable Products

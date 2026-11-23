@@ -71,7 +71,7 @@
 
     此模式不支持inplace场景。
 
-    该配置项支持Broadcast、AllGather、ReduceScatter、AllReduce、Reduce、Scatter、AlltoAll、AlltoAllV、AlltoAllVC、AllGatherV、ReduceScatterV算子。针对AllReduce、ReduceScatter、Reduce算子，数据类型仅支持int8、int16、int32、float16、float32、bfp16。针对ReduceScatterV算子，数据类型仅支持int16、int32、float16、float32、bfp16。其他通信算子支持的数据类型可参见对应的集合通信接口参考。
+    该配置项支持Broadcast、AllGather、ReduceScatter、AllReduce、Reduce、Scatter、AlltoAll、AlltoAllV、AlltoAllVC、AllGatherV、ReduceScatterV算子。针对AllReduce、ReduceScatter、Reduce算子，数据类型仅支持int16、int32、float16、float32、bfp16。针对ReduceScatterV算子，数据类型仅支持int16、int32、float16、float32、bfp16。其他通信算子支持的数据类型可参见对应的集合通信接口参考。
 
     HCCL的AllReduce、ReduceScatter和Reduce算子在单机通信场景中，当数据量超过一定阈值时，会自动回退到AI CPU展开模式下发，以避免性能下降。该阈值并非固定，会根据算子运行模式及网络规模等因素调整。
 

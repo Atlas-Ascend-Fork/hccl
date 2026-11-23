@@ -2,7 +2,7 @@
 
 ## 功能描述
 
-该环境变量用于配置AllReduce、AllGather、ReduceScatter、Broadcast、Reduce算子在特定两维度并行通信算法下的数据切分比例。
+该环境变量用于配置AllReduce、AllGather、ReduceScatter、Broadcast、Scatter、Reduce算子在特定两维度并行通信算法下的数据切分比例。
 
 两维度并行指Server内通信与Server间通信并行执行，Server内通信使用Mesh算法，Server间通信使用NHR算法的场景。在此场景下，HCCL会将每轮待通信的数据切分为两片，并分别走两条可并行的通信路径：一片数据先执行Mesh通信、再执行NHR通信，另一片数据先执行NHR通信、再执行Mesh通信。该环境变量用于调整这两片数据的大小，使耗时较长的通信路径分配较少数据，耗时较短的通信路径分配较多数据，从而改善两条路径的负载均衡。
 
@@ -10,8 +10,8 @@
 
 需要注意：
 
-- 该环境变量仅影响HCCL已经选择两维度并行通信算法时AllReduce、AllGather、ReduceScatter、Broadcast、Reduce算子的两片数据分配比例，不用于选择通信算法。
-- AllReduce和ReduceScatter算子中，两片数据0、1的目标切分比例为“环境变量取值”和“1-环境变量取值”；AllGather算子中，算法内部使用的两片数据切分顺序与AllReduce、ReduceScatter、Broadcast、Reduce相反，即两片数据0、1的目标切分比例为“1-环境变量取值”和“环境变量取值”。
+- 该环境变量仅影响HCCL已经选择两维度并行通信算法时AllReduce、AllGather、ReduceScatter、Broadcast、Scatter、Reduce算子的两片数据分配比例，不用于选择通信算法。
+- AllReduce和ReduceScatter算子中，两片数据0、1的目标切分比例为“环境变量取值”和“1-环境变量取值”；AllGather算子中，算法内部使用的两片数据切分顺序与AllReduce、ReduceScatter、Broadcast、Scatter、Reduce相反，即两片数据0、1的目标切分比例为“1-环境变量取值”和“环境变量取值”。
 - 实际切分时会根据数据类型大小、对齐要求和尾块数据量进行取整或对齐处理，因此实际切分比例可能与配置值存在少量偏差。
 - 通信域显式配置的切分比例优先于该环境变量。两者均未配置有效比例时，系统尝试按链路端口信息自适应计算比例，无法计算时回退到0.5；level0拓扑为`MESH_1D_CLOS`的场景跳过自适应计算，直接使用0.5，AI CPU和CCU均适用。显式配置的有效比例仍正常生效。若该环境变量配置为非数字格式，系统会在初始化环境变量时返回错误。
 - 一般情况下，用户保持默认值即可。仅建议在确认当前业务处于跨框、两维度通信场景，且需要针对特定组网、数据量进行性能调优时修改该环境变量。
@@ -74,7 +74,7 @@ export HCCL_ALG_MULTIPLE_DIMENSION_SPLIT_RATIO=0.5
 
 ## 使用约束
 
-- 该环境变量仅在AllReduce、AllGather、ReduceScatter、Broadcast、Reduce算子选择两维度并行通信算法时生效。若当前拓扑、数据量、数据类型、reduce类型或算子展开模式选择了其他通信算法，则该环境变量不生效。
+- 该环境变量仅在AllReduce、AllGather、ReduceScatter、Broadcast、Scatter、Reduce算子选择两维度并行通信算法时生效。若当前拓扑、数据量、数据类型、reduce类型或算子展开模式选择了其他通信算法，则该环境变量不生效。
 - 建议业务结合实际组网和通信数据量进行性能验证后再调整该环境变量。过小或过大的配置可能导致两片数据负载不均，影响通信性能。
 
 ## 产品支持情况
