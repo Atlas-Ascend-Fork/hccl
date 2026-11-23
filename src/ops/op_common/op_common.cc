@@ -738,6 +738,9 @@ HcclResult HcclAivCacheCheckAndReplay(HcclComm comm, OpParam& param, bool& cache
         // 探测必须带上本次引擎：CheckAndSetSymmetricMemory 的 AIV 门禁（LSA memberId 覆盖校验）
         // 依赖 engine，缺省 COMM_ENGINE_RESERVED 会跳过门禁，命中缓存后按 identity 映射填错对端 VA。
         probeParam.engine = param.engine;
+        // 探测必须带上本次 opType：AIV AG/RS/A2A 的 inplace 门禁按 opType 过滤，缺省 HCCL_CMD_INVALID
+        // 会走 default 分支直接放行，同址 buffer 会错误命中并回放对称指令集。
+        probeParam.opType = param.opType;
         probeParam.inputPtr = param.inputPtr;
         probeParam.inputSize = param.inputSize;
         probeParam.outputPtr = param.outputPtr;
@@ -5273,16 +5276,30 @@ static bool IsSymWinLsaCovered(const OpParam& param)
     return covered;
 }
 
-// 对称内存不支持 inplace：inplace 时 input/output 为同一块或重叠内存，而对称路径要读对端
-// user input、写对端 user output，跨 rank 的读写会互相踩。判据为两侧字节区间 [ptr, ptr+size)
-// 是否有交集；alltoall 类不设 size，退化为「地址相同即 inplace」。
+// 仅 AIV 对称路径下的 AG/RS/A2A 需要拦截 inplace：这三个 AIV 对称 kernel 直接读写对端窗口，
+// input/output 为同一块或重叠内存时会覆盖本端/对端待发送数据。
+// AICPU_TS 等非 AIV 引擎的 inplace 能力由各算法按自身语义处理，公共层不拦截；
+// AIV AllReduce 对称 kernel 按 chunk 归属划分读写，同址安全，但地址不同且区间相交时
+// 仍会覆盖尚未读取的 chunk，需继续拦截。
+// 判据为两侧字节区间 [ptr, ptr+size) 是否有交集；alltoall 类不设 size，退化为「地址相同即 inplace」。
 static bool IsSymMemInplaceOverlap(const OpParam& param)
 {
-    // broadcast 语义上就是同址：root 写、其余 rank 读同一块 buffer。跨 rank 仍是各自的 buffer，
-    // 对称路径只写本地/对端 output 不读本方 output，不存在读写互踩，故豁免 inplace 门禁；
-    // 否则 broadcast 对称内存会恒被否决，成为永不生效的代码路径。
-    if (param.opType == HcclCMDType::HCCL_CMD_BROADCAST) {
+    if (param.engine != CommEngine::COMM_ENGINE_AIV) {
         return false;
+    }
+    switch (param.opType) {
+        case HcclCMDType::HCCL_CMD_ALLGATHER:
+        case HcclCMDType::HCCL_CMD_REDUCE_SCATTER:
+        case HcclCMDType::HCCL_CMD_ALLTOALL:
+            break;
+        case HcclCMDType::HCCL_CMD_ALLREDUCE:
+            // 同址为 AllReduce 支持的 in-place 形态；部分重叠不保证 chunk 读写顺序，落入下方区间相交判断
+            if (param.inputPtr == param.outputPtr) {
+                return false;
+            }
+            break;
+        default:
+            return false;
     }
     if (param.inputPtr == nullptr || param.outputPtr == nullptr) {
         return false;
@@ -5489,7 +5506,7 @@ HcclResult RefreshSymmetricMemory(OpParam& param, const TopoInfoWithNetLayerDeta
     }
     if (param.symMemChecked) {
         // 本轮已在算子入口探测过，窗口句柄仍在 param 中，无需重复查询；入口条件块可能因初始
-        // 引擎/算法清过 flag，此处按窗口有效性恢复；inplace 时一律不恢复，LSA 覆盖仅对 AIV 校验。
+        // 引擎/算法清过 flag，此处按窗口有效性恢复；AIV inplace 不恢复，LSA 覆盖仅对 AIV 校验。
         const bool lsaCovered = param.engine != CommEngine::COMM_ENGINE_AIV || IsSymWinLsaCovered(param);
         param.supportSymmetricMemory = IsSymMemWindowValid(param) && !IsSymMemInplaceOverlap(param) && lsaCovered;
     } else {
@@ -5501,7 +5518,7 @@ HcclResult RefreshSymmetricMemory(OpParam& param, const TopoInfoWithNetLayerDeta
 void CheckAndSetSymmetricMemory(OpParam& param)
 {
     param.symMemChecked = true;
-    // inplace 场景不支持对称内存：直接不置 supportSymmetricMemory，kernel 侧自动回退非对称路径
+    // 仅 AIV 的 AG/RS/A2A 在 inplace 下不支持对称内存：直接不置 supportSymmetricMemory，kernel 自动回退非对称路径
     if (IsSymMemInplaceOverlap(param)) {
         HCCL_INFO(
             "[%s] inplace(input[%p] size[%llu] / output[%p] size[%llu]) is not supported by symmetric memory, "

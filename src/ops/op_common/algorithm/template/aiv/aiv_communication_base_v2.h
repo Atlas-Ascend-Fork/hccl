@@ -297,10 +297,6 @@ public:
 
     template <typename T>
     __aicore__ inline void
-    DataCopyGM2UB(const LocalTensor<T>& dstLocal, const GlobalTensor<T>& srcGlobal, const uint32_t calCount);
-
-    template <typename T>
-    __aicore__ inline void
     DataCopyUB2GM(const GlobalTensor<T>& dstGlobal, const LocalTensor<T>& srcLocal, const uint32_t calCount);
 
     // 按显式地址判断对齐的拷贝：GM 地址或长度非 32B 对齐时走 DataCopyPad
@@ -661,23 +657,6 @@ __aicore__ inline void AivCommBase::SetAtomicOp(uint32_t atomicOp)
         default:
             SetAtomicNone();
             break;
-    }
-}
-
-template <typename T>
-__aicore__ inline void
-AivCommBase::DataCopyGM2UB(const LocalTensor<T>& dstLocal, const GlobalTensor<T>& srcGlobal, const uint32_t calCount)
-{
-    if ((calCount * sizeof(T)) % UB_ALIGN_SIZE == 0) {
-        DataCopy(dstLocal, srcGlobal, calCount);
-    } else {
-        // 结构体DataCopyExtParams最后一个参数是rsv保留位
-        DataCopyExtParams copyParams{1, calCount * (uint32_t)sizeof(T), 0, 0, 0};
-        DataCopyPadExtParams<T> padParams;
-        padParams.isPad = true;
-        padParams.leftPadding = 0;
-        padParams.rightPadding = 1;
-        DataCopyPad(dstLocal, srcGlobal, copyParams, padParams);
     }
 }
 

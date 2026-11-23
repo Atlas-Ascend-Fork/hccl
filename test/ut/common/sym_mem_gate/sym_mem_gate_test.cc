@@ -191,10 +191,82 @@ TEST_F(SymMemGateTest, ReduceOpsRejectProd)
 
 TEST_F(SymMemGateTest, ReduceScatterVInplaceRejected)
 {
+    // RS/RSV 的 inplace 由 RefreshSymmetricMemory 的归约分支独立拦截（与引擎无关），此处固化该行为
     SetOp(HcclCMDType::HCCL_CMD_REDUCE_SCATTER_V);
     param_.outputPtr = param_.inputPtr;
     EXPECT_EQ(RefreshSymmetricMemory(param_, &topo_), HCCL_SUCCESS);
     EXPECT_FALSE(param_.supportSymmetricMemory);
+}
+
+TEST_F(SymMemGateTest, AicpuTsAllGatherInplaceAllowed)
+{
+    // 非 AIV 引擎的 inplace 由各算法按自身语义处理，公共层不拦截（AICPU_TS AG 白名单算法同址放行）
+    SetOp(HcclCMDType::HCCL_CMD_ALLGATHER);
+    ASSERT_EQ(strcpy_s(param_.algName, sizeof(param_.algName), "AicpuAllGatherPipeLineMeshNHR"), EOK);
+    param_.outputPtr = param_.inputPtr;
+    EXPECT_EQ(RefreshSymmetricMemory(param_, &topo_), HCCL_SUCCESS);
+    EXPECT_TRUE(param_.supportSymmetricMemory);
+}
+
+TEST_F(SymMemGateTest, AivInplaceRejectedForAgRsA2a)
+{
+    // AIV + AG/RS/A2A 的对称 kernel 直接读写对端窗口，inplace 会覆盖待发送数据
+    topo_.level0Topo = Level0Shape::MESH_1D_CLOS;
+    param_.engine = CommEngine::COMM_ENGINE_AIV;
+    param_.outputPtr = param_.inputPtr;
+
+    SetOp(HcclCMDType::HCCL_CMD_ALLGATHER);
+    ASSERT_EQ(strcpy_s(param_.algName, sizeof(param_.algName), "AivAllGatherSoleMesh"), EOK);
+    EXPECT_EQ(RefreshSymmetricMemory(param_, &topo_), HCCL_SUCCESS);
+    EXPECT_FALSE(param_.supportSymmetricMemory);
+
+    SetOp(HcclCMDType::HCCL_CMD_REDUCE_SCATTER);
+    ASSERT_EQ(strcpy_s(param_.algName, sizeof(param_.algName), "AivReduceScatterSoleMesh"), EOK);
+    EXPECT_EQ(RefreshSymmetricMemory(param_, &topo_), HCCL_SUCCESS);
+    EXPECT_FALSE(param_.supportSymmetricMemory);
+
+    SetOp(HcclCMDType::HCCL_CMD_ALLTOALL);
+    ASSERT_EQ(strcpy_s(param_.algName, sizeof(param_.algName), "AivAllToAllSoleMesh"), EOK);
+    EXPECT_EQ(RefreshSymmetricMemory(param_, &topo_), HCCL_SUCCESS);
+    EXPECT_FALSE(param_.supportSymmetricMemory);
+}
+
+TEST_F(SymMemGateTest, AivAllReduceInplaceAllowed)
+{
+    // AllReduce 对称路径按 chunk 归属划分读写，同址不存在跨 rank 覆盖，放行
+    topo_.level0Topo = Level0Shape::MESH_1D_CLOS;
+    param_.engine = CommEngine::COMM_ENGINE_AIV;
+    param_.outputPtr = param_.inputPtr;
+    SetOp(HcclCMDType::HCCL_CMD_ALLREDUCE);
+    ASSERT_EQ(strcpy_s(param_.algName, sizeof(param_.algName), "AivAllReduceSoleMeshTwoShot"), EOK);
+    EXPECT_EQ(RefreshSymmetricMemory(param_, &topo_), HCCL_SUCCESS);
+    EXPECT_TRUE(param_.supportSymmetricMemory);
+}
+
+TEST_F(SymMemGateTest, AivAllReducePartialOverlapRejected)
+{
+    // 仅同址可放行：地址不同但区间相交时，写 output chunk 会覆盖尚未读取的 input chunk
+    topo_.level0Topo = Level0Shape::MESH_1D_CLOS;
+    param_.engine = CommEngine::COMM_ENGINE_AIV;
+    param_.outputPtr = static_cast<u8*>(param_.inputPtr) + 1024;
+    SetOp(HcclCMDType::HCCL_CMD_ALLREDUCE);
+    ASSERT_EQ(strcpy_s(param_.algName, sizeof(param_.algName), "AivAllReduceSoleMeshTwoShot"), EOK);
+    EXPECT_EQ(RefreshSymmetricMemory(param_, &topo_), HCCL_SUCCESS);
+    EXPECT_FALSE(param_.supportSymmetricMemory);
+}
+
+TEST_F(SymMemGateTest, AivCacheReplayInplaceNotHit)
+{
+    // 缓存键不含地址/inplace：先按非 inplace buffer 录制对称指令集（桩固定返回 symmetric 模式条目），
+    // 再以同址 buffer 调用时必须跳过回放。重放前探测若缺 opType，门禁会走 default 放行并错误命中缓存。
+    param_.engine = CommEngine::COMM_ENGINE_AIV;
+    SetOp(HcclCMDType::HCCL_CMD_ALLGATHER);
+    ASSERT_EQ(strcpy_s(param_.algName, sizeof(param_.algName), "AivAllGatherSoleMesh"), EOK);
+    param_.outputPtr = param_.inputPtr;
+
+    bool cacheHit = true;
+    EXPECT_EQ(HcclAivCacheCheckAndReplay(param_.hcclComm, param_, cacheHit), HCCL_SUCCESS);
+    EXPECT_FALSE(cacheHit);
 }
 
 TEST_F(SymMemGateTest, ReduceScatterVMultiLevelRejected)
