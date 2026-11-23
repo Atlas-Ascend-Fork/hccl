@@ -25,6 +25,17 @@
 #include "utils.h"
 
 namespace ops_hccl {
+// 在4p内执行并发算法场景中计算权重,根据mesh：clos的端口数量比例关系切分数据
+// 仅计算并行切分权重；内存模式与调参策略由执行器选择。
+// 不同算法有不同的ratio和tune值
+inline void GetConcurrentPortNum(u32 rankSize, u32 ratio, u32 tune, u32& meshPort, u32& closPort)
+{
+    constexpr uint32_t MESH_PORT_BASE = 20;
+    constexpr uint32_t CLOS_PORT_BASE = 80;
+    meshPort = MESH_PORT_BASE * (rankSize - 1) + ratio * (rankSize - tune);
+    closPort = CLOS_PORT_BASE;
+}
+
 /*
  * 统一填充template数据参数的buffInfo: 序列/两发等执行器GenBaseTempAlgParams中
  * "三段buffer类型+输入输出指针+hcclBuff"的6行赋值样板, hcclBuffType恒为HCCL_BUFFER。

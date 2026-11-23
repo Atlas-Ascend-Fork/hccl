@@ -29,11 +29,6 @@ constexpr u32 MESH_BW_SCHED = 10;
 constexpr u32 CLOS_BW_SCHED = 12;
 constexpr u32 MESH_BW_MS = 11;
 constexpr u32 CLOS_BW_MS = 10;
-constexpr u32 MESH_BW_AICPU = 21;
-constexpr u32 CLOS_BW_AICPU = 20;
-// 对称内存路径使用的 Mesh/CLOS 数据切分权重。
-constexpr u32 MESH_BW_AICPU_SYMMETRIC = 5;
-constexpr u32 CLOS_BW_AICPU_SYMMETRIC = 6;
 
 #include "alg_attrs_registry.h"
 #include "auto_selector_base.h"
@@ -76,11 +71,11 @@ InsReduceScatterConcurrentExecutor<AlgTopoMatch, InsAlgTemplate0, InsAlgTemplate
         "[InsReduceScatterConcurrentExecutor][CalcCostCoeff] rankSize=%d, netTypeLevel0=%d, netTypeLevel1=%d", rankSize,
         static_cast<int>(netTypeLevel0), static_cast<int>(netTypeLevel1));
 
-    OpParam localParam;
+    OpParam localParam{};
     localParam.supportSymmetricMemory = param.supportSymmetricMemory;
     SetCostModelExecuteConfig<std::is_base_of<CcuAlgTemplateBase, InsAlgTemplate0>::value>(localParam, algName);
     std::vector<float> dataSplitSize;
-    GetParallelDataSplit(localParam, dataSplitSize);
+    GetParallelDataSplit(localParam, rankSize, dataSplitSize);
     std::vector<CostModelParam> params
         = [rankSize, &dataSplitSize, portNumLevel0, portNumLevel1, netTypeLevel0, netTypeLevel1, isPod] {
               std::vector<CostModelParam> v;
@@ -114,11 +109,11 @@ AlgNetMeta InsReduceScatterConcurrentExecutor<AlgTopoMatch, InsAlgTemplate0, Ins
     CommTopo netTypeLevel1 = GetPhysicalLevelTopoType(topoInfo, physIdxLevel1);
     u32 rankSize = topoInfo->userRankSize;
 
-    OpParam localParam;
+    OpParam localParam{};
     localParam.supportSymmetricMemory = param.supportSymmetricMemory;
     SetCostModelExecuteConfig<std::is_base_of<CcuAlgTemplateBase, InsAlgTemplate0>::value>(localParam, algName);
     std::vector<float> dataSplitSize;
-    GetParallelDataSplit(localParam, dataSplitSize);
+    GetParallelDataSplit(localParam, rankSize, dataSplitSize);
     return BuildConcurrentNetMeta(netTypeLevel0, netTypeLevel1, rankSize, dataSplitSize);
 }
 template <typename AlgTopoMatch, typename InsAlgTemplate0, typename InsAlgTemplate1>
@@ -314,22 +309,15 @@ HcclResult InsReduceScatterConcurrentExecutor<AlgTopoMatch, InsAlgTemplate0, Ins
     tempAlgParamsforTemp1.buffInfo.outBuffType = BufferType::OUTPUT;
     tempAlgParamsforTemp1.repeatNum = 1; // 不重复
 
-    u64 portNum = 4;
     // 对称路径的 NHR 轴直接在用户 input 上归约，不占用 scratch；Mesh 轴保留接收空间。
     u32 templateScratchMultiplier1
         = useSymmetricMemory ? 0 : tempAlg1->CalcScratchMultiple(BufferType::INPUT, BufferType::OUTPUT);
-    u64 portNum0 = rankSize_ - 1;
     u32 templateScratchMultiplier0 = tempAlg0->CalcScratchMultiple(BufferType::INPUT, BufferType::OUTPUT);
-    if (param.opExecuteConfig == OpExecuteConfig::CCU_SCHED) {
-        portNum0 = MESH_BW_SCHED;
-        portNum = CLOS_BW_SCHED;
-    } else if (param.opExecuteConfig == OpExecuteConfig::AICPU_TS) {
-        portNum0 = useSymmetricMemory ? MESH_BW_AICPU_SYMMETRIC : MESH_BW_AICPU;
-        portNum = useSymmetricMemory ? CLOS_BW_AICPU_SYMMETRIC : CLOS_BW_AICPU;
-    } else if (param.opExecuteConfig == OpExecuteConfig::CCU_MS) {
-        portNum0 = MESH_BW_MS;
-        portNum = CLOS_BW_MS;
-    }
+    u32 meshPort;
+    u32 closPort;
+    GetParallelDataSplit(param, rankSize_, meshPort, closPort);
+    const u64 portNum0 = meshPort;
+    const u64 portNum = closPort;
     // 划分cclbuffer
     void* cclMemAddr = resCtx.cclMem.addr;
     const u64 cclMemSize = resCtx.cclMem.size;
@@ -376,7 +364,7 @@ HcclResult InsReduceScatterConcurrentExecutor<AlgTopoMatch, InsAlgTemplate0, Ins
     u32 loopTimesforTemp1 = (dataCountforTemp1 + maxCountPerLoopforTemp1 - 1) / maxCountPerLoopforTemp1;
 
     HCCL_INFO(
-        "[InsReduceScatterConcurrentExecutor][%s]portNum0[%u], portNum1[%u], dataCount[%llu], "
+        "[InsReduceScatterConcurrentExecutor][%s]portNum0[%llu], portNum1[%llu], dataCount[%llu], "
         "maxCountPerLoopforTemp0[%llu], "
         "maxCountPerLoopforTemp1[%llu], dataCountforTemp0[%llu], dataCountforTemp1[%llu]",
         __func__, portNum0, portNum, dataCount_, maxCountPerLoopforTemp0, maxCountPerLoopforTemp1, dataCountforTemp0,
@@ -550,20 +538,32 @@ HcclResult InsReduceScatterConcurrentExecutor<AlgTopoMatch, InsAlgTemplate0, Ins
 
 template <typename AlgTopoMatch, typename InsAlgTemplate0, typename InsAlgTemplate1>
 void InsReduceScatterConcurrentExecutor<AlgTopoMatch, InsAlgTemplate0, InsAlgTemplate1>::GetParallelDataSplit(
-    const OpParam& param, std::vector<float>& splitDataSize) const
+    const OpParam& param, u32 rankSize, u32& meshPort, u32& closPort) const
 {
-    u32 portNum0 = rankSize_ - 1; // mesh端口数为rank size - 1
-    u32 portNum1 = 4;             // clos端口数
+    meshPort = rankSize - 1;
+    closPort = 4;
     if (param.opExecuteConfig == OpExecuteConfig::CCU_SCHED) {
-        portNum0 = MESH_BW_SCHED;
-        portNum1 = CLOS_BW_SCHED;
+        meshPort = MESH_BW_SCHED;
+        closPort = CLOS_BW_SCHED;
     } else if (param.opExecuteConfig == OpExecuteConfig::CCU_MS) {
-        portNum0 = MESH_BW_MS;
-        portNum1 = CLOS_BW_MS;
+        meshPort = MESH_BW_MS;
+        closPort = CLOS_BW_MS;
     } else if (param.opExecuteConfig == OpExecuteConfig::AICPU_TS) {
-        portNum0 = param.supportSymmetricMemory ? MESH_BW_AICPU_SYMMETRIC : MESH_BW_AICPU;
-        portNum1 = param.supportSymmetricMemory ? CLOS_BW_AICPU_SYMMETRIC : CLOS_BW_AICPU;
+        if (param.supportSymmetricMemory) {
+            GetConcurrentPortNum(rankSize, 1, rankSize, meshPort, closPort);
+        } else {
+            GetConcurrentPortNum(rankSize, 0, rankSize, meshPort, closPort);
+        }
     }
+}
+
+template <typename AlgTopoMatch, typename InsAlgTemplate0, typename InsAlgTemplate1>
+void InsReduceScatterConcurrentExecutor<AlgTopoMatch, InsAlgTemplate0, InsAlgTemplate1>::GetParallelDataSplit(
+    const OpParam& param, u32 rankSize, std::vector<float>& splitDataSize) const
+{
+    u32 portNum0;
+    u32 portNum1;
+    GetParallelDataSplit(param, rankSize, portNum0, portNum1);
     double splitData = static_cast<double>(portNum0) / (portNum0 + portNum1);
     splitDataSize.push_back(splitData);
     splitDataSize.push_back(1 - splitData);

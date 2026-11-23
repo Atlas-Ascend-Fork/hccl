@@ -78,7 +78,8 @@ private:
         const OpParam& param, const AlgResourceCtxSerializable& resCtx, TemplateDataParams& tempAlgParams) const;
     HcclResult RestoreSendRecvData(const OpParam& param);
     HcclResult SplitSendRecvData(const OpParam& param, std::vector<SendRecvData>& splitData);
-    void GetParallelDataSplit(const OpParam& param, std::vector<float>& splitDataSize) const;
+    void GetParallelDataSplit(const OpParam& param, u32 rankSize, std::vector<float>& splitDataSize) const;
+    void GetParallelDataSplit(const OpParam& param, u32 rankSize, u32& meshPort, u32& closPort) const;
     HcclResult GetMaxSendRecvDataCount(u64& maxSendRecvDataCount, const SendRecvData& splitData) const;
     HcclResult CalcMaxDataCountPerLoop(
         const OpParam& param, const std::vector<u64> scratchMulti, std::vector<u64>& maxDataCountPerLoop) const;

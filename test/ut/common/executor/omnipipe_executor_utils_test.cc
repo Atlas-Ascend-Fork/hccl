@@ -9,6 +9,7 @@
  */
 
 #include <gtest/gtest.h>
+#include "executor_common_ops.h"
 #include "omnipipe_executor_utils.h"
 
 using namespace ops_hccl;
@@ -72,4 +73,49 @@ TEST_F(IsOnlyThirdAxisTopoTest, NonContiguousLayerIds_UseSecondLayerAsIndex)
     topo.netLayerDetails.netLayers = {2, 5};                          // layers[1] == 5
     topo.netLayerDetails.localNetInsSizeOfLayer = {4, 4, 4, 4, 4, 1}; // index 5 == 1
     EXPECT_TRUE(IsOnlyThirdAxisTopo(&topo));
+}
+
+TEST(ConcurrentPortNumTest, ProductionParametersForTwoAndFourRanks)
+{
+    struct TestCase {
+        const char* name;
+        u32 rankSize;
+        u32 ratio;
+        u32 tune;
+        u32 expectedMeshPort;
+    };
+    const TestCase testCases[] = {
+        {"AllGather symmetric 2 ranks", 2, 1, 2, 20},     {"AllGather asymmetric 2 ranks", 2, 1, 2, 20},
+        {"AllGather symmetric 4 ranks", 4, 1, 4, 60},     {"AllGather asymmetric 4 ranks", 4, 1, 2, 62},
+        {"AllReduce symmetric 2 ranks", 2, 1, 2, 20},     {"AllReduce asymmetric 2 ranks", 2, 10, 2, 20},
+        {"AllReduce symmetric 4 ranks", 4, 1, 4, 60},     {"AllReduce asymmetric 4 ranks", 4, 10, 2, 80},
+        {"AllToAll symmetric 2 ranks", 2, 1, 1, 21},      {"AllToAll asymmetric 2 ranks", 2, 4, 1, 24},
+        {"AllToAll symmetric 4 ranks", 4, 1, 3, 61},      {"AllToAll asymmetric 4 ranks", 4, 4, 3, 64},
+        {"ReduceScatter symmetric 2 ranks", 2, 1, 2, 20}, {"ReduceScatter asymmetric 2 ranks", 2, 0, 2, 20},
+        {"ReduceScatter symmetric 4 ranks", 4, 1, 4, 60}, {"ReduceScatter asymmetric 4 ranks", 4, 0, 4, 60},
+    };
+
+    for (const auto& testCase : testCases) {
+        SCOPED_TRACE(testCase.name);
+        u32 meshPort = 0;
+        u32 closPort = 0;
+        GetConcurrentPortNum(testCase.rankSize, testCase.ratio, testCase.tune, meshPort, closPort);
+        EXPECT_EQ(meshPort, testCase.expectedMeshPort);
+        EXPECT_EQ(closPort, 80U);
+    }
+}
+
+TEST(ConcurrentPortNumTest, AppliesRatioAndTuneWithoutChoosingPolicy)
+{
+    u32 meshPort = 0;
+    u32 closPort = 0;
+    GetConcurrentPortNum(8, 1, 4, meshPort, closPort);
+    EXPECT_EQ(meshPort, 144U);
+    EXPECT_EQ(closPort, 80U);
+    GetConcurrentPortNum(8, 4, 4, meshPort, closPort);
+    EXPECT_EQ(meshPort, 156U);
+    EXPECT_EQ(closPort, 80U);
+    GetConcurrentPortNum(8, 4, 0, meshPort, closPort);
+    EXPECT_EQ(meshPort, 172U);
+    EXPECT_EQ(closPort, 80U);
 }

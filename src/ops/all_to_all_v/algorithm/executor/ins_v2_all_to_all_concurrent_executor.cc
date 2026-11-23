@@ -9,11 +9,11 @@
  */
 
 #include <type_traits>
+#include "ins_v2_all_to_all_concurrent_executor.h"
 #include "executor_common_ops.h"
 #include "alg_data_trans_wrapper.h"
 #include "channel.h"
 #include "ccu_alg_template_base.h"
-#include "ins_v2_all_to_all_concurrent_executor.h"
 #include "aicpu/ins_temp_all_to_all_v_mesh_1D.h"
 #include "alg_attrs_registry.h"
 
@@ -37,8 +37,6 @@ constexpr uint64_t BIG_DATA_SIZE_LIMIT = 512;
 
 constexpr u32 MESH_BW = 100;
 constexpr u32 CLOS_BW = 93;
-constexpr u32 MESH_BW_AICPU = 10;
-constexpr u32 CLOS_BW_AICPU = 12;
 
 template <typename AlgTopoMatch, typename InsAlgTemplate0, typename InsAlgTemplate1>
 InsV2AllToAllConcurrentExecutor<AlgTopoMatch, InsAlgTemplate0, InsAlgTemplate1>::InsV2AllToAllConcurrentExecutor()
@@ -95,14 +93,15 @@ InsV2AllToAllConcurrentExecutor<AlgTopoMatch, InsAlgTemplate0, InsAlgTemplate1>:
         "[InsV2AllToAllConcurrentExecutor][CalcCostCoeff] rankSize=%d, netTypeLevel0=%d, netTypeLevel1=%d", rankSize,
         static_cast<int>(netTypeLevel0), static_cast<int>(netTypeLevel1));
 
-    OpParam localParam;
+    OpParam localParam{};
+    localParam.supportSymmetricMemory = param.supportSymmetricMemory;
     if constexpr (std::is_base_of<CcuAlgTemplateBase, InsAlgTemplate0>::value) {
         localParam.engine = CommEngine::COMM_ENGINE_CCU;
     } else {
         localParam.engine = CommEngine::COMM_ENGINE_AICPU_TS;
     }
     std::vector<float> dataSplitSize;
-    GetParallelDataSplit(localParam, dataSplitSize);
+    GetParallelDataSplit(localParam, rankSize, dataSplitSize);
     std::vector<CostModelParam> params
         = [rankSize, &dataSplitSize, &portNumLevel0, &portNumLevel1, netTypeLevel0, netTypeLevel1, isPod] {
               std::vector<CostModelParam> v;
@@ -146,14 +145,15 @@ AlgNetMeta InsV2AllToAllConcurrentExecutor<AlgTopoMatch, InsAlgTemplate0, InsAlg
     CommTopo netTypeLevel0 = GetPhysicalLevelTopoType(topoInfo, physIdxLevel0);
     CommTopo netTypeLevel1 = GetPhysicalLevelTopoType(topoInfo, physIdxLevel1);
 
-    OpParam localParam;
+    OpParam localParam{};
+    localParam.supportSymmetricMemory = param.supportSymmetricMemory;
     if constexpr (std::is_base_of<CcuAlgTemplateBase, InsAlgTemplate0>::value) {
         localParam.engine = CommEngine::COMM_ENGINE_CCU;
     } else {
         localParam.engine = CommEngine::COMM_ENGINE_AICPU_TS;
     }
     std::vector<float> dataSplitSize;
-    GetParallelDataSplit(localParam, dataSplitSize);
+    GetParallelDataSplit(localParam, rankSize, dataSplitSize);
     meta.netTypes.push_back(netTypeLevel0);
     meta.netTypes.push_back(netTypeLevel1);
     meta.intraGroupMode = CostAggMode::MAX;
@@ -409,15 +409,9 @@ HcclResult InsV2AllToAllConcurrentExecutor<AlgTopoMatch, InsAlgTemplate0, InsAlg
     }
 
     // 按topo切分数据：0为topo 0，1为topo 1
-    uint32_t factorMesh = rankSize_ - 1;
-    uint32_t factorClos = CONST_4; // 端口数获取
-    if (param.engine == CommEngine::COMM_ENGINE_CCU) {
-        factorMesh = MESH_BW;
-        factorClos = CLOS_BW;
-    } else if (param.engine == CommEngine::COMM_ENGINE_AICPU_TS) {
-        factorMesh = MESH_BW_AICPU;
-        factorClos = CLOS_BW_AICPU;
-    }
+    u32 factorMesh;
+    u32 factorClos;
+    GetParallelDataSplit(param, rankSize_, factorMesh, factorClos);
     uint32_t factor = factorMesh + factorClos;
     for (u64 i = 0; i < rankSize_; i++) {
         uint64_t sendQuotient = sendCounts_[i] / factor;
@@ -448,21 +442,29 @@ HcclResult InsV2AllToAllConcurrentExecutor<AlgTopoMatch, InsAlgTemplate0, InsAlg
 
 template <typename AlgTopoMatch, typename InsAlgTemplate0, typename InsAlgTemplate1>
 void InsV2AllToAllConcurrentExecutor<AlgTopoMatch, InsAlgTemplate0, InsAlgTemplate1>::GetParallelDataSplit(
-    const OpParam& param, std::vector<float>& splitDataSize) const
+    const OpParam& param, u32 rankSize, u32& meshPort, u32& closPort) const
 {
-    // 与SplitSendRecvData同口径: 按mesh/clos带宽比切分, CCU用MESH_BW/CLOS_BW, AICPU_TS用MESH_BW_AICPU/CLOS_BW_AICPU
+    meshPort = rankSize - 1;
+    closPort = CONST_4;
+    if (param.engine == CommEngine::COMM_ENGINE_CCU) {
+        meshPort = MESH_BW;
+        closPort = CLOS_BW;
+    } else if (param.engine == CommEngine::COMM_ENGINE_AICPU_TS) {
+        if (param.supportSymmetricMemory) {
+            GetConcurrentPortNum(rankSize, 1, (rankSize - 1), meshPort, closPort);
+        } else {
+            GetConcurrentPortNum(rankSize, 4, (rankSize - 1), meshPort, closPort);
+        }
+    }
+}
+
+template <typename AlgTopoMatch, typename InsAlgTemplate0, typename InsAlgTemplate1>
+void InsV2AllToAllConcurrentExecutor<AlgTopoMatch, InsAlgTemplate0, InsAlgTemplate1>::GetParallelDataSplit(
+    const OpParam& param, u32 rankSize, std::vector<float>& splitDataSize) const
+{
     u32 factorMesh;
     u32 factorClos;
-    if (param.engine == CommEngine::COMM_ENGINE_CCU) {
-        factorMesh = MESH_BW;
-        factorClos = CLOS_BW;
-    } else if (param.engine == CommEngine::COMM_ENGINE_AICPU_TS) {
-        factorMesh = MESH_BW_AICPU;
-        factorClos = CLOS_BW_AICPU;
-    } else {
-        factorMesh = rankSize_ - 1;
-        factorClos = CONST_4;
-    }
+    GetParallelDataSplit(param, rankSize, factorMesh, factorClos);
     double splitData = static_cast<double>(factorMesh) / (factorMesh + factorClos);
     splitDataSize.push_back(static_cast<float>(splitData));
     splitDataSize.push_back(static_cast<float>(1.0 - splitData));

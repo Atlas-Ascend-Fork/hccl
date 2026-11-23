@@ -70,7 +70,8 @@ protected:
     AlgHierarchyInfoForAllLevel algHierarchyInfo_;
 
 private:
-    void GetParallelDataSplit(const OpParam& param, std::vector<float>& splitDataSize) const;
+    void GetParallelDataSplit(const OpParam& param, u32 rankSize, std::vector<float>& splitDataSize) const;
+    void GetParallelDataSplit(const OpParam& param, u32 rankSize, u32& meshPort, u32& closPort) const;
 
     void GenTempAlgParams(
         const u64 dataOffset, const u64 dataCountforTemp, const u64 maxCountPerLoop,
