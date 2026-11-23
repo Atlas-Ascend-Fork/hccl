@@ -1121,6 +1121,15 @@ namespace {
             HCCL_INFO("[OpCommon][LaunchWarmupVOperator] OpMode::OFFLOAD is not supported");
             return HCCL_SUCCESS;
         }
+        // 此处早于DFX构造，实时查询业务流，避免对正在捕获的流执行阻塞同步。
+        aclmdlRICaptureStatus captureStatus = ACL_MODEL_RI_CAPTURE_STATUS_NONE;
+        u64 modelId = 0;
+        bool isCapture = false;
+        CHK_RET(haclrtGetCaptureInfo(param.stream, captureStatus, modelId, isCapture));
+        if (isCapture) {
+            HCCL_INFO("[VCacheWarmup] skip: business stream is capturing, comm[%s].", param.commName);
+            return HCCL_SUCCESS;
+        }
 
         // 零拷贝不支持
         if (param.isZeroCopy) {
@@ -1161,21 +1170,16 @@ namespace {
 
             const u64 bufSize = static_cast<u64>(rankSize) * DATATYPE_SIZE_TABLE[sendType];
 
-            aclrtStream warmUpStream = nullptr;
-            HCCL_INFO("[VCacheWarmup] create stream begin: comm[%s].", commName.c_str());
-            aclError aclRet = aclrtCreateStream(&warmUpStream);
-            if (aclRet != ACL_SUCCESS) {
-                HCCL_ERROR("[OpCommon][LaunchWarmupVOperator] aclrtCreateStream failed, ret[%d].", aclRet);
-                return HCCL_E_RUNTIME;
-            }
+            // 预热和业务共用调用方的流，通过同流顺序保证启动notify的有序复用。
+            aclrtStream warmUpStream = param.stream;
             HCCL_INFO(
-                "[VCacheWarmup] stream created: comm[%s] warmupStream[%p] rankSize[%u] bufferBytes[%llu].",
+                "[VCacheWarmup] reuse business stream: comm[%s] warmupStream[%p] rankSize[%u] bufferBytes[%llu].",
                 commName.c_str(), warmUpStream, rankSize, static_cast<unsigned long long>(bufSize));
 
             void* sendBuf = nullptr;
             void* recvBuf = nullptr;
             HCCL_INFO("[VCacheWarmup] allocate buffers begin: comm[%s].", commName.c_str());
-            aclRet = aclrtMalloc(&sendBuf, bufSize, ACL_MEM_MALLOC_HUGE_FIRST);
+            aclError aclRet = aclrtMalloc(&sendBuf, bufSize, ACL_MEM_MALLOC_HUGE_FIRST);
             if (aclRet == ACL_SUCCESS) {
                 aclRet = aclrtMalloc(&recvBuf, bufSize, ACL_MEM_MALLOC_HUGE_FIRST);
             }
@@ -1184,7 +1188,6 @@ namespace {
                     "[VCacheWarmup] allocation failed: comm[%s] bytes[%llu] send[%p] recv[%p] ret[%d].",
                     commName.c_str(), static_cast<unsigned long long>(bufSize), sendBuf, recvBuf, aclRet);
                 ReleaseWarmupResource(sendBuf, recvBuf);
-                (void)aclrtDestroyStream(warmUpStream);
                 return HCCL_E_RUNTIME;
             }
             HCCL_INFO(
@@ -1219,7 +1222,6 @@ namespace {
                     "[OpCommon][LaunchWarmupVOperator] warmup op failed, ret[%d], comm[%s].", ret, commName.c_str());
                 (void)aclrtSynchronizeStream(warmUpStream);
                 ReleaseWarmupResource(sendBuf, recvBuf);
-                (void)aclrtDestroyStream(warmUpStream);
                 return HCCL_E_INTERNAL;
             }
 
@@ -1233,19 +1235,12 @@ namespace {
                     commName.c_str());
                 (void)aclrtSynchronizeStream(warmUpStream);
                 ReleaseWarmupResource(sendBuf, recvBuf);
-                (void)aclrtDestroyStream(warmUpStream);
                 return HCCL_E_INTERNAL;
             }
             HCCL_INFO(
                 "[VCacheWarmup] synchronize complete, cleanup begin: comm[%s] warmupStream[%p].", commName.c_str(),
                 warmUpStream);
             ReleaseWarmupResource(sendBuf, recvBuf);
-            HCCL_INFO(
-                "[VCacheWarmup] destroy stream begin: comm[%s] warmupStream[%p].", commName.c_str(), warmUpStream);
-            aclRet = aclrtDestroyStream(warmUpStream);
-            if (aclRet != ACL_SUCCESS) {
-                HCCL_ERROR("[VCacheWarmup] destroy stream failed: comm[%s] ret[%d].", commName.c_str(), aclRet);
-            }
             HCCL_INFO("[OpCommon][LaunchWarmupVOperator] small warmUp op success, comm[%s].", commName.c_str());
         } else {
             HCCL_INFO(
