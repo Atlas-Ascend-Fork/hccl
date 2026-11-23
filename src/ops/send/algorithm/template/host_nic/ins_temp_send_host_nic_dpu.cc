@@ -159,6 +159,14 @@ HcclResult InsTempSendHostNicDpu::RunDpuTransfer(
 
         uint8_t* input = static_cast<uint8_t*>(tempAlgParam.buffInfo.inputPtr);
         uint64_t inputSize = tempAlgParam.buffInfo.inputSize;
+        const ChannelInfo& sendChannel = channels.at(rankId)[0];
+        CHK_PRT_RET(
+            sendChannel.remoteCclMem.addr == nullptr || sendChannel.remoteCclMem.size < inputSize,
+            HCCL_ERROR(
+                "[InsTempSendHostNicDpu][RunDpuTransfer] invalid remote CCL buffer, rankId[%u], addr[%p], "
+                "size[%llu], inputSize[%llu].",
+                rankId, sendChannel.remoteCclMem.addr, sendChannel.remoteCclMem.size, inputSize),
+            HCCL_E_PARA);
 
         for (u64 sizeResidue = inputSize; sizeResidue > 0; sizeResidue -= sizePerRound) {
             // 前同步

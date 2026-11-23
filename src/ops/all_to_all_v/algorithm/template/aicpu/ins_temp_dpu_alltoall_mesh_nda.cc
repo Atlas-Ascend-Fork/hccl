@@ -506,23 +506,33 @@ HcclResult InsTempDpuAlltoAllMeshNda::PostCopyDataToRecvBuf(
     for (u32 i = 0; i < commRanks.size(); i++) {
         u32 remoteRank = commRanks[i];
         u64 recvCount = tempAlgParams.recvCounts[remoteRank];
-        if (remoteRank != myRank_ && recvCount > 0 && channels.at(remoteRank)[0].protocol == COMM_PROTOCOL_ROCE) {
-            u64 recvSliceSize = recvCount * dataTypeSize_;
-            u64 recvOffset = tempAlgParams.rdispls[remoteRank] * dataTypeSize_;
-            DataSlice srcSlice = DataSlice(
-                tempAlgParams.buffInfo.hcclBuff.addr,
-                tempAlgParams.buffInfo.hcclBuffBaseOff + halfMaxTmpMemSize_ + remoteRank * hcclbuffBlockMemSize_,
-                recvSliceSize, recvCount);
-            // 将HCCL_BUF的后半部分CCL_OUT上接收到的数据，拷贝到recvBuf上
-            DataSlice dstSlice = DataSlice(tempAlgParams.buffInfo.outputPtr, recvOffset, recvSliceSize, recvCount);
-            HCCL_INFO(
-                "[InsTempDpuAlltoAllMeshNda] [PostCopyDataToRecvBuf] myRank[%u] localCopy remoteRank[%u]'s data "
-                "from CCLOUT startAddr[%llu] to recvBuf startAddr[%llu] and Size is [%llu]",
-                myRank_, remoteRank,
-                tempAlgParams.buffInfo.hcclBuffBaseOff + halfMaxTmpMemSize_ + remoteRank * hcclbuffBlockMemSize_,
-                recvOffset, recvSliceSize);
-            CHK_RET(AppendCopy(threads[0], srcSlice, dstSlice, pendingSource, pendingDestination));
+        if (remoteRank == myRank_ || recvCount == 0) {
+            continue;
         }
+        auto it = channels.find(remoteRank);
+        CHK_PRT_RET(
+            it == channels.end() || it->second.empty(),
+            HCCL_ERROR("[InsTempDpuAlltoAllMeshNda][PostCopyDataToRecvBuf] no channel for remoteRank[%u]", remoteRank),
+            HCCL_E_PARA);
+        // 非 ROCE 链路的数据不经本端 CCL_OUT 中转，无 CCL_OUT→recvBuf 回拷
+        if (it->second[0].protocol != COMM_PROTOCOL_ROCE) {
+            continue;
+        }
+        u64 recvSliceSize = recvCount * dataTypeSize_;
+        u64 recvOffset = tempAlgParams.rdispls[remoteRank] * dataTypeSize_;
+        DataSlice srcSlice = DataSlice(
+            tempAlgParams.buffInfo.hcclBuff.addr,
+            tempAlgParams.buffInfo.hcclBuffBaseOff + halfMaxTmpMemSize_ + remoteRank * hcclbuffBlockMemSize_,
+            recvSliceSize, recvCount);
+        // 将HCCL_BUF的后半部分CCL_OUT上接收到的数据，拷贝到recvBuf上
+        DataSlice dstSlice = DataSlice(tempAlgParams.buffInfo.outputPtr, recvOffset, recvSliceSize, recvCount);
+        HCCL_INFO(
+            "[InsTempDpuAlltoAllMeshNda] [PostCopyDataToRecvBuf] myRank[%u] localCopy remoteRank[%u]'s data "
+            "from CCLOUT startAddr[%llu] to recvBuf startAddr[%llu] and Size is [%llu]",
+            myRank_, remoteRank,
+            tempAlgParams.buffInfo.hcclBuffBaseOff + halfMaxTmpMemSize_ + remoteRank * hcclbuffBlockMemSize_,
+            recvOffset, recvSliceSize);
+        CHK_RET(AppendCopy(threads[0], srcSlice, dstSlice, pendingSource, pendingDestination));
     }
     if (pendingSource.size_ != 0) {
         CHK_RET(LocalCopy(threads[0], pendingSource, pendingDestination));

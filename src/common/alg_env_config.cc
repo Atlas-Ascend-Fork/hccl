@@ -328,7 +328,8 @@ HcclResult InitEnvConfig()
     RPT_ENV_ERR(
         ret != HCCL_SUCCESS, "EI0001", std::vector<std::string>({"value", "env", "expect"}),
         std::vector<std::string>(
-            {GetEnv("HCCL_EXEC_TIMEOUT"), "HCCL_EXEC_TIMEOUT", "a non-negative number with up to 2 decimals"}));
+            {GetEnv("HCCL_EXEC_TIMEOUT"), "HCCL_EXEC_TIMEOUT",
+             "a non-negative number of seconds with up to 2 decimals"}));
     CHK_PRT_RET(
         ret != HCCL_SUCCESS,
         HCCL_ERROR(

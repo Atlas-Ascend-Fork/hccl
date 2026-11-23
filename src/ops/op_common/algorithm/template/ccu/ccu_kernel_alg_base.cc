@@ -1108,17 +1108,17 @@ CcuResult CreateReduceLoop(
     uint32_t loopNum = 2;
     for (int32_t index = 0; index < loopNum; index++) {
         var.loopScratch[index].resize(size);
+        var.loopEvtGroup[index].Init(size);
 
         uint32_t bufBase = index * ctx.moConfig.msInterleave;
-        ccu::Event loopEvt = ctx.moRes.completedEvent[index];
 
-        loops.body[index].reset(new ccu::Func([&ctx, index, bufBase, loopEvt, size, dataType, outputDataType, opType,
-                                               &var]() {
+        loops.body[index].reset(new ccu::Func([&ctx, index, bufBase, size, dataType, outputDataType, opType, &var]() {
             for (uint32_t i = 0; i < size; i++) {
                 ccu::LocalCopy(
-                    ctx.moRes.ccuBuf[bufBase + i], var.loopScratch[index][i], var.loopLen[index], loopEvt, 1 << i);
+                    ctx.moRes.ccuBuf[bufBase + i], var.loopScratch[index][i], var.loopLen[index],
+                    var.loopEvtGroup[index].GetEvent(i), var.loopEvtGroup[index].GetMask(i));
             }
-            ccu::EventWait(loopEvt, (1 << size) - 1);
+            var.loopEvtGroup[index].WaitAll();
 
             if (size > 1) {
                 std::vector<ccu::CcuBuffer> bufs;
@@ -1126,12 +1126,16 @@ CcuResult CreateReduceLoop(
                 for (uint32_t i = 0; i < size; i++) {
                     bufs.push_back(ctx.moRes.ccuBuf[bufBase + i]);
                 }
-                ccu::LocalReduce(bufs.data(), size, dataType, outputDataType, opType, var.loopLen[index], loopEvt, 1);
-                ccu::EventWait(loopEvt);
+                ccu::LocalReduce(
+                    bufs.data(), size, dataType, outputDataType, opType, var.loopLen[index],
+                    var.loopEvtGroup[index].GetEvent(0), 1);
+                ccu::EventWait(var.loopEvtGroup[index].GetEvent(0));
             }
 
-            ccu::LocalCopy(var.loopDst[index], ctx.moRes.ccuBuf[bufBase], var.loopLenExp[index], loopEvt, 1);
-            ccu::EventWait(loopEvt, 1);
+            ccu::LocalCopy(
+                var.loopDst[index], ctx.moRes.ccuBuf[bufBase], var.loopLenExp[index],
+                var.loopEvtGroup[index].GetEvent(0), 1);
+            ccu::EventWait(var.loopEvtGroup[index].GetEvent(0), 1);
         }));
 
         loops.loops[index].reset(new ccu::Loop(loops.loopParam[index], *loops.body[index]));

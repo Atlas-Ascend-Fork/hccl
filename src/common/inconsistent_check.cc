@@ -164,7 +164,8 @@ InconsistentCheckParams(HcclComm comm, const OpExchangeInfo& exchangeInfo, const
         }
         if (strncmp(exchangeInfo.group, rmtExchangeInfo.group, MAX_LENGTH) != 0) {
             CHK_RET(ReportOpExchangeInfoCheckFailed(
-                logCtx, exchangeInfo, "GroupName", exchangeInfo.group, rmtExchangeInfo.group));
+                logCtx, exchangeInfo, "GroupName", exchangeInfo.group,
+                std::string(rmtExchangeInfo.group, strnlen(rmtExchangeInfo.group, MAX_LENGTH))));
         }
         if (strncmp(exchangeInfo.tag, rmtExchangeInfo.tag, TAG_LENGTH) != 0) {
             bool isGroupEnabled = false;
@@ -173,7 +174,8 @@ InconsistentCheckParams(HcclComm comm, const OpExchangeInfo& exchangeInfo, const
             }
             if (!isGroupEnabled) {
                 CHK_RET(ReportOpExchangeInfoCheckFailed(
-                    logCtx, exchangeInfo, "OpTag", exchangeInfo.tag, rmtExchangeInfo.tag));
+                    logCtx, exchangeInfo, "OpTag", exchangeInfo.tag,
+                    std::string(rmtExchangeInfo.tag, strnlen(rmtExchangeInfo.tag, TAG_LENGTH))));
             }
         }
         HCCL_INFO("[InconsistentCheckParams] success. remoteRank[%u]", channel.remoteRank);

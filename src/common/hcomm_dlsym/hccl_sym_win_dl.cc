@@ -39,20 +39,32 @@ void HcclSymWinDlInit(void* libHcommHandle)
 void HcclSymWinHostDlInit(void* libHcommHandle) { INIT_SUPPORT_FLAG(libHcommHandle, HcclSymWinGetPeerDevicePointer); }
 
 // device 侧兜底：x86 host 上通常不可用，保留以兼容 aarch64/仿真环境。
-// 只探测一次且失败不重试，避免每次取对端地址都重复 dlopen。
-static std::once_flag gSymWinDeviceInitOnce;
+// dlopen 瞬时失败（库未加载、加载路径竞争）不固化结论，下次调用重试，避免一次失败永久禁用对称取址；
+// 仅当库确实加载成功但缺少该接口时固化缺席结论，与 host 侧 ResolveSymWinTeamApi 口径一致。
+static std::mutex gSymWinDeviceDlMutex;
+static bool gSymWinDeviceDlAbsent = false;
 
 static void EnsureDeviceSymWinDlInit(void)
 {
+    std::lock_guard<std::mutex> lock(gSymWinDeviceDlMutex);
     if (HcommIsSupportHcclSymWinGetPeerPointer() || HcommIsSupportHcclSymWinGetRemoteAddr()) {
+        return;
+    }
+    if (gSymWinDeviceDlAbsent) {
         return;
     }
     void* handle = HcclDlopen("libccl_kernel.so", RTLD_NOW);
     if (handle == nullptr) {
-        HCCL_COMPAT_ERROR("[HcclWrapper] no symmetric-memory peer pointer provider available");
+        HCCL_COMPAT_ERROR("[HcclWrapper] dlopen libccl_kernel.so failed, retry sym API resolution next call");
         return;
     }
     HcclSymWinDlInit(handle);
+    if (!HcommIsSupportHcclSymWinGetPeerPointer() && !HcommIsSupportHcclSymWinGetRemoteAddr()) {
+        gSymWinDeviceDlAbsent = true;
+        HCCL_LOG_PRINT(
+            HCCL, HCCL_LOG_WARN,
+            "[HcclWrapper] libccl_kernel.so has no sym-win peer API, fallback to stub permanently");
+    }
 }
 
 // hcomm 的 team 转换接口：把通信域 rank 换算成 LSA WorldTeam member ID；
@@ -196,7 +208,7 @@ bool GetSymWinRankToMemberTable(HcclCommSymWindow winHandle, uint32_t rankSize, 
 
 HcclResult GetSymWinRemoteMem(HcclCommSymWindow winHandle, size_t offset, uint32_t peerRank, void** ptr)
 {
-    std::call_once(gSymWinDeviceInitOnce, EnsureDeviceSymWinDlInit);
+    EnsureDeviceSymWinDlInit();
     if (HcommIsSupportHcclSymWinGetRemoteAddr()) {
         return HcclSymWinGetRemoteAddr(winHandle, offset, peerRank, ptr);
     }

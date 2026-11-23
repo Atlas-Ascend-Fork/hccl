@@ -420,9 +420,9 @@ HcclResult InsV2AlltoAllSequenceExecutor<AlgTopoMatch>::OrchestrateLoop(
             u32 stageIndex = totalStages_ - 1 - k;
             u32 stageRankSize = GetStageTemplateRankSize(k, param);
 
-            SetStageParams(
+            CHK_RET(SetStageParams(
                 tempAlgParams, stageIndex, totalStages_, loop, currDataCount, processedDataCount, maxDataCountPerLoop,
-                totalRankSize_, stageRankSize);
+                totalRankSize_, stageRankSize));
 
             TemplateResource templateRes;
             CHK_RET(FillTemplateResource(param, resCtx, templateRes, stageIndex));

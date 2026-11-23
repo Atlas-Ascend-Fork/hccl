@@ -184,6 +184,7 @@ struct GroupLocalReduceVar {
     std::array<std::vector<ccu::LocalAddr>, NUM_TWO> loopScratch;
     ccu::Variable loopLen[2];
     ccu::Variable loopLenExp[2];
+    CcuEventGroup loopEvtGroup[NUM_TWO];
 };
 
 struct CcuKernelCtxBase {
