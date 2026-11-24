@@ -292,7 +292,7 @@ Solution: 1. Check whether the network devices between the two ends are abnormal
 2. 排查对端的业务进程在本端发生ERROR CQE时是否先异常退出或已进入资源销毁流程，可以通过观察对端的业务日志或者plog日志确认对端进程的异常退出时间是否在本端发生ERROR CQE前。
 3. 若环境变量配置的HCCL_RDMA_TIMEOUT重传超时时间及HCCL_RDMA_RETRY_CNT重传次数比较小，在链路状态不佳时容易出现ERROR CQE错误，将环境变量调大即可。
 
-其中，status\[12\]代表着RoCE报文重传超时，其他状态码极为少见，遇到后请联系技术支持。
+其中，status\[12\]代表着RoCE报文重传超时，若按上述步骤排查后仍无法解决问题，请收集相关日志并[提交Issue](https://gitcode.com/cann/hccl/issues)。
 
 ### AIV通信算子执行失败
 

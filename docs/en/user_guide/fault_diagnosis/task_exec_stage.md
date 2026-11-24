@@ -316,7 +316,7 @@ Here, localIP and remoteIP represent the device IPs of the local end and the rem
 
 3. If the HCCL_RDMA_TIMEOUT retransmission timeout and HCCL_RDMA_RETRY_CNT retry count configured in the environment variables are relatively small, ERROR CQE errors are likely to occur when the link status is poor. Increase these environment variable values accordingly.
 
-Among them, status\[12\] indicates a RoCE packet retransmission timeout. Other status codes are extremely rare. If encountered, contact technical support.
+status\[12\] indicates a retransmission timeout of RoCE packets. If the fault persists after performing the preceding steps, collect the logs and [submit an issue](https://gitcode.com/cann/hccl/issues).
 
 ### AIV Communication Operator Execution Failure
 

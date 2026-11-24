@@ -122,8 +122,6 @@ The following lists the algorithms supported by different inter-server product m
 
 - **Pipeline**
 
-  **Note**: For Atlas A2 training products/Atlas A2 inference products, if the pipeline algorithm is selected, deterministic computation is not supported; otherwise, the pipeline algorithm will not take effect.
-
   | Operator | Data Type | Network Running | Handling for Unsupported Operators |
   | --- | --- | --- | --- |
   | AllReduce | int8, int16, int32, float16, float32, bfp16 | - Single-operator<br>  - Graph (Ascend IR): For the overflow mode of floating-point computation, saturation mode is not supported; only INF/NaN mode is supported. | Auto switching to NHR, H-D_R, or ring algorithm |

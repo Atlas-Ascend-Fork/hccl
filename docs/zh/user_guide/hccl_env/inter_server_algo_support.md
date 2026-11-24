@@ -120,8 +120,6 @@
 
 - **pipeline算法**
 
-  **注意**：针对Atlas A2 训练系列产品/Atlas A2 推理系列产品，如果选择pipeline算法，不支持开启确定性计算；否则pipeline算法不会生效。
-
   | 集合通信算子 | 数据类型 | 网络运行模式 | 不支持算子处理方法 |
   | --- | --- | --- | --- |
   | AllReduce | int8、int16、int32、float16、float32、bfp16 | - 单算子模式<br>  - 图模式（Ascend IR）：针对浮点计算的溢出模式，不支持饱和模式，仅支持INF/NaN模式。 | 自动选择为NHR、H-D_R或者ring算法 |
