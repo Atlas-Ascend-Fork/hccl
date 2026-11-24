@@ -40,6 +40,8 @@ constexpr u32 MAX_RANK_NUM_FOR_CONCURRENT_ALGO = 4;
 constexpr u32 MAX_RANK_NUM_FOR_REDUCE_MS_ALGO = 8;
 constexpr u64 AR_FLATTEN_MAX_DATA_SIZE = 512 * 1024;
 constexpr u64 AR_CCU_CLOS_1D_SMALL_DATA_SIZE = 8 * 1024 * 1024;
+// CLOS 单层组网下 Mesh/NHR 选路阈值，小数据量场景 Mesh 性能优于 NHR
+constexpr u64 AR_CCU_CLOS_MESH_SMALL_DATA_SIZE = 512 * 1024;
 constexpr u64 AR_AICPU_SEQUENCE_DATA_SIZE = 4ULL * 1024 * 1024 * 1024;
 constexpr u64 OMNI_PCIE_AR_DATA_SIZE = 32 * 1024 * 1024;
 constexpr u64 OMNI_UBX_AR_SCHED_DATA_SIZE = 64 * 1024 * 1024;
@@ -398,9 +400,12 @@ SelectorStatus AllReduceAutoSelector::SelectCcuScheduleLevel0Algo(
             HCCL_WARNING("[AllReduceAutoSelector] pcie mixed topo is not supported yet for ccu schedule mode.");
             return SelectorStatus::NOT_MATCH;
         }
-        if (dataSize < AR_CCU_CLOS_1D_SMALL_DATA_SIZE) {
+        // mesh 算法不支持 int8，且 CLOS 建链要求拓扑中只有一个 die 的 channel，不满足时回退 NHR
+        if (dataSize < AR_CCU_CLOS_MESH_SMALL_DATA_SIZE && IsLevel0SingleClosInst(topoInfo)
+            && opParam.DataDes.dataType != HcclDataType::HCCL_DATA_TYPE_INT8) {
+            selectAlgName = "CcuSchedAllReduceSoleMesh";
+        } else if (dataSize < AR_CCU_CLOS_1D_SMALL_DATA_SIZE) {
             selectAlgName = "CcuSchedAllReduceSoleNHR";
-            return SelectorStatus::MATCH;
         } else {
             return SelectorStatus::NOT_MATCH;
         }

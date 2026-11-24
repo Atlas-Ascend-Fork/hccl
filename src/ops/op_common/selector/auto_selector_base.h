@@ -102,6 +102,21 @@ public:
     static bool IsRollBackAiv(OpParam& opParam, TopoInfoWithNetLayerDetails* topoInfo);
     static bool IsLayerAllConnetedWithTopo(
         const TopoInfoWithNetLayerDetails* topoInfo, const u32 netLayer, const CommTopo topoType);
+    // CLOS 链路跑 CCU Mesh 要求拓扑中只有一个 die 的 channel：level0 出现两个及以上 CLOS 拓扑实例时，
+    // 两个实例分属不同 die，Mesh 建链会出现 die0 连 die1 的异常，此时不允许选 Mesh。
+    // 头文件内联实现：部分 UT 目标单独编译 selector 且不链接 auto_selector_base.cc，避免链接缺符号
+    static bool IsLevel0SingleClosInst(const TopoInfoWithNetLayerDetails* topoInfo)
+    {
+        constexpr u32 level0 = 0;
+        if (topoInfo == nullptr || topoInfo->topoInstDetailsOfLayer.size() <= level0) {
+            return false;
+        }
+        const auto& rankNumMap = topoInfo->topoInstDetailsOfLayer[level0].rankNumForTopoType;
+        auto closItr = rankNumMap.find(COMM_TOPO_CLOS);
+        // CLOS 实例列表缺失或为空时均不可判定单 die，保守回退 NHR
+        return closItr != rankNumMap.end() && closItr->second.size() == 1;
+    }
+
     static HcclResult CheckMeshNumEqualToClosNum(const TopoInfoWithNetLayerDetails* topoInfo, bool& isEqual);
     static HcclResult CheckClosNumMultipleOfMeshNum(const TopoInfoWithNetLayerDetails* topoInfo, bool& isMultiple);
     static bool IsTwoLevelNetLayer(const TopoInfoWithNetLayerDetails* topoInfo, const OpParam& opParam);

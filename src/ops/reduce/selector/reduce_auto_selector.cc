@@ -38,6 +38,8 @@ constexpr int TOPO_LEVEL_3 = 3;
 constexpr u64 OMNI_UBX_MS_DATA_SIZE = 64 * 1024 * 1024;
 constexpr u64 OMNI2D_UBX_REDUCE_DATA_SIZE = 128 * 1024 * 1024;
 constexpr u32 REDUCE_CCU_MAX_RANK_SIZE = 64;
+// CLOS 单层组网下 Mesh/NHR 选路阈值，小数据量场景 Mesh 性能优于 NHR
+constexpr u64 REDUCE_CCU_CLOS_MESH_SMALL_DATA_SIZE = 512 * 1024;
 constexpr u32 UBX_REDUCE_CONCURRENT_DATA_SIZE = 2 * 1024 * 1024;
 
 SelectorStatus ReduceAutoSelector::SelectCcuMsAlgo(
@@ -278,7 +280,14 @@ SelectorStatus ReduceAutoSelector::SelectMeshAlgoCcuSchedule(
                          "schedule mode.");
             return SelectorStatus::NOT_MATCH;
         }
-        selectAlgName = "CcuSchedReduceSoleNHR";
+        // mesh 算法不支持 int8、大 rank 场景，且 CLOS 建链要求拓扑中只有一个 die 的 channel，命中限制时回退 NHR
+        if (dataSize < REDUCE_CCU_CLOS_MESH_SMALL_DATA_SIZE && IsLevel0SingleClosInst(topoInfo)
+            && opParam.DataDes.dataType != HcclDataType::HCCL_DATA_TYPE_INT8
+            && topoInfo->userRankSize <= smallRankSize) {
+            selectAlgName = "CcuSchedReduceSoleMesh";
+        } else {
+            selectAlgName = "CcuSchedReduceSoleNHR";
+        }
     } else {
         HCCL_WARNING(
             "[ReduceAutoSelector][SelectMeshAlgoCcuSchedule] level0Topo[%d] is not supported yet for ccu schedule "

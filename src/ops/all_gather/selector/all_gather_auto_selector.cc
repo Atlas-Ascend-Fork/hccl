@@ -23,6 +23,8 @@ constexpr u64 AG_CCU_SEQUENCE_MAX_DATA_SIZE = 4 * 1024 * 1024;
 constexpr u64 AG_AICPU_SMALL_DATA_SIZE = 1 * 1024 * 1024;
 constexpr u64 AG_AICPU_1D_TWO_LEVEL_DATA_SIZE_THRESHOLD = 1 * 1024 * 1024 * 1024;
 constexpr u64 AG_CCU_CLOS_SMALL_DATA_SIZE = 1 * 1024 * 1024;
+// CLOS 单层组网下 Mesh/NHR 选路阈值，小数据量场景 Mesh 性能优于 NHR
+constexpr u64 AG_CCU_CLOS_MESH_SMALL_DATA_SIZE = 2 * 1024 * 1024;
 constexpr u64 AG_AICPU_SEQUENCE_DATA_SIZE = 4ULL * 1024 * 1024 * 1024;
 constexpr u64 AG_2P_DETOUR_DATA_SIZE = 4 * 1024 * 1024;
 constexpr u32 OMNI_PCIE_AG_DATA_SIZE = 16 * 1024 * 1024;
@@ -195,7 +197,12 @@ SelectorStatus AllGatherAutoSelector::SelectCcuScheduleLevel0Algo(
             HCCL_WARNING("[AllGatherAutoSelector] pcie mixed topo is not supported yet for ccu schedule mode.");
             return SelectorStatus::NOT_MATCH;
         }
-        selectAlgName = "CcuSchedAllGatherSoleNHR";
+        // CLOS 建链要求拓扑中只有一个 die 的 channel，存在两个 CLOS 实例时回退 NHR
+        if (dataSize < AG_CCU_CLOS_MESH_SMALL_DATA_SIZE && IsLevel0SingleClosInst(topoInfo)) {
+            selectAlgName = "CcuSchedAllGatherSoleMesh";
+        } else {
+            selectAlgName = "CcuSchedAllGatherSoleNHR";
+        }
     } else {
         HCCL_DEBUG(
             "[AllGatherAutoSelector] level0Shape[%d] is not supported yet for ccu schedule mode.",

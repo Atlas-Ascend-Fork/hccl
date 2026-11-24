@@ -24,11 +24,21 @@ set(_selector_ut_include_dirs
     ${_repo_root}/src/ops/op_common/algorithm/executor/registry
     ${_repo_root}/src/ops/op_common/algorithm/executor/channel
     ${_repo_root}/src/ops/op_common/algorithm/topo_match
+    ${_repo_root}/src/ops/op_common/algorithm/template/aiv
     ${_repo_root}/src/common
     ${_repo_root}/src/common/tuner
     ${_repo_root}/src/common/hcomm_dlsym
     ${_repo_root}/src/common/hcomm_dlsym/ccu
 )
+
+# 六个算子的 auto selector 依赖本算子 algorithm/executor 与 template/aicpu 下的头文件
+foreach(_op all_reduce all_gather broadcast reduce reduce_scatter scatter)
+    list(APPEND _selector_ut_include_dirs
+        ${_repo_root}/src/ops/${_op}/selector
+        ${_repo_root}/src/ops/${_op}/algorithm/executor
+        ${_repo_root}/src/ops/${_op}/algorithm/template/aicpu
+    )
+endforeach()
 
 # 前向兼容：探测 CANN 版本号，与主构建/ST 保持一致（宏逻辑与 test/ut/all_reduce_biar 一致）。
 # 缺少该宏时 dlsym_common.h 中的桩类型块会启用，与 CANN 公共头重复定义导致 conflicting declaration。
@@ -106,3 +116,38 @@ target_link_libraries(selector_engine_test PRIVATE
 )
 
 run_llt_test(TARGET selector_engine_test TASK_NUM 1)
+
+# CLOS 单层拓扑下 6 个算子的 CcuSched Mesh/NHR 选路 UT: 真实编译 auto selector 与 registry,
+# dlsym/costModel 等外部依赖由本目录桩提供, 不依赖硬件
+set(clos_selector_ut_src_list
+    ${CMAKE_CURRENT_SOURCE_DIR}/clos_topo_selector_test.cc
+    ${CMAKE_CURRENT_SOURCE_DIR}/stub/log_stub.cc
+    ${CMAKE_CURRENT_SOURCE_DIR}/stub/securec_stub.cc
+    ${CMAKE_CURRENT_SOURCE_DIR}/stub/selector_deps_stub.cc
+    ${_repo_root}/src/ops/op_common/selector/auto_selector_base.cc
+    ${_repo_root}/src/ops/op_common/selector/selector_registry.cc
+    ${_repo_root}/src/ops/all_reduce/selector/all_reduce_auto_selector.cc
+    ${_repo_root}/src/ops/all_gather/selector/all_gather_auto_selector.cc
+    ${_repo_root}/src/ops/broadcast/selector/broadcast_auto_selector.cc
+    ${_repo_root}/src/ops/reduce/selector/reduce_auto_selector.cc
+    ${_repo_root}/src/ops/reduce_scatter/selector/reduce_scatter_auto_selector.cc
+    ${_repo_root}/src/ops/scatter/selector/scatter_auto_selector.cc
+)
+
+add_executable(clos_topo_selector_test ${clos_selector_ut_src_list})
+
+target_compile_options(clos_topo_selector_test PRIVATE
+    -U_FORTIFY_SOURCE
+)
+
+target_include_directories(clos_topo_selector_test PRIVATE ${_selector_ut_include_dirs})
+
+_detect_cann_version(clos_topo_selector_test)
+
+target_link_libraries(clos_topo_selector_test PRIVATE
+    $<BUILD_INTERFACE:intf_llt_pub>
+    GTest::gtest_main
+    -lpthread
+)
+
+run_llt_test(TARGET clos_topo_selector_test TASK_NUM 1)
