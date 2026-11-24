@@ -54,6 +54,9 @@ private:
     u64 count_{0};
     std::vector<u64> allRankCounts_;
     std::vector<u64> allRankProcessSize_;
+    std::vector<u64> elemCountOut_;
+    std::vector<u64> sizeOut_;
+    std::vector<u64> elemOffset_;
 };
 
 } // namespace ops_hccl

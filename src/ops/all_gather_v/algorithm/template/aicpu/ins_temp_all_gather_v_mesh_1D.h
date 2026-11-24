@@ -36,7 +36,6 @@ public:
     HcclResult CalcRes(
         HcclComm comm, const OpParam& param, const TopoInfoWithNetLayerDetails* topoInfo,
         AlgResourceRequest& resourceRequest) override;
-    HcclResult GetResWithoutLinks(AlgResourceRequest& resourceRequest) const;
 
     u64 CalcScratchMultiple(BufferType inBuffType, BufferType outBuffType) override;
 
@@ -52,6 +51,13 @@ private:
     HcclResult PostLocalCopy(const std::vector<ThreadHandle>& threads);
     TemplateDataParams tempAlgParams_;
     bool supportSymmetricMemory_{false};
+
+    std::vector<u64> elemCountOut_;   // 每通道子区元素数(发送侧, 多通道数据切分)
+    std::vector<u64> sizeOut_;        // 每通道子区大小(字节, 发送侧)
+    std::vector<u64> elemOffset_;     // 每通道子区起始偏移(字节, 发送侧)
+    std::vector<u64> rxElemCountOut_; // 每通道子区元素数(接收侧)
+    std::vector<u64> rxSizeOut_;      // 每通道子区大小(字节, 接收侧)
+    std::vector<u64> rxElemOffset_;   // 每通道子区起始偏移(字节, 接收侧)
 };
 
 } // namespace ops_hccl

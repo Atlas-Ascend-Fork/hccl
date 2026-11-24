@@ -43,35 +43,40 @@ public:
     HcclResult CalcRes(
         HcclComm comm, const OpParam& param, const TopoInfoWithNetLayerDetails* topoInfo,
         AlgResourceRequest& resourceRequest) override;
+    HcclResult GetRes(AlgResourceRequest& resourceRequest) const override;
     u64 CalcScratchMultiple(BufferType inBuffType, BufferType outBuffType) override;
 
-    HcclResult PostCopy(const TemplateDataParams& tempAlgParams, const std::vector<ThreadHandle>& threads);
-
-    void GetNotifyIdxMainToSub(std::vector<u32>& notifyIdxMainToSub);
-    void GetNotifyIdxSubToMain(std::vector<u32>& notifyIdxSubToMain);
+    void GetNotifyIdxMainToSub(std::vector<u32>& notifyIdxMainToSub) override;
+    void GetNotifyIdxSubToMain(std::vector<u32>& notifyIdxSubToMain) override;
 
     u64 GetThreadNum() const override;
 
 private:
     HcclResult CalcSlice(const u64 chunkSize);
-    HcclResult PreCopy(const TemplateDataParams& tempAlgParams);
-    HcclResult RunReduce(
-        const std::map<u32, std::vector<ChannelInfo>>& channels, const TemplateDataParams& tempAlgParams,
-        const std::string& algTag);
-    HcclResult RunGather(const std::map<u32, std::vector<ChannelInfo>>& channels);
-    HcclResult PostCopy(const TemplateDataParams& tempAlgParams);
+    HcclResult
+    PreCopy(const TemplateDataParams& tempAlgParams, const std::vector<ThreadHandle>& threads, u32 channelIdx);
+    HcclResult RunGather(
+        const std::vector<ThreadHandle>& threads, const std::map<u32, std::vector<ChannelInfo>>& channels,
+        u32 channelIdx);
+    HcclResult RunReduceInitCopy(
+        const TemplateDataParams& tempAlgParams, const std::vector<ThreadHandle>& threads, u32 channelIdx);
+    HcclResult
+    RunReduceLocal(const std::vector<ThreadHandle>& threads, const TemplateDataParams& tempAlgParams, u32 channelIdx);
 
     HcclResult GetStepInfoList(std::vector<AicpuNHRStepInfo>& stepInfoList);
     HcclResult GetStepInfo(u32 step, u32 nSteps, AicpuNHRStepInfo& stepInfo);
     HcclResult GetAlgRank(u32 rank, u32& algRank) const;
 
-    ThreadHandle thread_;
     u64 processSize_{0};
     u64 count_{0};
     u32 myIdx_ = UINT32_MAX; // 本rank在通信域内的索引
 
     RankSliceInfo sliceInfoVec_;
     bool isDmaRead_{false};
+    std::vector<u64> sizeOut_;    // 每通道子区大小(字节), 多通道数据切分
+    std::vector<u64> elemOffset_; // 每通道子区起始偏移(字节)
+    std::vector<u32> notifyIdxMainToSub_;
+    std::vector<u32> notifyIdxSubToMain_;
 };
 
 } // namespace ops_hccl

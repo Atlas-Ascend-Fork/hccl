@@ -42,6 +42,7 @@ public:
     HcclResult CalcRes(
         HcclComm comm, const OpParam& param, const TopoInfoWithNetLayerDetails* topoInfo,
         AlgResourceRequest& resourceRequest) override;
+    HcclResult GetRes(AlgResourceRequest& resourceRequest) const override;
     u64 CalcScratchMultiple(BufferType inBuffType, BufferType outBuffType) override;
 
     void GetNotifyIdxMainToSub(std::vector<u32>& notifyIdxMainToSub) override;
@@ -51,10 +52,16 @@ public:
 
 private:
     HcclResult CalcSlice(u64 dataSize);
-    HcclResult PreCopy(const TemplateDataParams& tempAlgParams);
-    HcclResult RunReduce(const std::map<u32, std::vector<ChannelInfo>>& channels);
-    HcclResult RunGather(const std::map<u32, std::vector<ChannelInfo>>& channels);
-    HcclResult PostCopy(const TemplateDataParams& tempAlgParams) const;
+    HcclResult
+    PreCopy(const TemplateDataParams& tempAlgParams, const std::vector<ThreadHandle>& threads, u32 channelIdx);
+    HcclResult RunReduce(
+        const std::vector<ThreadHandle>& threads, const std::map<u32, std::vector<ChannelInfo>>& channels,
+        u32 channelIdx);
+    HcclResult RunGather(
+        const std::vector<ThreadHandle>& threads, const std::map<u32, std::vector<ChannelInfo>>& channels,
+        u32 channelIdx);
+    HcclResult
+    PostCopy(const TemplateDataParams& tempAlgParams, const std::vector<ThreadHandle>& threads, u32 channelIdx) const;
 
     HcclResult GetStepInfoList(std::vector<AicpuNHRStepInfo>& stepInfoList) const;
     HcclResult GetStepInfo(u32 step, u32 nSteps, AicpuNHRStepInfo& stepInfo) const;
@@ -68,7 +75,6 @@ private:
     void* GetRemoteWorkspacePtr(const ChannelInfo& channel, u32 remoteAlgRank) const;
     u64 GetRemoteWorkspaceBaseOff(u32 remoteAlgRank) const;
 
-    ThreadHandle thread_;
     BuffInfo buffInfo_;
     u64 processSize_{0};
     u64 count_{0};
@@ -81,6 +87,10 @@ private:
     RankSliceInfo sliceInfoVec_;
     bool isDmaRead_{false};
     bool rootUsesOutputWorkspace_{false};
+    std::vector<u64> sizeOut_;
+    std::vector<u64> elemOffset_;
+    std::vector<u32> notifyIdxMainToSub_;
+    std::vector<u32> notifyIdxSubToMain_;
 };
 
 } // namespace ops_hccl

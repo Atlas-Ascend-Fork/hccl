@@ -177,6 +177,13 @@ HcclResult ReduceSoleExecutor<AlgTopoMatch, AlgTemplate>::OrchestrateLoop(
         = std::make_shared<AlgTemplate>(param, resCtx.topoInfo.userRank, resCtx.algHierarchyInfo.infos[0]);
     u32 templateScratchMultiplier
         = algTemplate->CalcScratchMultiple(tempAlgParams.buffInfo.inBuffType, tempAlgParams.buffInfo.outBuffType);
+    // 多通道使能(仅AICPU_TS): 单通道拓扑刷新后仍为 1, 与不调用等价。仅白名单已适配算法(AicpuReduceSoleNHR/
+    // AicpuReduceSoleNHRAicpuReduce)注入
+    if (param.engine == COMM_ENGINE_AICPU_TS && !templateAlgRes.channels.empty()
+        && (std::string(param.algName) == "AicpuReduceSoleNHR"
+            || std::string(param.algName) == "AicpuReduceSoleNHRAicpuReduce")) {
+        CHK_RET(algTemplate->SetchannelsPerRank(templateAlgRes.channels));
+    }
     // 计算最小传输大小
     u64 maxDataSizePerLoop = 0;
     maxTmpMemSize_ = tempAlgParams.buffInfo.hcclBuff.size;
