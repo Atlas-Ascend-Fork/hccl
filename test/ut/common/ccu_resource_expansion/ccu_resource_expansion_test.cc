@@ -113,8 +113,8 @@ TEST_F(CcuResourceExpansionTest, ExtraInstanceReceivesFullRequirement)
     ASSERT_EQ(Apply(), HCCL_SUCCESS);
     ASSERT_EQ(g_resources.createRequests.size(), 1u);
     const ResourceNumbers expected = {
-        {HCOMM_CCU_RES_TYPE_LOOP, 16},
-        {HCOMM_CCU_RES_TYPE_CCU_BUF, 128},
+        {HCOMM_CCU_RES_TYPE_LOOP, 24},
+        {HCOMM_CCU_RES_TYPE_CCU_BUF, 192},
         {HCOMM_CCU_RES_TYPE_VARIABLE, KERNEL_NEED},
         {HCOMM_CCU_RES_TYPE_ADDRESS, KERNEL_NEED},
         {HCOMM_CCU_RES_TYPE_EVENT, 48},
@@ -136,8 +136,8 @@ TEST_F(CcuResourceExpansionTest, MsModeCreatesExtraInstance)
     ASSERT_EQ(Apply(), HCCL_SUCCESS);
     ASSERT_EQ(g_resources.createRequests.size(), 1u);
     const ResourceNumbers expected = {
-        {HCOMM_CCU_RES_TYPE_LOOP, 128},
-        {HCOMM_CCU_RES_TYPE_CCU_BUF, 1024},
+        {HCOMM_CCU_RES_TYPE_LOOP, 136},
+        {HCOMM_CCU_RES_TYPE_CCU_BUF, 1088},
         {HCOMM_CCU_RES_TYPE_VARIABLE, KERNEL_NEED},
         {HCOMM_CCU_RES_TYPE_ADDRESS, KERNEL_NEED},
         {HCOMM_CCU_RES_TYPE_EVENT, 160},
