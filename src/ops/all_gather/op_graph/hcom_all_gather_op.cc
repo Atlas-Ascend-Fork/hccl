@@ -4,7 +4,7 @@
  * CANN Open Software License Agreement Version 2.0 (the "License").
  * Please refer to the License for details. You may not use this file except in compliance with the License.
  * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
- * INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY OR FITNESS FOR A PARTICULAR PURPOSE.
+ * INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
  * See LICENSE in the root of the software repository for the full text of the License.
  */
 
@@ -16,12 +16,14 @@
 // CCL buffer 尺寸获取（CalcResourcesStatic）: GetOrCreateInCCLbuf 实际尺寸 / GetCCLBufferAvailableSize 环境推导
 // 另使用 hcom.h 常量: HCCL_KERNEL_OP_TYPE_ALLGATHER, HCCL_CMD_ALLGATHER
 // 通信调用: 动态路径 HcclAllGather (单算子), 静态/Direct/Refresh 路径 HcclAllGatherGraphMode —
-//           均本仓 src/ops/all_gather/all_gather.h, hccl.map 导出, extern "C" 前向声明,
-//           无 reduction 参数 (区别于 AllReduce/Reduce/RS)
+//           均本仓 src/ops/all_gather/all_gather.h, hccl.map 导出, 声明统一收敛于
+//           graph_mode_c_api.h, 无 reduction 参数 (区别于 AllReduce/Reduce/RS)
 // 公共工具 (CalcLoopMaxTime/BuildTagVec/CalcOnlineResources/HcclRtMemAddrAsyncCopyWithOffset) 见
 //           hccl_op_utils.h/.cc 与 hccl_rt_utils.h/.cc
 
 #include "hcom_all_gather_op.h"
+
+#include "graph_mode_c_api.h"
 
 #include <cstddef>
 
@@ -32,15 +34,7 @@
 #include "hccl_rt_utils.h"
 #include "log.h"
 
-// 前向声明, 避免引入内部头文件依赖链 (签名对照本仓 src/ops/all_gather/all_gather.h)
-extern "C" {
-HcclResult HcclSetAivCoreLimitGraphMode(const char* group, uint32_t aivCoreLimit);
-HcclResult HcclAllGather(
-    void* sendBuf, void* recvBuf, uint64_t sendCount, HcclDataType dataType, HcclComm comm, aclrtStream stream);
-HcclResult HcclAllGatherGraphMode(
-    void* sendBuf, void* recvBuf, uint64_t sendCount, HcclDataType dataType, const char* group, aclrtStream stream,
-    const char* tag, void** streams, size_t streamCount, void* scratchMemAddr, uint64_t scratchMemSize);
-}
+// 通信入口声明见统一头 graph_mode_c_api.h (签名对照本仓 src/ops/all_gather/all_gather.h)
 
 // 输出 shape 构造: 输入第 0 维 × rankSize, 其余维度不变 (与 InferShape 契约一致)
 // UNKNOWN_DIM 直通 (不乘, 保持未知标记); dimNum==0 (标量) 输出 [rankSize]

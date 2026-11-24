@@ -24,6 +24,8 @@
 
 #include "hcom_all_reduce_op.h"
 
+#include "graph_mode_c_api.h"
+
 #include <cstddef>
 
 #include "acl/acl_rt.h"
@@ -34,14 +36,7 @@
 #include "hccl_rt_utils.h"
 #include "log.h"
 
-// 前向声明 OpParamGraphMode, 避免引入内部头文件依赖链
-extern "C" {
-HcclResult HcclSetAivCoreLimitGraphMode(const char* group, uint32_t aivCoreLimit);
-HcclResult HcclAllReduceGraphMode(
-    void* sendBuf, void* recvBuf, uint64_t sendCount, HcclDataType dataType, HcclReduceOp op, const char* group,
-    aclrtStream stream, const char* tag, void** streams, size_t streamCount, void* scratchMemAddr,
-    uint64_t scratchMemSize);
-}
+// OpParamGraphMode/通信入口声明统一见 graph_mode_c_api.h, 避免引入内部头文件依赖链
 
 // ExtractParams 公共校验: 首 input 判空、attrs 判空、dataType/reduceOp 解析 (静态/动态路径共用)
 static ge::graphStatus ExtractCommonParams(
@@ -99,8 +94,16 @@ static ge::graphStatus AllocOutputsAndCalcCracks(hccl::HcclOpState& st, size_t& 
         }
         inputCount++;
 
-        gert::Tensor* outTensor
-            = st.ctx->MallocOutputTensor(i, inTensor->GetShape(), inTensor->GetFormat(), inTensor->GetDataType());
+        // 0 元素输入: HcclAllReduce 对 count==0 提前成功 (all_reduce.cc), GE eager Malloc 不支持
+        // 0 字节申请 — 空输出只定形不分配 (与 AGV/RSV 同款 SetEmptyOutputTensor 口径)
+        gert::Tensor* outTensor = nullptr;
+        if (inTensor->GetShapeSize() == 0) {
+            outTensor = hccl::SetEmptyOutputTensor(
+                st.ctx, i, inTensor->GetShape(), inTensor->GetFormat(), inTensor->GetDataType());
+        } else {
+            outTensor
+                = st.ctx->MallocOutputTensor(i, inTensor->GetShape(), inTensor->GetFormat(), inTensor->GetDataType());
+        }
         if (outTensor == nullptr) {
             HCCL_ERROR("[HcomAllReduceOp][ExtractParamsStatic] failed to allocate output tensor %zu.", i);
             return ge::GRAPH_FAILED;
@@ -130,6 +133,15 @@ static ge::graphStatus AllocOutputsAndCalcCracks(hccl::HcclOpState& st, size_t& 
         return ge::GRAPH_FAILED;
     }
     st.count = totalAlignedSize / unitSize;
+    // 混合空+非空: 首输入空 → inputPtrs[0] 为 null 而 count>0 (含非空对齐量),
+    // null buf 配非零计数下发通信会在 HCCL 入口才被拒 — 适配层 GE 输入边界先拦
+    if (st.count > 0 && st.inputPtrs[0] == nullptr) {
+        HCCL_ERROR(
+            "[HcomAllReduceOp][ExtractParamsStatic] first input is empty (null buf) with count=%lu > 0, "
+            "mixed empty/non-empty inputs not supported.",
+            st.count);
+        return ge::GRAPH_FAILED;
+    }
     return ge::GRAPH_SUCCESS;
 }
 
@@ -171,8 +183,15 @@ static ge::graphStatus AllocOutputsAndCalcCounts(hccl::HcclOpState& st, size_t& 
         }
         inputCount++;
 
-        gert::Tensor* outTensor
-            = st.ctx->MallocOutputTensor(i, inTensor->GetShape(), inTensor->GetFormat(), inTensor->GetDataType());
+        // 0 元素输入同静态路径: 空输出只定形不分配, 零计数在 HCCL 语义内为合法 no-op
+        gert::Tensor* outTensor = nullptr;
+        if (inTensor->GetShapeSize() == 0) {
+            outTensor = hccl::SetEmptyOutputTensor(
+                st.ctx, i, inTensor->GetShape(), inTensor->GetFormat(), inTensor->GetDataType());
+        } else {
+            outTensor
+                = st.ctx->MallocOutputTensor(i, inTensor->GetShape(), inTensor->GetFormat(), inTensor->GetDataType());
+        }
         if (outTensor == nullptr) {
             HCCL_ERROR("[HcomAllReduceOp][ExtractParamsDynamic] failed to allocate output tensor %zu.", i);
             return ge::GRAPH_FAILED;
@@ -198,6 +217,14 @@ static ge::graphStatus AllocOutputsAndCalcCounts(hccl::HcclOpState& st, size_t& 
 
     if (inputCount == 0) {
         HCCL_ERROR("[HcomAllReduceOp][ExtractParamsDynamic] no input tensors.");
+        return ge::GRAPH_FAILED;
+    }
+    // 同静态路径: 混合空+非空首输入 null buf 配 count>0, 边界先拦
+    if (st.count > 0 && st.inputPtrs[0] == nullptr) {
+        HCCL_ERROR(
+            "[HcomAllReduceOp][ExtractParamsDynamic] first input is empty (null buf) with count=%lu > 0, "
+            "mixed empty/non-empty inputs not supported.",
+            st.count);
         return ge::GRAPH_FAILED;
     }
     return ge::GRAPH_SUCCESS;
@@ -372,18 +399,12 @@ HcomAllReduceOp::CalcBatchSlices(const hccl::HcclOpState& st, uint64_t maxCommCo
         if (commCount <= maxCommCount) {
             sliceIdx++;
         } else {
-            if (sliceIdx == 0) {
-                sliceIdx++;
-                sliceIdxs.push_back(sliceIdx);
-                sliceSum += sliceIdx;
-                commCount = 0;
-                sliceIdx = 0;
-            } else {
-                sliceIdxs.push_back(sliceIdx);
-                sliceSum += sliceIdx;
-                commCount = st.inputCounts[i];
-                sliceIdx = 1;
-            }
+            // sliceIdx 必非 0: 循环首已拦截 inputCounts[i] > maxCommCount, 而 commCount 超界
+            // 仅发生在本轮累加后, 此前 sliceIdx==0 意味着 commCount==inputCounts[i] ≤ 容量, 矛盾
+            sliceIdxs.push_back(sliceIdx);
+            sliceSum += sliceIdx;
+            commCount = st.inputCounts[i];
+            sliceIdx = 1;
         }
     }
     if (sliceSum < st.inputCounts.size()) {
@@ -405,13 +426,15 @@ ge::graphStatus HcomAllReduceOp::CopyInputsToCCLbuff(
     for (uint32_t j = 0; j < inputsNum; j++) {
         uint32_t inputIdx = inputOffset + j;
         uint64_t copySize = st.inputCounts[inputIdx] * unitSize;
-        aclError aclRet = aclrtMemcpyAsync(
-            dstBuff, maxDstSize, st.inputPtrs[inputIdx], copySize, ACL_MEMCPY_DEVICE_TO_DEVICE,
-            static_cast<aclrtStream>(st.stream));
-        if (aclRet != ACL_SUCCESS) {
+        // HcclRtMemAsyncCopy: count==0 短路先于指针判空 — 混入 0 元素输入 (空指针+0 字节) 的
+        // 批次按无操作成功, 直调 aclrtMemcpyAsync 无此保障会整批失败 (与 Send/Recv 刷新路径同款)
+        HcclResult rtRet = hccl::HcclRtMemAsyncCopy(
+            dstBuff, maxDstSize, st.inputPtrs[inputIdx], copySize,
+            hccl::HcclRtMemcpyKind::HCCL_RT_MEMCPY_KIND_DEVICE_TO_DEVICE, static_cast<aclrtStream>(st.stream));
+        if (rtRet != HCCL_SUCCESS) {
             HCCL_ERROR(
-                "[HcomAllReduceOp][CopyInputsToCCLbuff] aclrtMemcpyAsync input[%u]->CCL failed, ret=%d.", inputIdx,
-                static_cast<int>(aclRet));
+                "[HcomAllReduceOp][CopyInputsToCCLbuff] copy input[%u]->CCL failed, ret=%d.", inputIdx,
+                static_cast<int>(rtRet));
             return ge::GRAPH_FAILED;
         }
         dstBuff += copySize;
@@ -431,13 +454,14 @@ ge::graphStatus HcomAllReduceOp::CopyCCLbuffToOutputs(
     for (uint32_t j = 0; j < outputsNum; j++) {
         uint32_t outputIdx = outputOffset + j;
         uint64_t copySize = st.inputCounts[outputIdx] * unitSize;
-        aclError aclRet = aclrtMemcpyAsync(
-            st.outputPtrs[outputIdx], copySize, srcBuff, copySize, ACL_MEMCPY_DEVICE_TO_DEVICE,
-            static_cast<aclrtStream>(st.stream));
-        if (aclRet != ACL_SUCCESS) {
+        // 同 CopyInputsToCCLbuff: 0 元素输出的空指针+0 字节拷贝经 HcclRtMemAsyncCopy 短路跳过
+        HcclResult rtRet = hccl::HcclRtMemAsyncCopy(
+            st.outputPtrs[outputIdx], copySize, srcBuff, copySize,
+            hccl::HcclRtMemcpyKind::HCCL_RT_MEMCPY_KIND_DEVICE_TO_DEVICE, static_cast<aclrtStream>(st.stream));
+        if (rtRet != HCCL_SUCCESS) {
             HCCL_ERROR(
-                "[HcomAllReduceOp][CopyCCLbuffToOutputs] aclrtMemcpyAsync CCL->output[%u] failed, ret=%d.", outputIdx,
-                static_cast<int>(aclRet));
+                "[HcomAllReduceOp][CopyCCLbuffToOutputs] copy CCL->output[%u] failed, ret=%d.", outputIdx,
+                static_cast<int>(rtRet));
             return ge::GRAPH_FAILED;
         }
         srcBuff += copySize;
@@ -489,6 +513,13 @@ ge::graphStatus HcomAllReduceOp::LaunchBatchDynamic(hccl::HcclOpState& st)
     // 动态路径 (lowering-style): batch slicing through CCL buffer
     // 对应 lowering HcomLaunchAllReduceKernelV2
     uint64_t unitSize = hccl::GetHcclDataTypeSize(st.dataType);
+
+    // 零计数 no-op: 全部输入 0 元素时跳过 CCL buffer 获取与分段循环直接成功 —
+    // 与 HcclAllReduceGraphMode 入口 sendCount==0 提前返回同判 (空输出地址不再进入任何拷贝/通信)
+    if (st.count == 0) {
+        HCCL_INFO("[HcomAllReduceOp][LaunchBatchDynamic] all inputs empty (count=0), skip batch and succeed.");
+        return ge::GRAPH_SUCCESS;
+    }
 
     // AIV 算力上限: 对照 lowering HcomLaunchAllReduceKernelV2 — HcceSetAivCoreLimitGraphMode
     // 在分段循环之前下发 (与 Reduce 动态路径同款)

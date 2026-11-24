@@ -4,13 +4,15 @@
  * CANN Open Software License Agreement Version 2.0 (the "License").
  * Please refer to the License for details. You may not use this file except in compliance with the License.
  * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
- * INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY OR FITNESS FOR A PARTICULAR PURPOSE.
+ * INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
  * See LICENSE in the root of the software repository for the full text of the License.
  */
 
 // V 变体算子参数解析链 + 运行期张量读取
 // 从 hccl_op_utils.cc 拆出; 声明仍在 hccl_op_utils.h (同 namespace hccl, 调用方无感知)
 #include <algorithm>
+#include <cerrno>
+#include <cstdlib>
 #include <cstring>
 #include <sstream>
 #include <string>
@@ -224,6 +226,9 @@ uint64_t CalcAlignedCount(uint64_t dataSize, uint64_t unitSize, uint64_t alignSi
     }
     if (alignSize == 0) {
         return 0; // 防御: alignSize 为除数, 0 值触发整型除零 UB
+    }
+    if (dataSize > UINT64_MAX - (alignSize - 1)) {
+        return 0; // 防御: 对齐加法回绕会产出垃圾 count (0 由调用方按零计数语义处理)
     }
     const uint64_t alignedSize = (dataSize + alignSize - 1) / alignSize * alignSize;
     return alignedSize / unitSize;

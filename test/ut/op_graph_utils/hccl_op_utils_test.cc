@@ -210,6 +210,14 @@ TEST(CalcLoopMaxTimeTest, LoopCountAtUint32BoundarySucceeds)
 // ---------------------------------------------------------------------------
 // CalcAlignedCount: RoundUp 公式 + unitSize==0 防御
 // ---------------------------------------------------------------------------
+TEST(CalcAlignedCountTest, DataSizeOverflowReturnsZero)
+{
+    // 回绕防御: dataSize + (alignSize-1) 超过 UINT64_MAX 时回绕产出垃圾 count, 防御返回 0
+    EXPECT_EQ(0U, CalcAlignedCount(UINT64_MAX, 4, 32));
+    EXPECT_EQ(0U, CalcAlignedCount(UINT64_MAX - 30, 4, 32)); // +31 回绕
+    EXPECT_NE(0U, CalcAlignedCount(UINT64_MAX - 31, 4, 32)); // +31 恰为 UINT64_MAX, 不回绕
+}
+
 TEST(CalcAlignedCountTest, RoundUpFormula)
 {
     EXPECT_EQ(32U, CalcAlignedCount(100, 4, 32)); // RoundUp(100,32)=128 → /4
@@ -274,7 +282,12 @@ protected:
         unsetenv("HCCL_BUFFSIZE");
 #endif
     }
-    void TearDown() override { unsetenv("HCCL_BUFFSIZE"); }
+    void TearDown() override
+    {
+#ifndef _WIN32
+        unsetenv("HCCL_BUFFSIZE");
+#endif
+    }
 };
 
 TEST_F(GetCCLBufferAvailableSizeTest, DefaultIs200MbMinus1Mb)

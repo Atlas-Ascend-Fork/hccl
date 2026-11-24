@@ -16,10 +16,26 @@ set(ut_src_list
     ${CMAKE_CURRENT_SOURCE_DIR}/hccl_op_utils_read_test.cc
     ${CMAKE_CURRENT_SOURCE_DIR}/hccl_custom_op_parse_test.cc
     ${CMAKE_CURRENT_SOURCE_DIR}/hccl_op_v_parse_test.cc
+    ${CMAKE_CURRENT_SOURCE_DIR}/hccl_rt_utils_test.cc
+    ${CMAKE_CURRENT_SOURCE_DIR}/hcom_op_layer_test.cc
+    ${CMAKE_CURRENT_SOURCE_DIR}/hcom_execute_test.cc
+    ${CMAKE_CURRENT_SOURCE_DIR}/hcom_guard_test.cc
     ${CMAKE_CURRENT_SOURCE_DIR}/stub/log_stub.cc
     ${CMAKE_CURRENT_SOURCE_DIR}/stub/op_deps_stub.cc
     ${_repo_root}/src/common/op_graph/hccl_op_utils.cc
     ${_repo_root}/src/common/op_graph/hccl_op_v_utils.cc
+    ${_repo_root}/src/common/op_graph/hccl_rt_utils.cc
+    # 算子层 UT (M2/M10): 链接真实算子 TU, 外部依赖经 op_layer_stub.cc 桩化
+    ${_repo_root}/src/common/op_graph/hccl_custom_op.cc
+    ${_repo_root}/src/ops/all_reduce/op_graph/hcom_all_reduce_op.cc
+    ${_repo_root}/src/ops/reduce_scatter/op_graph/hcom_reduce_scatter_op.cc
+    ${_repo_root}/src/ops/send/op_graph/hcom_send_op.cc
+    ${_repo_root}/src/ops/broadcast/op_graph/hcom_broadcast_op.cc
+    ${_repo_root}/src/ops/all_to_all_v/op_graph/hcom_alltoallv_op.cc
+    ${_repo_root}/src/ops/all_gather_v/op_graph/hcom_all_gather_v_op.cc
+    ${_repo_root}/src/ops/recv/op_graph/hcom_receive_op.cc
+    ${_repo_root}/src/ops/reduce/op_graph/hcom_reduce_op.cc
+    ${CMAKE_CURRENT_SOURCE_DIR}/stub/op_layer_stub.cc
 )
 
 add_executable(op_graph_utils_test ${ut_src_list})
@@ -32,6 +48,14 @@ target_compile_options(op_graph_utils_test PRIVATE
 target_include_directories(op_graph_utils_test PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/stub
     ${_repo_root}/src/common/op_graph
+    ${_repo_root}/src/ops/all_reduce/op_graph
+    ${_repo_root}/src/ops/reduce_scatter/op_graph
+    ${_repo_root}/src/ops/send/op_graph
+    ${_repo_root}/src/ops/broadcast/op_graph
+    ${_repo_root}/src/ops/all_to_all_v/op_graph
+    ${_repo_root}/src/ops/all_gather_v/op_graph
+    ${_repo_root}/src/ops/recv/op_graph
+    ${_repo_root}/src/ops/reduce/op_graph
     ${_repo_root}/src/common
     ${_repo_root}/include
     ${ASCEND_CANN_PACKAGE_PATH}/include

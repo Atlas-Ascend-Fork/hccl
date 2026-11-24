@@ -8,8 +8,8 @@
  * See LICENSE in the root of the software repository for the full text of the License.
  */
 
-#ifndef HCCL_CUSTOM_OP_GE_HCOM_ALL_GATHER_V_OP_H
-#define HCCL_CUSTOM_OP_GE_HCOM_ALL_GATHER_V_OP_H
+#ifndef HCCL_HCOM_ALL_GATHER_V_OP_H
+#define HCCL_HCOM_ALL_GATHER_V_OP_H
 
 #include "hccl_custom_op.h"
 
@@ -25,6 +25,10 @@ public:
     static constexpr size_t INPUT_RECV_COUNTS = 2;
     static constexpr size_t INPUT_RECV_DISPLS = 3;
     static constexpr size_t ATTR_GROUP = 0; // AGV 无 reduction attr, group 是唯一属性
+
+public:
+    ge::graphStatus ResolveRecvDisplsForInferShape(
+        gert::InferShapeContext* ctx, const std::vector<uint64_t>& recvCounts, std::vector<uint64_t>& recvDispls);
 
 protected:
     ge::graphStatus ExtractParamsStatic(hccl::HcclOpState& st) override;
@@ -47,8 +51,6 @@ private:
     ge::graphStatus CalcSendCount(uint64_t rawSendCount, uint64_t otherDims, uint64_t& sendCount);
     // InferShape 的 recvDispls 解析: 非空 const 位移须与 recv_counts 等长, 否则按前缀和
     // (对齐上游 proto 与 vinputvec pass CalcDisplacements)
-    ge::graphStatus ResolveRecvDisplsForInferShape(
-        gert::InferShapeContext* ctx, const std::vector<uint64_t>& recvCounts, std::vector<uint64_t>& recvDispls);
 };
 
-#endif // HCCL_CUSTOM_OP_GE_HCOM_ALL_GATHER_V_OP_H
+#endif // HCCL_HCOM_ALL_GATHER_V_OP_H

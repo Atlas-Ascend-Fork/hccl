@@ -279,6 +279,8 @@ ge::graphStatus CalcOnlineResources(
     if (st.ifAiv) {
         // 取值来源: InfoStore HcomOpsKernelBuilder::HcomCalcOpRunningParam 同款 (kernel_builder.cc:906),
         // 512 = AIV workspace 字节数 (字节), 3 = AIV task 数 (个数) — 与旧路径取值一致
+        // 对照 InfoStore CalcOpRunningParam 的 AIV 覆写口径: workspace=512B, taskNum=3
+        // (GE builder 侧 AIV 算子的固定占位值, 非 capability 推导)
         constexpr uint32_t AIV_WORKSPACE_MEM_SIZE = 512;
         constexpr uint32_t AIV_TASK_NUM = 3;
         st.streamNum = 0;
@@ -361,5 +363,4 @@ CrackCleaner::Clean(HcclOpState& st, const std::vector<void*>& crackAddrs, const
     HCCL_DEBUG("[CrackCleaner][Clean] cleared %zu cracks.", crackAddrs.size());
     return ge::GRAPH_SUCCESS;
 }
-// 按 shape 声明的元素数计算 counts 有效字节数:
 } // namespace hccl

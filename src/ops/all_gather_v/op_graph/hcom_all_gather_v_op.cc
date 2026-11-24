@@ -14,13 +14,12 @@
 // 公共工具 (CalcOnlineResources/GetCCLBufferAvailableSize/BuildTagVec/ReadU64VectorWithD2H 等) 见
 // hccl_op_utils.h/.cc
 //
-// 前向声明的 libhccl.so 内部接口 (同包直调, 对应 InfoStore/lowering 的 HcceAllGatherV*
-// dlsym 路径; 不 include src/ops/all_gather_v/all_gather_v.h 以避免内部头依赖链):
-//   HcclAllGatherV               (all_gather_v.h) — comm 版, 动态路径
-//   HcclAllGatherVGraphMode      (all_gather_v.h) — group+tag+streams+scratch 版, 静态路径
-//   HcclSetAivCoreLimitGraphMode — AIV 核心数限制 (同 hcom_all_reduce_op.cc 的前向声明)
+// libhccl.so 内部接口同包直调 (对应 InfoStore/lowering 的 HcceAllGatherV* dlsym 路径):
+//   HcclAllGatherV(动态) / HcclAllGatherVGraphMode(静态) / HcclSetAivCoreLimitGraphMode — 声明统一见 graph_mode_c_api.h
 
 #include "hcom_all_gather_v_op.h"
+
+#include "graph_mode_c_api.h"
 
 #include <algorithm>
 #include <cstdint>
@@ -31,17 +30,6 @@
 #include "hccl/hcom.h"
 #include "hccl_op_utils.h"
 #include "log.h"
-
-extern "C" {
-HcclResult HcclAllGatherV(
-    void* sendBuf, uint64_t sendCount, void* recvBuf, const void* recvCounts, const void* recvDispls,
-    HcclDataType dataType, HcclComm comm, aclrtStream stream);
-HcclResult HcclAllGatherVGraphMode(
-    void* sendBuf, void* recvBuf, uint64_t sendCount, const void* recvCounts, const void* recvDispls,
-    HcclDataType dataType, const char* group, aclrtStream stream, const char* tag, void** streams, size_t streamCount,
-    void* scratchMemAddr, uint64_t scratchMemSize);
-HcclResult HcclSetAivCoreLimitGraphMode(const char* group, uint32_t aivCoreLimit);
-}
 
 ge::graphStatus HcomAllGatherVOp::ExtractVAttrs(hccl::HcclOpState& st, const char*& group)
 {
@@ -127,6 +115,15 @@ ge::graphStatus HcomAllGatherVOp::ResolveRecvDisplsForInferShape(
     uint64_t tempSum = 0;
     for (uint64_t c : recvCounts) {
         recvDispls.push_back(tempSum);
+        // 前缀和溢出防护 (与运行期 ResolveVDispls 同判): 累加回绕产出静默错误 displs,
+        // 编译期 outDim0 与运行期 fail-fast 分叉
+        if (c > UINT64_MAX - tempSum) {
+            recvDispls.clear();
+            HCCL_ERROR(
+                "[HcomAllGatherVOp][ResolveRecvDisplsForInferShape] prefix sum overflow at tempSum=%lu, c=%lu.",
+                tempSum, c);
+            return ge::GRAPH_FAILED;
+        }
         tempSum += c;
     }
     return ge::GRAPH_SUCCESS;

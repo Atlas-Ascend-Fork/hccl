@@ -19,11 +19,13 @@
 //
 // 另调用 hccl_comm.h: HcclGetRankSize (CalcResourcesStatic)
 // 另使用 hcom.h 常量: HCCL_KERNEL_OP_TYPE_REDUCE, HCCL_CMD_REDUCE, rtStream_t
-// 通信调用: HcclReduceGraphMode — 本仓 src/ops/reduce/reduce.h, hccl.map 导出, extern "C" 前向声明,
+// 通信调用: HcclReduceGraphMode — 本仓 src/ops/reduce/reduce.h, hccl.map 导出, 声明统一收敛于 graph_mode_c_api.h,
 //           root 参数位于 op 与 group 之间 (第 6 参)
 // 公共工具 (CalcLoopMaxTime/BuildTagVec/CalcOnlineResources/CrackCleaner) 见 hccl_op_utils.h/.cc
 
 #include "hcom_reduce_op.h"
+
+#include "graph_mode_c_api.h"
 
 #include <cstddef>
 
@@ -35,14 +37,7 @@
 #include "hccl_rt_utils.h"
 #include "log.h"
 
-// 前向声明, 避免引入内部头文件依赖链 (签名对照本仓 src/ops/reduce/reduce.h)
-extern "C" {
-HcclResult HcclSetAivCoreLimitGraphMode(const char* group, uint32_t aivCoreLimit);
-HcclResult HcclReduceGraphMode(
-    void* sendBuf, void* recvBuf, uint64_t count, HcclDataType dataType, HcclReduceOp op, uint32_t root,
-    const char* group, aclrtStream stream, const char* tag, void** streams, size_t streamCount, void* scratchMemAddr,
-    uint64_t scratchMemSize);
-}
+// 通信入口声明见统一头 graph_mode_c_api.h (签名对照本仓 src/ops/reduce/reduce.h)
 
 // ExtractParams 公共校验: 首 input/attrs 判空、root_rank/reduction/dataType 解析 (静态/动态路径共用)
 static ge::graphStatus ExtractCommonParams(
@@ -113,8 +108,16 @@ static ge::graphStatus AllocOutputsAndCalcCracks(hccl::HcclOpState& st, size_t& 
         }
         inputCount++;
 
-        gert::Tensor* outTensor
-            = st.ctx->MallocOutputTensor(i, inTensor->GetShape(), inTensor->GetFormat(), inTensor->GetDataType());
+        // 0 元素输入: HcclReduce 对 count==0 提前成功 (reduce.cc), GE eager Malloc 不支持
+        // 0 字节申请 — 空输出只定形不分配 (与 AGV/RSV 同款 SetEmptyOutputTensor 口径)
+        gert::Tensor* outTensor = nullptr;
+        if (inTensor->GetShapeSize() == 0) {
+            outTensor = hccl::SetEmptyOutputTensor(
+                st.ctx, i, inTensor->GetShape(), inTensor->GetFormat(), inTensor->GetDataType());
+        } else {
+            outTensor
+                = st.ctx->MallocOutputTensor(i, inTensor->GetShape(), inTensor->GetFormat(), inTensor->GetDataType());
+        }
         if (outTensor == nullptr) {
             HCCL_ERROR("[HcomReduceOp][ExtractParamsStatic] failed to allocate output tensor %zu.", i);
             return ge::GRAPH_FAILED;
@@ -145,6 +148,14 @@ static ge::graphStatus AllocOutputsAndCalcCracks(hccl::HcclOpState& st, size_t& 
         return ge::GRAPH_FAILED;
     }
     st.count = totalSize / unitSize;
+    // 混合空+非空: 首输入空 → null buf 配 count>0, 适配层先拦 (同 AllReduce 口径)
+    if (st.count > 0 && st.inputPtrs[0] == nullptr) {
+        HCCL_ERROR(
+            "[HcomReduceOp][ExtractParamsStatic] first input is empty (null buf) with count=%lu > 0, "
+            "mixed empty/non-empty inputs not supported.",
+            st.count);
+        return ge::GRAPH_FAILED;
+    }
     return ge::GRAPH_SUCCESS;
 }
 
@@ -185,8 +196,15 @@ static ge::graphStatus AllocOutputsAndCalcCounts(hccl::HcclOpState& st, size_t& 
         }
         inputCount++;
 
-        gert::Tensor* outTensor
-            = st.ctx->MallocOutputTensor(i, inTensor->GetShape(), inTensor->GetFormat(), inTensor->GetDataType());
+        // 0 元素输入同静态路径: 空输出只定形不分配, 零计数在 HCCL 语义内为合法 no-op
+        gert::Tensor* outTensor = nullptr;
+        if (inTensor->GetShapeSize() == 0) {
+            outTensor = hccl::SetEmptyOutputTensor(
+                st.ctx, i, inTensor->GetShape(), inTensor->GetFormat(), inTensor->GetDataType());
+        } else {
+            outTensor
+                = st.ctx->MallocOutputTensor(i, inTensor->GetShape(), inTensor->GetFormat(), inTensor->GetDataType());
+        }
         if (outTensor == nullptr) {
             HCCL_ERROR("[HcomReduceOp][ExtractParamsDynamic] failed to allocate output tensor %zu.", i);
             return ge::GRAPH_FAILED;

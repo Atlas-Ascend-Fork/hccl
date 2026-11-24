@@ -8,13 +8,28 @@
  * See LICENSE in the root of the software repository for the full text of the License.
  */
 
+#include <cstdarg>
+#include <cstdio>
+
 #include "log.h"
 
 bool HcclCheckLogLevel(int logType, int moduleId)
 {
-    (void)logType;
     (void)moduleId;
-    return false;
+    // 仅放行 ERROR/WARN 供失败定位; INFO/DEBUG 保持静默避免刷屏
+    return (logType == HCCL_LOG_ERROR || logType == HCCL_LOG_WARN);
 }
 
 bool IsErrorToWarn() { return false; }
+
+// 弱符号补齐 (真库未链接): stderr 打印, 供 Execute 链路失败定位
+void DlogRecord(int32_t moduleId, int32_t level, const char* fmt, ...)
+{
+    (void)moduleId;
+    va_list args;
+    va_start(args, fmt);
+    fprintf(stderr, "[UT-LOG%d] ", level);
+    vfprintf(stderr, fmt, args);
+    fprintf(stderr, "\n");
+    va_end(args);
+}

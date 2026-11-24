@@ -8,8 +8,8 @@
  * See LICENSE in the root of the software repository for the full text of the License.
  */
 
-#ifndef HCCL_CUSTOM_OP_GE_HCOM_REDUCE_SCATTER_OP_H
-#define HCCL_CUSTOM_OP_GE_HCOM_REDUCE_SCATTER_OP_H
+#ifndef HCCL_HCOM_REDUCE_SCATTER_OP_H
+#define HCCL_HCOM_REDUCE_SCATTER_OP_H
 
 #include <cstdint>
 
@@ -60,6 +60,25 @@ public:
     static constexpr size_t ATTR_GROUP = 3;
     static constexpr size_t ATTR_RANK_SIZE = 4;
 
+    // ---- SplitV 融合形态的逐项布局校验/推导 (ExtractParamsStaticFused 拆分) ----
+    // 校验 1: 同一 op 的各槽位切片 shape 一致 (input[r*N+op] ≡ input[op])
+    static ge::graphStatus
+    ValidateFusedSliceSizes(const std::vector<uint64_t>& inBytes, size_t fusedOps, uint64_t rankSize);
+    // 校验 2: 输入地址连续升序不重叠
+    static ge::graphStatus
+    ValidateFusedContiguity(const std::vector<void*>& inAddrs, const std::vector<uint64_t>& inBytes);
+    // 校验 3: 槽位均匀 (slotBytes = input[N]-input[0], 各槽位步长相等) + 元素对齐检查
+    static ge::graphStatus CalcUniformSlotBytes(
+        const std::vector<void*>& inAddrs, size_t fusedOps, uint64_t rankSize, uint64_t unitSize, uint64_t& slotBytes);
+    // 校验 4: 输出与输入槽位布局镜像 (各 op 输出偏移 == 槽内输入偏移); 镜像通过即输出块容量
+    // = slotBytes (GE eager 512 对齐分配保证, 见 .cc 注释), 无额外容量判定
+    static ge::graphStatus
+    ValidateFusedOutputMirror(const std::vector<void*>& inAddrs, const std::vector<void*>& outAddrs, size_t fusedOps);
+    // crack 由实际地址间隙推导: 相邻输入间隙 + 尾隙 (末输入末尾到总覆盖末尾)
+    static void DeriveFusedCracks(
+        const std::vector<void*>& inAddrs, const std::vector<uint64_t>& inBytes, size_t inputNum, uint64_t slotBytes,
+        uint64_t rankSize, hccl::HcclOpState& st);
+
 protected:
     ge::graphStatus ExtractParamsStatic(hccl::HcclOpState& st) override;
     ge::graphStatus CalcResourcesStatic(hccl::HcclOpState& st) override;
@@ -76,6 +95,8 @@ private:
     // 由 ExtractParamsStatic 判定后分流; 契约与校验见 .cc 实现注释
     ge::graphStatus
     ExtractParamsStaticFused(hccl::HcclOpState& st, size_t inputNum, uint64_t rankSize, const char* group);
+    // 分配 N 个融合输出 (shape = 切片 shape 直通, dim0/rankSize 已由 GE SplitV 完成)
+    ge::graphStatus AllocFusedOutputs(hccl::HcclOpState& st, size_t fusedOps, std::vector<void*>& outAddrs);
     // 静态路径 (CalcOnlineResources/BuildTagVec 的公共实现见 hccl_op_utils)
     // Direct/Refresh 双路径保留: Direct 直传用户 buffer, Refresh 走 CCL buffer 中转 + args struct 地址刷新
     ge::graphStatus LaunchDirect(hccl::HcclOpState& st);
@@ -95,25 +116,6 @@ private:
     // ExtractParamsStatic 循环内: 512B 对齐 crack 缝隙累计 (对齐 InfoStore GetCrackParamsInfo,
     // 与 AllReduce 同款口径; ALIGNED_SIZE 对齐粒度与 crack 计算同源)
     void AccumulateCrackInfo(uint64_t inputSize, uint64_t& crackTotalSize, hccl::HcclOpState& st);
-
-    // ---- SplitV 融合形态的逐项布局校验/推导 (ExtractParamsStaticFused 拆分) ----
-    // 校验 1: 同一 op 的各槽位切片 shape 一致 (input[r*N+op] ≡ input[op])
-    ge::graphStatus ValidateFusedSliceSizes(const std::vector<uint64_t>& inBytes, size_t fusedOps, uint64_t rankSize);
-    // 校验 2: 输入地址连续升序不重叠
-    ge::graphStatus ValidateFusedContiguity(const std::vector<void*>& inAddrs, const std::vector<uint64_t>& inBytes);
-    // 校验 3: 槽位均匀 (slotBytes = input[N]-input[0], 各槽位步长相等) + 元素对齐检查
-    ge::graphStatus CalcUniformSlotBytes(
-        const std::vector<void*>& inAddrs, size_t fusedOps, uint64_t rankSize, uint64_t unitSize, uint64_t& slotBytes);
-    // 分配 N 个融合输出 (shape = 切片 shape 直通, dim0/rankSize 已由 GE SplitV 完成)
-    ge::graphStatus AllocFusedOutputs(hccl::HcclOpState& st, size_t fusedOps, std::vector<void*>& outAddrs);
-    // 校验 4: 输出与输入槽位布局镜像 (各 op 输出偏移 == 槽内输入偏移); 镜像通过即输出块容量
-    // = slotBytes (GE eager 512 对齐分配保证, 见 .cc 注释), 无额外容量判定
-    ge::graphStatus
-    ValidateFusedOutputMirror(const std::vector<void*>& inAddrs, const std::vector<void*>& outAddrs, size_t fusedOps);
-    // crack 由实际地址间隙推导: 相邻输入间隙 + 尾隙 (末输入末尾到总覆盖末尾)
-    void DeriveFusedCracks(
-        const std::vector<void*>& inAddrs, const std::vector<uint64_t>& inBytes, size_t inputNum, uint64_t slotBytes,
-        uint64_t rankSize, hccl::HcclOpState& st);
 
     // ---- LaunchRefresh 循环体拆分 (单迭代/多迭代输入搬运、crack 清零、输出回写) ----
     // Refresh 路径的 CCL buf 获取 (get-or-create 语义, 对照 InfoStore GetHcomInCCLbufferSize 查→建→重查)
@@ -164,4 +166,4 @@ private:
     hccl::CrackCleaner crackCleaner_;
 };
 
-#endif // HCCL_CUSTOM_OP_GE_HCOM_REDUCE_SCATTER_OP_H
+#endif // HCCL_HCOM_REDUCE_SCATTER_OP_H

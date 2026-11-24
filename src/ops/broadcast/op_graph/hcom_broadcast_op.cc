@@ -4,7 +4,7 @@
  * CANN Open Software License Agreement Version 2.0 (the "License").
  * Please refer to the License for details. You may not use this file except in compliance with the License.
  * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
- * INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY OR FITNESS FOR A PARTICULAR PURPOSE.
+ * INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
  * See LICENSE in the root of the software repository for the full text of the License.
  */
 
@@ -16,12 +16,14 @@
 // CCL buffer 尺寸获取（CalcResourcesStatic）: GetOrCreateInCCLbuf 实际尺寸 / GetCCLBufferAvailableSize 环境推导
 // 另使用常量: HCCL_KERNEL_OP_TYPE_BROADCAST (hcom.h), HCCL_CMD_BROADCAST (hccl_types.h)
 // 通信调用: 动态路径 HcclBroadcast (单算子), 静态/Direct/Refresh 路径 HcclBroadcastGraphMode —
-//           均本仓 src/ops/broadcast/broadcast.h, hccl.map 导出, extern "C" 前向声明,
+//           均本仓 src/ops/broadcast/broadcast.h, hccl.map 导出, 声明统一收敛于 graph_mode_c_api.h,
 //           单 buf in-place 带 root 参数 (区别于 AG 的双 buf 无 root)
 // 公共工具 (CalcLoopMaxTime/BuildTagVec/CalcOnlineResources/HcclRtMemAddrAsyncCopyWithOffset) 见
 //           hccl_op_utils.h/.cc 与 hccl_rt_utils.h/.cc
 
 #include "hcom_broadcast_op.h"
+
+#include "graph_mode_c_api.h"
 
 #include <cstddef>
 
@@ -32,15 +34,7 @@
 #include "hccl_rt_utils.h"
 #include "log.h"
 
-// 前向声明, 避免引入内部头文件依赖链 (签名对照本仓 src/ops/broadcast/broadcast.h)
-extern "C" {
-HcclResult HcclSetAivCoreLimitGraphMode(const char* group, uint32_t aivCoreLimit);
-HcclResult
-HcclBroadcast(void* buf, uint64_t count, HcclDataType dataType, uint32_t root, HcclComm comm, aclrtStream stream);
-HcclResult HcclBroadcastGraphMode(
-    void* buf, uint64_t count, HcclDataType dataType, uint32_t root, const char* group, aclrtStream stream,
-    const char* tag, void** streams, size_t streamCount, void* scratchMemAddr, uint64_t scratchMemSize);
-}
+// 通信入口声明见统一头 graph_mode_c_api.h (签名对照本仓 src/ops/broadcast/broadcast.h)
 
 // ExtractParams 公共校验: 首 input 判空、attrs 判空、root_rank 校验、group/stream 落 st、dataType 转换
 // (静态/动态路径共用); attr root_rank (index 0, REQUIRED): 广播源 rank, 越界校验由 HCCL 库内部负责
@@ -225,8 +219,14 @@ ge::graphStatus HcomBroadcastOp::ExtractParamsDynamic(hccl::HcclOpState& st)
             "[HcomBroadcastOp][ExtractParamsDynamic] unitSize is 0 (dataType=%d).", static_cast<int>(st.dataType));
         return ge::GRAPH_FAILED;
     }
-    uint64_t shapeSize = static_cast<uint64_t>(firstInput->GetShapeSize());
-    // 溢出/负值防御: shapeSize 为负时 cast 成巨数, shapeSize*unitSize+512 对齐回绕时拒绝
+    // 先检后 cast: 负 shapeSize (UNKNOWN_DIM 混入) cast 回绕成巨数, 上界检查存在漏过窗口
+    const int64_t shapeSizeI = firstInput->GetShapeSize();
+    if (shapeSizeI < 0) {
+        HCCL_ERROR(
+            "[HcomBroadcastOp][ExtractParamsDynamic] negative shape size %ld (UNKNOWN dim mixed in?).", shapeSizeI);
+        return ge::GRAPH_FAILED;
+    }
+    uint64_t shapeSize = static_cast<uint64_t>(shapeSizeI);
     if (shapeSize > (UINT64_MAX - (memAlignSize - 1)) / unitSize) {
         HCCL_ERROR(
             "[HcomBroadcastOp][ExtractParamsDynamic] input size overflow: shapeSize=%lu unitSize=%lu.", shapeSize,

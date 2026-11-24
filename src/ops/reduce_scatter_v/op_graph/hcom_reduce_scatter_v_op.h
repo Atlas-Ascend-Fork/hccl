@@ -8,8 +8,8 @@
  * See LICENSE in the root of the software repository for the full text of the License.
  */
 
-#ifndef HCCL_CUSTOM_OP_GE_HCOM_REDUCE_SCATTER_V_OP_H
-#define HCCL_CUSTOM_OP_GE_HCOM_REDUCE_SCATTER_V_OP_H
+#ifndef HCCL_HCOM_REDUCE_SCATTER_V_OP_H
+#define HCCL_HCOM_REDUCE_SCATTER_V_OP_H
 
 #include "hccl_custom_op.h"
 
@@ -45,4 +45,4 @@ private:
     ge::graphStatus CheckOutDim0(uint64_t rawOutDim0, int64_t& outDim0);
 };
 
-#endif // HCCL_CUSTOM_OP_GE_HCOM_REDUCE_SCATTER_V_OP_H
+#endif // HCCL_HCOM_REDUCE_SCATTER_V_OP_H

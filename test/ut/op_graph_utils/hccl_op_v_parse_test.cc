@@ -9,7 +9,7 @@
  */
 
 // V 变体参数解析链 UT: ReadVCountPairWithCheck / GetVRankSizeByGroup / ConvertVCountsToElementUnit /
-// CalcOtherDimsFromShape / CrackCleaner 拷贝路径 — gert::Tensor 真实构造 (检视意见采纳)
+// CalcOtherDimsFromShape / CrackCleaner 拷贝路径 — gert::Tensor 真实构造
 #include <gtest/gtest.h>
 #include <cstdint>
 #include <cstring>
@@ -34,6 +34,11 @@ Tensor MakeHostTensor(std::initializer_list<int64_t> shape, ge::DataType dtype, 
         reinterpret_cast<gert::TensorAddress>(const_cast<void*>(buf)));
 }
 } // namespace
+
+// 桩层可注入项 (op_deps_stub.cc 定义): MallocWorkSpace 返回缓冲 / aclrt 拷贝返回码
+extern void* g_stubMallocWsRet;
+extern aclError g_stubAclMemcpyRet;
+extern aclError g_stubAclMemcpyAsyncRet;
 
 // ---------------------------------------------------------------------------
 // ReadVCountPairWithCheck: 双张量 + 长度契约
@@ -149,7 +154,7 @@ TEST(CalcOtherDimsShapeTest, OneDimIsOne)
 // ---------------------------------------------------------------------------
 // CrackCleaner::Clean: 拷贝路径 (非平凡分支 — 需 MallocWorkSpace 桩 + crack 参数)
 // ---------------------------------------------------------------------------
-TEST(CrackCleanerTest, SingleCrackPasses)
+TEST(CrackCleanerTest, NullCtxMallocFailsReturnsGraphFailed)
 {
     HcclOpState st;
     st.opType = "ut";
@@ -167,33 +172,60 @@ TEST(CrackCleanerTest, SingleCrackPasses)
 
 TEST(CrackCleanerTest, MultipleCracksCorrectSizes)
 {
+    // 多 crack 真实拷贝路径: MallocWorkSpace 桩返回有效缓冲 → H2D 零化 → D2D 清零,
+    // 逐 crack 断言实际内容被清零 (尺寸各自生效)
+    static uint8_t zeroBuf[32] = {};
+    g_stubMallocWsRet = zeroBuf;
+
     HcclOpState st;
+    st.opType = "ut";
+    st.ctx = reinterpret_cast<gert::EagerOpExecutionContext*>(0x10); // 任意非 null 指针 (触发桩)
+    st.stream = reinterpret_cast<void*>(0x20); // 真源 HcclRtMemAsyncCopy 入口判 stream 非空
     CrackCleaner cleaner;
-    std::vector<void*> addrs; // 空的 → no-op success (已覆盖在第二批)
-    std::vector<uint64_t> sizes;
-    EXPECT_EQ(ge::GRAPH_SUCCESS, cleaner.Clean(st, addrs, sizes));
+
+    uint8_t crackA[8];
+    uint8_t crackB[16];
+    memset(crackA, 0xFF, sizeof(crackA));
+    memset(crackB, 0xFF, sizeof(crackB));
+
+    std::vector<void*> addrs = {reinterpret_cast<void*>(crackA), reinterpret_cast<void*>(crackB)};
+    std::vector<uint64_t> sizes = {sizeof(crackA), sizeof(crackB)};
+    ASSERT_EQ(ge::GRAPH_SUCCESS, cleaner.Clean(st, addrs, sizes));
+    // 清零结果断言: 两个 crack 缓冲实际内容全 0 (D2D 桩为真 memcpy, 零源已 H2D 写入桩缓冲)
+    for (size_t i = 0; i < sizeof(crackA); i++) {
+        EXPECT_EQ(0U, crackA[i]) << "crackA[" << i << "]";
+    }
+    for (size_t i = 0; i < sizeof(crackB); i++) {
+        EXPECT_EQ(0U, crackB[i]) << "crackB[" << i << "]";
+    }
+    g_stubMallocWsRet = nullptr; // 本用例不在 CrackCleanerCopyTest fixture 内, 尾部手动复位防泄漏
 }
 
 // ---------------------------------------------------------------------------
-// CrackCleaner 真实拷贝路径 (检视复核意见: 新增用例实际走 ctx=null 失败路径)
+// CrackCleaner 真实拷贝路径: 桩返回码/缓冲内容全部可注入断言
 // ---------------------------------------------------------------------------
-extern void* g_stubMallocWsRet;
 
 class CrackCleanerCopyTest : public ::testing::Test {
 protected:
-    void TearDown() override { g_stubMallocWsRet = nullptr; }
+    void TearDown() override
+    {
+        g_stubMallocWsRet = nullptr;
+        g_stubAclMemcpyRet = ACL_SUCCESS;
+        g_stubAclMemcpyAsyncRet = ACL_SUCCESS;
+    }
 };
 
 TEST_F(CrackCleanerCopyTest, RealCopyPathZeroesCrackData)
 {
-    // MallocWorkSpace 桩返回有效缓冲 → HcclRtMemSyncCopy(stub 为真 memcpy) 将零拷入
-    // → HcclRtMemAsyncCopy(stub SUCCESS) 清零 crack 地址
+    // MallocWorkSpace 桩返回有效缓冲 → HcclRtMemSyncCopy(真源) 经 aclrtMemcpy 桩将零拷入
+    // → HcclRtMemAsyncCopy(真源) 经 aclrtMemcpyAsync 桩真实搬运零 → crack 实际被清零
     static uint8_t crackZeroBuf[64] = {};
     g_stubMallocWsRet = crackZeroBuf;
 
     HcclOpState st;
     st.opType = "ut";
     st.ctx = reinterpret_cast<gert::EagerOpExecutionContext*>(0x10); // 任意非 null 指针 (触发桩)
+    st.stream = reinterpret_cast<void*>(0x20);                       // 真源入口判 stream 非空
     CrackCleaner cleaner;
 
     uint8_t crackData[8];
@@ -202,8 +234,10 @@ TEST_F(CrackCleanerCopyTest, RealCopyPathZeroesCrackData)
     std::vector<void*> addrs = {reinterpret_cast<void*>(crackData)};
     std::vector<uint64_t> sizes = {sizeof(crackData)};
     ASSERT_EQ(ge::GRAPH_SUCCESS, cleaner.Clean(st, addrs, sizes));
-    // HcclRtMemSyncCopy stub 做真拷贝到 crackZeroBuf; HcclRtMemAsyncCopy stub 返回 SUCCESS
-    // 被测路径: MallocWorkSpace 有效 → H2D 零化 → D2D 清零 → SUCCESS
+    // 清零结果断言: 8 字节全部实际为 0 (H2D 零化 → D2D 真实搬运全链路)
+    for (size_t i = 0; i < sizeof(crackData); i++) {
+        EXPECT_EQ(0U, crackData[i]) << "crackData[" << i << "]";
+    }
 }
 
 TEST_F(CrackCleanerCopyTest, MallocWorkSpaceFailureReturnsGraphFailed)

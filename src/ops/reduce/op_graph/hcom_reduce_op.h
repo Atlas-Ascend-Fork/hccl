@@ -8,8 +8,8 @@
  * See LICENSE in the root of the software repository for the full text of the License.
  */
 
-#ifndef HCCL_CUSTOM_OP_GE_HCOM_REDUCE_OP_H
-#define HCCL_CUSTOM_OP_GE_HCOM_REDUCE_OP_H
+#ifndef HCCL_HCOM_REDUCE_OP_H
+#define HCCL_HCOM_REDUCE_OP_H
 
 #include "acl/acl_rt.h"
 #include "hccl_custom_op.h"
@@ -61,4 +61,4 @@ private:
     hccl::CrackCleaner crackCleaner_;
 };
 
-#endif // HCCL_CUSTOM_OP_GE_HCOM_REDUCE_OP_H
+#endif // HCCL_HCOM_REDUCE_OP_H

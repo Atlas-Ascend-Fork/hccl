@@ -4,12 +4,12 @@
  * CANN Open Software License Agreement Version 2.0 (the "License").
  * Please refer to the License for details. You may not use this file except in compliance with the License.
  * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
- * INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY OR FITNESS FOR A PARTICULAR PURPOSE.
+ * INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
  * See LICENSE in the root of the software repository for the full text of the License.
  */
 
-#ifndef HCCL_CUSTOM_OP_GE_HCOM_BROADCAST_OP_H
-#define HCCL_CUSTOM_OP_GE_HCOM_BROADCAST_OP_H
+#ifndef HCCL_HCOM_BROADCAST_OP_H
+#define HCCL_HCOM_BROADCAST_OP_H
 
 #include "acl/acl_rt.h"
 #include "hccl_custom_op.h"
@@ -58,4 +58,4 @@ private:
     // Broadcast 无 crack 清零 (InfoStore GetTensorNum 清零列表仅 RS/AllReduce/Reduce)
 };
 
-#endif // HCCL_CUSTOM_OP_GE_HCOM_BROADCAST_OP_H
+#endif // HCCL_HCOM_BROADCAST_OP_H

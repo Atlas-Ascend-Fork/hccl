@@ -14,13 +14,13 @@
 // 公共工具 (CalcOnlineResources/GetCCLBufferAvailableSize/BuildTagVec/ReadU64VectorWithD2H 等) 见
 // hccl_op_utils.h/.cc
 //
-// 前向声明的 libhccl.so 内部接口 (同包直调, 对应 InfoStore/lowering 的 HcceReduceScatterV*
-// dlsym 路径; 不 include src/ops/reduce_scatter_v/reduce_scatter_v.h 以避免内部头依赖链):
-//   HcclReduceScatterV            (reduce_scatter_v.h) — comm 版, 动态路径
-//   HcclReduceScatterVGraphMode   (reduce_scatter_v.h) — group+tag+streams+scratch 版, 静态路径
-//   HcclSetAivCoreLimitGraphMode  — AIV 核心数限制 (同 hcom_all_reduce_op.cc 的前向声明)
+// libhccl.so 内部接口同包直调 (对应 InfoStore/lowering 的 HcceReduceScatterV* dlsym 路径):
+//   HcclReduceScatterV(动态) / HcclReduceScatterVGraphMode(静态) / HcclSetAivCoreLimitGraphMode — 声明统一见
+//   graph_mode_c_api.h
 
 #include "hcom_reduce_scatter_v_op.h"
+
+#include "graph_mode_c_api.h"
 
 #include <algorithm>
 #include <cstdint>
@@ -31,17 +31,6 @@
 #include "hccl/hcom.h"
 #include "hccl_op_utils.h"
 #include "log.h"
-
-extern "C" {
-HcclResult HcclReduceScatterV(
-    void* sendBuf, const void* sendCounts, const void* sendDispls, void* recvBuf, uint64_t recvCount,
-    HcclDataType dataType, HcclReduceOp op, HcclComm comm, aclrtStream stream);
-HcclResult HcclReduceScatterVGraphMode(
-    void* sendBuf, const void* sendCounts, const void* sendDispls, void* recvBuf, uint64_t recvCount,
-    HcclDataType dataType, HcclReduceOp op, const char* group, aclrtStream stream, const char* tag, void** streams,
-    size_t streamCount, void* scratchMemAddr, uint64_t scratchMemSize);
-HcclResult HcclSetAivCoreLimitGraphMode(const char* group, uint32_t aivCoreLimit);
-}
 
 ge::graphStatus HcomReduceScatterVOp::ExtractVAttrs(hccl::HcclOpState& st, const char*& group)
 {

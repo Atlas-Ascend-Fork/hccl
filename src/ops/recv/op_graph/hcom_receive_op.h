@@ -8,8 +8,8 @@
  * See LICENSE in the root of the software repository for the full text of the License.
  */
 
-#ifndef HCCL_CUSTOM_OP_GE_HCOM_RECEIVE_OP_H
-#define HCCL_CUSTOM_OP_GE_HCOM_RECEIVE_OP_H
+#ifndef HCCL_HCOM_RECEIVE_OP_H
+#define HCCL_HCOM_RECEIVE_OP_H
 
 #include "acl/acl_rt.h"
 #include "hccl_custom_op.h"
@@ -28,6 +28,11 @@ struct HcomRecvArgs {
 
 class HcomReceiveOp : public hccl::HcclCustomOpBase, public ge::ArgsUpdater {
 public:
+    // 动态路径 output 分配+粒度防御 (纯参数驱动), public static 供 UT 直测
+    static ge::graphStatus AllocateNegotiatedOutput(
+        hccl::HcclOpState& st, const gert::Shape& negotiatedShape, uint64_t count, uint64_t unitSize,
+        size_t& outputSize);
+
     ~HcomReceiveOp() override;
     const char* GetOpTypeName() const override;
 
@@ -74,8 +79,6 @@ private:
     static ge::graphStatus ParseNegotiatedShape(
         const std::vector<int64_t>& recvShape, uint64_t unitSize, gert::Shape& negotiatedShape, int64_t& shapeSize,
         uint64_t& dataSize, uint64_t& count);
-    static ge::graphStatus
-    AllocateNegotiatedOutput(hccl::HcclOpState& st, const gert::Shape& negotiatedShape, size_t& outputSize);
 };
 
-#endif // HCCL_CUSTOM_OP_GE_HCOM_RECEIVE_OP_H
+#endif // HCCL_HCOM_RECEIVE_OP_H

@@ -128,11 +128,6 @@ bool HcclGeRuntimeInterfaceAvailable();
 // 任一不满足即不注册, 算子回退原 hccl_engine 路径。
 ge::CustomOpCreatorRegister* CreateSocGatedRegister(const char* opType, ge::CustomOpCreateFunc creator);
 
-// aivCoreLimit 配置值解析 (字符串→uint32, 对照 InfoStore GetAivCoreLimit 的 SalStrToInt + 校验);
-// 非法值 (空/非数字/0/超范围) 返回 0, 调用方保持缺省
-
-// 未找到/非法返回 0, 调用方保持缺省 (对照 InfoStore GetAivCoreLimit 的 hardwareInfo 回退分支)
-
 class HcclCustomOpBase : public ge::EagerExecuteOp, public ge::ShapeInferOp {
 public:
     ~HcclCustomOpBase() override = default;

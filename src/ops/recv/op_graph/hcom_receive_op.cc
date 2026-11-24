@@ -32,6 +32,8 @@
 
 #include "hcom_receive_op.h"
 
+#include "graph_mode_c_api.h"
+
 #include <cstddef>
 #include <cstdint>
 #include <cstdlib>
@@ -45,15 +47,6 @@
 #include "hccl_op_utils.h"
 #include "hccl_rt_utils.h"
 #include "log.h"
-
-extern "C" {
-HcclResult
-HcclRecv(void* recvBuf, uint64_t count, HcclDataType dataType, uint32_t srcRank, HcclComm comm, aclrtStream stream);
-HcclResult HcclRecvGraphMode(
-    void* recvBuf, uint64_t count, HcclDataType dataType, uint32_t srcRank, const char* group, aclrtStream stream,
-    const char* tag, void** streams, size_t streamCount, void* scratchMemAddr, uint64_t scratchMemSize);
-HcclResult HcclSetAivCoreLimitGraphMode(const char* group, uint32_t aivCoreLimit);
-}
 
 namespace {
 constexpr int64_t UNKNOWN_DIM = -1;
@@ -137,6 +130,12 @@ ge::graphStatus HcomReceiveOp::ExtractParamsStatic(hccl::HcclOpState& st)
         return ge::GRAPH_FAILED;
     }
 
+    // 上界防 static_cast<uint32_t> 截断 (同 Reduce root/Send 口径)
+    if (*srTag < 0 || *srTag > static_cast<int64_t>(UINT32_MAX) || *srcRank < 0
+        || *srcRank > static_cast<int64_t>(UINT32_MAX)) {
+        HCCL_ERROR("[HcomReceiveOp][ExtractParamsStatic] srTag=%ld srcRank=%ld out of uint32 range.", *srTag, *srcRank);
+        return ge::GRAPH_FAILED;
+    }
     st.group = group;
     st.srTag = static_cast<uint32_t>(*srTag);
     st.srcRank = static_cast<uint32_t>(*srcRank);
@@ -368,6 +367,13 @@ ge::graphStatus HcomReceiveOp::ExtractParamsDynamic(hccl::HcclOpState& st)
         return ge::GRAPH_FAILED;
     }
 
+    // 上界防 static_cast<uint32_t> 截断 (同 Reduce root/Send 口径)
+    if (*srTag < 0 || *srTag > static_cast<int64_t>(UINT32_MAX) || *srcRank < 0
+        || *srcRank > static_cast<int64_t>(UINT32_MAX)) {
+        HCCL_ERROR(
+            "[HcomReceiveOp][ExtractParamsDynamic] srTag=%ld srcRank=%ld out of uint32 range.", *srTag, *srcRank);
+        return ge::GRAPH_FAILED;
+    }
     st.group = group;
     st.srTag = static_cast<uint32_t>(*srTag);
     st.srcRank = static_cast<uint32_t>(*srcRank);
@@ -420,7 +426,7 @@ ge::graphStatus HcomReceiveOp::LaunchHcclOpDynamic(hccl::HcclOpState& st)
 
     // ---- Step 3: 按协商 shape 分配 output (对照顺序: 收 shape → 分配 → 收数据; true 相位) ----
     size_t outputSize = 0;
-    HCCL_GE_CHK_RET(AllocateNegotiatedOutput(st, negotiatedShape, outputSize));
+    HCCL_GE_CHK_RET(AllocateNegotiatedOutput(st, negotiatedShape, count, unitSize, outputSize));
 
     // ---- Step 4: 接收数据 (对照相位: 数据段 HcclRecv 前 LaunchKernelMode 置 false) ----
     HcomSetLaunchKernelMode(false);
@@ -505,9 +511,9 @@ ge::graphStatus HcomReceiveOp::ParseNegotiatedShape(
     return ge::GRAPH_SUCCESS;
 }
 
-// 动态路径拆分 Step 3: 按协商 shape 分配 output (dtype attr + MallocOutputTensor)
-ge::graphStatus
-HcomReceiveOp::AllocateNegotiatedOutput(hccl::HcclOpState& st, const gert::Shape& negotiatedShape, size_t& outputSize)
+// 动态路径拆分 Step 3: 按协商 shape 分配 output (dtype attr + MallocOutputTensor + 分配粒度防御)
+ge::graphStatus HcomReceiveOp::AllocateNegotiatedOutput(
+    hccl::HcclOpState& st, const gert::Shape& negotiatedShape, uint64_t count, uint64_t unitSize, size_t& outputSize)
 {
     const gert::RuntimeAttrs* attrs = st.ctx->GetAttrs();
     const int64_t* dtypeAttr = (attrs != nullptr) ? attrs->GetInt(ATTR_DTYPE) : nullptr;
@@ -525,6 +531,15 @@ HcomReceiveOp::AllocateNegotiatedOutput(hccl::HcclOpState& st, const gert::Shape
         // 两段协议无回滚原语: 分配失败时对端数据消息滞留信道, 只能干净报错并提示重建会话
         HCCL_ERROR("[HcomReceiveOp][LaunchHcclOpDynamic] MallocOutputTensor failed; two-phase protocol desynced "
                    "(data message pending on channel), session rebuild required.");
+        return ge::GRAPH_FAILED;
+    }
+    // 防御 (与静态路径 AllocateStaticOutput 同款): count 已按 32B 对齐口径放大, GE 按协商
+    // shape 分配若未补齐对齐粒度, HcclRecv 按对齐字节数写入会越界 — 报错而非越界写
+    if (static_cast<uint64_t>(outputTensor->GetSize()) < count * unitSize) {
+        HCCL_ERROR(
+            "[HcomReceiveOp][LaunchHcclOpDynamic] output allocated size %zu < aligned recv bytes %lu "
+            "(allocation granularity insufficient).",
+            outputTensor->GetSize(), count * unitSize);
         return ge::GRAPH_FAILED;
     }
     outputSize = outputTensor->GetSize();

@@ -30,6 +30,8 @@
 
 #include "hcom_send_op.h"
 
+#include "graph_mode_c_api.h"
+
 #include <cstddef>
 #include <cstdint>
 #include <memory>
@@ -42,15 +44,6 @@
 #include "hccl_op_utils.h"
 #include "hccl_rt_utils.h"
 #include "log.h"
-
-extern "C" {
-HcclResult
-HcclSend(void* sendBuf, uint64_t count, HcclDataType dataType, uint32_t destRank, HcclComm comm, aclrtStream stream);
-HcclResult HcclSendGraphMode(
-    void* sendBuf, uint64_t count, HcclDataType dataType, uint32_t destRank, const char* group, aclrtStream stream,
-    const char* tag, void** streams, size_t streamCount, void* scratchMemAddr, uint64_t scratchMemSize);
-HcclResult HcclSetAivCoreLimitGraphMode(const char* group, uint32_t aivCoreLimit);
-}
 
 namespace {
 // 元数据 device buffer RAII 释放 (对照 HcomSendKernelV2 的 unique_ptr deleter 模式)
@@ -113,6 +106,13 @@ ge::graphStatus HcomSendOp::ExtractParamsStatic(hccl::HcclOpState& st)
         return ge::GRAPH_FAILED;
     }
 
+    // 上界防 static_cast<uint32_t> 截断 (同 Reduce root 口径): 负值/超界静默截断后可能落入
+    // [0, rankSize) 发往错误 rank / 用错误 tag 配对, Send/Recv 线协议失配且无报错
+    if (*srTag < 0 || *srTag > static_cast<int64_t>(UINT32_MAX) || *destRank < 0
+        || *destRank > static_cast<int64_t>(UINT32_MAX)) {
+        HCCL_ERROR("[HcomSendOp][ExtractParamsStatic] srTag=%ld destRank=%ld out of uint32 range.", *srTag, *destRank);
+        return ge::GRAPH_FAILED;
+    }
     st.group = group;
     st.srTag = static_cast<uint32_t>(*srTag);
     st.destRank = static_cast<uint32_t>(*destRank);
@@ -310,6 +310,11 @@ ge::graphStatus HcomSendOp::ExtractParamsDynamic(hccl::HcclOpState& st)
         return ge::GRAPH_FAILED;
     }
 
+    if (*srTag < 0 || *srTag > static_cast<int64_t>(UINT32_MAX) || *destRank < 0
+        || *destRank > static_cast<int64_t>(UINT32_MAX)) {
+        HCCL_ERROR("[HcomSendOp][ExtractParamsDynamic] srTag=%ld destRank=%ld out of uint32 range.", *srTag, *destRank);
+        return ge::GRAPH_FAILED;
+    }
     st.group = group;
     st.srTag = static_cast<uint32_t>(*srTag);
     st.destRank = static_cast<uint32_t>(*destRank);
@@ -318,7 +323,13 @@ ge::graphStatus HcomSendOp::ExtractParamsDynamic(hccl::HcclOpState& st)
     // inputShapes[0] 同时生成元数据与 count; origin != storage (格式转换) 时 count 走 storage
     // 会与 Recv 侧按元数据重建 shape 计算的 count 失配, ND 下两者相等行为不变
     const uint64_t unitSize = hccl::GetHcclDataTypeSize(st.dataType);
-    const uint64_t dataSize = static_cast<uint64_t>(inputTensor->GetOriginShape().GetShapeSize()) * unitSize;
+    // 先检后 cast: 负 shapeSize (UNKNOWN_DIM 混入) cast 回绕成巨数, 上界检查存在漏过窗口
+    const int64_t dataSizeI = inputTensor->GetOriginShape().GetShapeSize();
+    if (dataSizeI < 0) {
+        HCCL_ERROR("[HcomSendOp][ExtractParamsDynamic] negative shape size %ld (UNKNOWN dim mixed in?).", dataSizeI);
+        return ge::GRAPH_FAILED;
+    }
+    const uint64_t dataSize = static_cast<uint64_t>(dataSizeI) * unitSize;
     st.count = hccl::CalcAlignedCount(dataSize, unitSize, ALIGN_SIZE_DYNAMIC);
     st.inputPtrs.push_back(const_cast<void*>(inputTensor->GetAddr()));
     st.stream = st.ctx->GetStream();

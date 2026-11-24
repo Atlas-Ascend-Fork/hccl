@@ -17,12 +17,14 @@
 // 另调用 hccl_comm.h: HcclGetRankSize (CalcResourcesStatic)
 // 另使用 hcom.h 常量: HCCL_KERNEL_OP_TYPE_REDUCESCATTER, HCCL_CMD_REDUCE_SCATTER
 // 通信调用: 静态路径 HcclReduceScatterGraphMode — 本仓 src/ops/reduce_scatter/reduce_scatter.h, hccl.map
-//           导出, extern "C" 前向声明, 无 root 参数 (区别于 HcclReduceGraphMode);
+//           导出, 声明统一收敛于 graph_mode_c_api.h, 无 root 参数 (区别于 HcclReduceGraphMode);
 //           动态路径 HcclReduceScatter 单算子接口 — include/hccl.h (comm 句柄, 无 tag/streams/scratch);
 //           AIV 算力上限统一用前向声明的 HcclSetAivCoreLimitGraphMode
 // 公共工具 (CalcLoopMaxTime/BuildTagVec/CalcOnlineResources/CrackCleaner) 见 hccl_op_utils.h/.cc
 
 #include "hcom_reduce_scatter_op.h"
+
+#include "graph_mode_c_api.h"
 
 #include <cstddef>
 
@@ -34,14 +36,7 @@
 #include "hccl_rt_utils.h"
 #include "log.h"
 
-// 前向声明, 避免引入内部头文件依赖链 (签名对照本仓 src/ops/reduce_scatter/reduce_scatter.h)
-extern "C" {
-HcclResult HcclSetAivCoreLimitGraphMode(const char* group, uint32_t aivCoreLimit);
-HcclResult HcclReduceScatterGraphMode(
-    void* sendBuf, void* recvBuf, uint64_t recvCount, HcclDataType dataType, HcclReduceOp op, const char* group,
-    aclrtStream stream, const char* tag, void** streams, size_t streamCount, void* scratchMemAddr,
-    uint64_t scratchMemSize);
-}
+// 通信入口声明见统一头 graph_mode_c_api.h (签名对照本仓 src/ops/reduce_scatter/reduce_scatter.h)
 
 namespace {
 // SplitV 融合形态的 fusion attr 值 (fusion=2 即 HCOM_ATTR_FUSION_BY_FUSION_ID, 按 fusion_id 分组,
@@ -103,6 +98,12 @@ HcomReduceScatterOp::AllocRsOutput(hccl::HcclOpState& st, size_t index, const ge
 {
     // RS 输出 shape = 输入 dim0 / rank_size (对照 InferShape 契约); UNKNOWN_DIM 直通
     gert::StorageShape outShape = inTensor->GetShape();
+    // 0 维 (标量) 防御: GetDim 不校验 dim_num_, eager/RT2 直执行可绕过 InferShape 的 0 维拦截,
+    // 直接 GetDim(0) 越界读出垃圾 dim0
+    if (outShape.GetStorageShape().GetDimNum() == 0) {
+        HCCL_ERROR("[HcomReduceScatterOp][AllocRsOutput] input[%zu] dimNum is 0 (scalar tensor).", index);
+        return nullptr;
+    }
     int64_t dim0 = outShape.GetStorageShape().GetDim(0);
     if (dim0 != ge::UNKNOWN_DIM) {
         if (dim0 % rankSize != 0) {
@@ -219,6 +220,14 @@ void HcomReduceScatterOp::LogExtractParamsStaticSummary(
     const hccl::HcclOpState& st, size_t inputCount, uint64_t attrRankSizeU, const int64_t* fusion,
     const int64_t* fusionId)
 {
+    // 非融合多 input 告警: HCCL 调用仍只消费首地址 + 累加 count, 要求各 input 连续布局;
+    // 布局不连续时结果错误且此前无任何诊断
+    if (inputCount > 1) {
+        HCCL_WARNING(
+            "[HcomReduceScatterOp][ExtractParamsStatic] non-fused multi-input (%zu): only input[0] address takes "
+            "effect with accumulated count, inputs must be contiguous.",
+            inputCount);
+    }
     HCCL_INFO(
         "[HcomReduceScatterOp][ExtractParamsStatic] inputCount=%zu input[0]=%p output[0]=%p count=%lu "
         "dataType=%d reduceOp=%d group=%s stream=%p attrRankSize=%lu fusion=%ld fusionId=%ld.",

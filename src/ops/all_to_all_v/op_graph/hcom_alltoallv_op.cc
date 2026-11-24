@@ -37,7 +37,7 @@
 #include "log.h"
 #include "graph_mode_c_api.h"
 
-// ---- kind 工具函数函数 ----
+// ---- kind 工具函数 ----
 
 const char* HcomAllToAllVOp::GetOpTypeStr() const
 {
@@ -165,9 +165,20 @@ static ge::graphStatus CalcVRecvDim(hccl::HcclOpState& st, const char* group, in
         return ge::GRAPH_FAILED;
     }
     for (uint32_t i = 0; i < st.rankSize; i++) {
-        int64_t end = static_cast<int64_t>(st.recvDispls[i]) + static_cast<int64_t>(st.recvCounts[i]);
-        if (outDim0 < end) {
-            outDim0 = end;
+        // 受检窄化 (与 CalcVCRecvDim 同判): 窄化相加回绕会绕过负维检查致输出欠分配 + device 越界写
+        const uint64_t d = st.recvDispls[i];
+        const uint64_t c = st.recvCounts[i];
+        if (d > UINT64_MAX - c) {
+            HCCL_ERROR("[HcomAllToAllVOp][CalcVRecvDim] displs+counts overflow, d=%lu, c=%lu.", d, c);
+            return ge::GRAPH_FAILED;
+        }
+        const uint64_t endU64 = d + c;
+        if (endU64 > static_cast<uint64_t>(INT64_MAX)) {
+            HCCL_ERROR("[HcomAllToAllVOp][CalcVRecvDim] end=%lu exceeds int64 shape dim range.", endU64);
+            return ge::GRAPH_FAILED;
+        }
+        if (outDim0 < static_cast<int64_t>(endU64)) {
+            outDim0 = static_cast<int64_t>(endU64);
         }
     }
     return ge::GRAPH_SUCCESS;
@@ -311,8 +322,12 @@ ge::graphStatus HcomAllToAllVOp::CalcResourcesStatic(hccl::HcclOpState& st)
 {
     uint32_t rankSize = 0;
     HcclResult ret = HcclGetRankSize(st.comm, &rankSize);
-    if (ret != HCCL_SUCCESS) {
-        HCCL_ERROR("[HcomAllToAllVOp][CalcResourcesStatic] HcclGetRankSize failed, ret=%d.", static_cast<int>(ret));
+    if (ret != HCCL_SUCCESS || rankSize == 0) {
+        // rankSize 判零与 CalcVRecvDim/CalcAllToAllPerRankCount 同口径:
+        // 成功但返回 0 时 ALLTOALL 分支 inputSize/rankSize 整数除零 (SIGFPE/UB)
+        HCCL_ERROR(
+            "[HcomAllToAllVOp][CalcResourcesStatic] HcclGetRankSize failed, ret=%d, rankSize=%u.",
+            static_cast<int>(ret), rankSize);
         return ge::GRAPH_FAILED;
     }
 
@@ -668,15 +683,38 @@ static ge::graphStatus CalcCommMemSize(const hccl::HcclOpState& st, HcomAllToAll
     uint64_t unitSize = hccl::GetHcclDataTypeSize(st.dataType);
     if (kind == HcomAllToAllKind::kAllToAllV) {
         for (uint32_t i = 0; i < st.rankSize; i++) {
+            // 受检加法 (同 PR 溢出防护口径): counts+displs 回绕产出静默小值, 容量守卫被绕过
+            if (st.sendCounts[i] > UINT64_MAX - st.sendDispls[i] || st.recvCounts[i] > UINT64_MAX - st.recvDispls[i]) {
+                HCCL_ERROR(
+                    "[HcomAllToAllVOp][CalcCommMemSize] counts+displs overflow at i=%u: send=%lu+%lu, recv=%lu+%lu.", i,
+                    st.sendCounts[i], st.sendDispls[i], st.recvCounts[i], st.recvDispls[i]);
+                return ge::GRAPH_FAILED;
+            }
             ctx.sendCount = std::max(ctx.sendCount, st.sendCounts[i] + st.sendDispls[i]);
             ctx.recvCount = std::max(ctx.recvCount, st.recvCounts[i] + st.recvDispls[i]);
         }
     } else { // kAllToAllVC
         uint64_t rankSize = static_cast<uint64_t>(st.rankSize);
         for (uint32_t i = 0; i < st.rankSize; i++) {
-            ctx.sendCount += st.sendCountMatrix[static_cast<uint64_t>(st.rankId) * rankSize + i];
-            ctx.recvCount += st.sendCountMatrix[static_cast<uint64_t>(st.rankId) + rankSize * i];
+            const uint64_t send = st.sendCountMatrix[static_cast<uint64_t>(st.rankId) * rankSize + i];
+            const uint64_t recv = st.sendCountMatrix[static_cast<uint64_t>(st.rankId) + rankSize * i];
+            if (send > UINT64_MAX - ctx.sendCount || recv > UINT64_MAX - ctx.recvCount) {
+                HCCL_ERROR(
+                    "[HcomAllToAllVOp][CalcCommMemSize] matrix sum overflow at i=%u: send=%lu, recv=%lu.", i, send,
+                    recv);
+                return ge::GRAPH_FAILED;
+            }
+            ctx.sendCount += send;
+            ctx.recvCount += recv;
         }
+    }
+    // 受检乘法: count*unitSize 回绕后 inputMemSize/outputMemSize 失真, 超限数据静默放行
+    if (ctx.sendCount > UINT64_MAX / unitSize || ctx.recvCount > UINT64_MAX / unitSize) {
+        HCCL_ERROR(
+            "[HcomAllToAllVOp][CalcCommMemSize] count*unitSize overflow, sendCount=%lu, recvCount=%lu, "
+            "unitSize=%lu.",
+            ctx.sendCount, ctx.recvCount, unitSize);
+        return ge::GRAPH_FAILED;
     }
     ctx.inputMemSize = ctx.sendCount * unitSize;
     ctx.outputMemSize = ctx.recvCount * unitSize;
@@ -855,9 +893,20 @@ ge::graphStatus HcomAllToAllVOp::InferVRecvShape(gert::InferShapeContext* ctx, g
     }
     int64_t recvShape = -1;
     for (size_t i = 0; i < recvCounts.size(); i++) {
-        int64_t end = static_cast<int64_t>(rdispls[i]) + static_cast<int64_t>(recvCounts[i]);
-        if (recvShape < end) {
-            recvShape = end;
+        // 受检窄化+累加 (与执行侧 CalcVRecvDim 同判): 回绕会绕过 max 比较致编译期 shape 与执行分叉
+        const uint64_t d = rdispls[i];
+        const uint64_t c = recvCounts[i];
+        if (d > UINT64_MAX - c) {
+            HCCL_ERROR("[HcomAllToAllVOp][InferShape] rdispls+recvCounts overflow, d=%lu, c=%lu.", d, c);
+            return ge::GRAPH_FAILED;
+        }
+        const uint64_t endU64 = d + c;
+        if (endU64 > static_cast<uint64_t>(INT64_MAX)) {
+            HCCL_ERROR("[HcomAllToAllVOp][InferShape] end=%lu exceeds int64 shape dim range.", endU64);
+            return ge::GRAPH_FAILED;
+        }
+        if (recvShape < static_cast<int64_t>(endU64)) {
+            recvShape = static_cast<int64_t>(endU64);
         }
     }
     outputShape->SetDimNum(1);
@@ -887,6 +936,13 @@ ge::graphStatus HcomAllToAllVOp::InferVCRecvShape(gert::InferShapeContext* ctx, 
         return ge::GRAPH_SUCCESS;
     }
     int64_t rankSize = static_cast<int64_t>(std::sqrt(static_cast<double>(sendCountMatrix.size())));
+    // 方阵校验: 非方阵静默丢余会使推断与执行侧 (CalcVCRecvDim 按通信域 rankSize) 口径分裂
+    if (rankSize > 0 && rankSize * rankSize != static_cast<int64_t>(sendCountMatrix.size())) {
+        HCCL_ERROR(
+            "[HcomAllToAllVOp][InferShape] matrix size %zu is not a perfect square (rankSize=%ld).",
+            sendCountMatrix.size(), rankSize);
+        return ge::GRAPH_FAILED;
+    }
     if (rankSize <= 0) {
         HCCL_ERROR("[HcomAllToAllVOp][InferShape] rankSize is illegal, expected: > 0, actual: %ld.", rankSize);
         return ge::GRAPH_FAILED;

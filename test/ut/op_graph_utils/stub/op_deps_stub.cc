@@ -14,6 +14,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
+#include <vector>
 
 #include "hccl/hcom.h"
 #include "hccl_rt_utils.h"
@@ -123,53 +124,15 @@ HcclResult HcomGetRankSize(const char* group, uint32_t* rankSize)
 }
 } // extern "C"
 
-namespace hccl {
-// ReadU64VectorWithD2H 链路 (纯函数用例不触达, 供链接)
-HcclResult HcclRtMemSyncCopy(void* dst, uint64_t destMax, const void* src, uint64_t count, HcclRtMemcpyKind kind)
-{
-    // 真拷贝: D2H 用例依赖真实数据搬运 (destMax/count 越界防御)
-    (void)kind;
-    if (dst == nullptr || src == nullptr || count > destMax) {
-        return HCCL_E_PARA;
-    }
-    if (count > 0) {
-        memcpy(dst, src, static_cast<size_t>(count));
-    }
-    return HCCL_SUCCESS;
-}
-
-HcclResult HcclRtMemAsyncCopy(
-    void* dst, uint64_t destMax, const void* src, uint64_t count, HcclRtMemcpyKind kind, aclrtStream stream)
-{
-    (void)dst;
-    (void)destMax;
-    (void)src;
-    (void)count;
-    (void)kind;
-    (void)stream;
-    return HCCL_SUCCESS;
-}
-
-HcclResult HcclRtMemAddrAsyncCopyWithOffset(
-    void* dst, uint64_t destMax, uint64_t dstOffset, const void* src, uint64_t count, uint64_t srcOffset,
-    aclrtStream stream)
-{
-    (void)dst;
-    (void)destMax;
-    (void)dstOffset;
-    (void)src;
-    (void)count;
-    (void)srcOffset;
-    (void)stream;
-    return HCCL_SUCCESS;
-}
-} // namespace hccl
-
 // gert 上下文成员函数桩: AllocVOutputTensor/SetEmptyOutputTensor 链路 (纯函数用例不触达, 供链接)
 #include "exe_graph/runtime/eager_op_execution_context.h"
 
 // 可配置零缓冲 (全局域供测试 extern 引用)
 void* g_stubMallocWsRet = nullptr;
+
+// 输出分配队列 (hcut::CtxBuilder 注册, 顺序弹出; 空 → nullptr 保持旧行为) — 全局域供测试 extern
+std::vector<gert::Tensor*> g_stubOutputTensors;
+size_t g_stubOutputCursor = 0;
 
 namespace gert {
 
@@ -189,6 +152,9 @@ Tensor* EagerOpExecutionContext::MallocOutputTensor(
     (void)shape;
     (void)format;
     (void)dtype;
+    if (g_stubOutputCursor < g_stubOutputTensors.size()) {
+        return g_stubOutputTensors[g_stubOutputCursor++];
+    }
     return nullptr;
 }
 } // namespace gert
@@ -202,6 +168,65 @@ aclError aclrtSynchronizeStream(aclrtStream stream)
 {
     (void)stream;
     return g_stubSyncStreamRet;
+}
+
+// ---- aclrt 拷贝桩 (hccl_rt_utils.cc 真源编译, UT 不链真实 ACL): 真实搬运 + 可配置返回码 ----
+// 可配置返回码: 测试注入 ACL 失败 (→ HCCL_E_RUNTIME) / ACL_ERROR_RT_FEATURE_NOT_SUPPORT (→ HCCL_E_NOT_SUPPORT)
+aclError g_stubAclMemcpyRet = ACL_SUCCESS;
+aclError g_stubAclMemcpyAsyncRet = ACL_SUCCESS;
+aclError g_stubAclAddrCopyRet = ACL_SUCCESS;
+
+// 同步拷贝: 真实 memcpy (D2H 用例依赖), 保留 count>destMax 防御 (桩层语义, 生产由驱动保证)
+aclError aclrtMemcpy(void* dst, size_t destMax, const void* src, size_t count, aclrtMemcpyKind kind)
+{
+    (void)kind;
+    if (g_stubAclMemcpyRet != ACL_SUCCESS) {
+        return g_stubAclMemcpyRet;
+    }
+    if (dst == nullptr || src == nullptr || count > destMax) {
+        return ACL_ERROR_INVALID_PARAM;
+    }
+    if (count > 0) {
+        memcpy(dst, src, count);
+    }
+    return ACL_SUCCESS;
+}
+
+// 异步拷贝: 真实 memcpy — CrackCleaner D2D 清零用例依赖零缓冲→crack 地址的实际搬运
+aclError
+aclrtMemcpyAsync(void* dst, size_t destMax, const void* src, size_t count, aclrtMemcpyKind kind, aclrtStream stream)
+{
+    (void)kind;
+    (void)stream;
+    if (g_stubAclMemcpyAsyncRet != ACL_SUCCESS) {
+        return g_stubAclMemcpyAsyncRet;
+    }
+    if (dst == nullptr || src == nullptr || count > destMax) {
+        return ACL_ERROR_INVALID_PARAM;
+    }
+    if (count > 0) {
+        memcpy(dst, src, count);
+    }
+    return ACL_SUCCESS;
+}
+
+// ADDR 二级指针语义: 拷贝目标/源为地址槽, 实际搬运 (*dst)+dstOff ← (*src)+srcOff
+aclError aclrtMemcpyAsyncWithOffset(
+    void** dst, size_t destMax, size_t dstDataOffset, const void** src, size_t count, size_t srcDataOffset,
+    aclrtMemcpyKind kind, aclrtStream stream)
+{
+    (void)kind;
+    (void)stream;
+    if (g_stubAclAddrCopyRet != ACL_SUCCESS) {
+        return g_stubAclAddrCopyRet;
+    }
+    if (dst == nullptr || src == nullptr || *dst == nullptr || *src == nullptr || count > destMax) {
+        return ACL_ERROR_INVALID_PARAM;
+    }
+    if (count > 0) {
+        memcpy(static_cast<char*>(*dst) + dstDataOffset, static_cast<const char*>(*src) + srcDataOffset, count);
+    }
+    return ACL_SUCCESS;
 }
 
 // gert::Tensor 构造链的GetSizeInBytes桩 (尺寸校验辅助, 与 toolkit 实现同口径)

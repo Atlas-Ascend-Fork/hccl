@@ -8,8 +8,8 @@
  * See LICENSE in the root of the software repository for the full text of the License.
  */
 
-#ifndef HCCL_CUSTOM_OP_GE_HCOM_ALLTOALLV_OP_H
-#define HCCL_CUSTOM_OP_GE_HCOM_ALLTOALLV_OP_H
+#ifndef HCCL_HCOM_ALLTOALLV_OP_H
+#define HCCL_HCOM_ALLTOALLV_OP_H
 
 #include "hccl_custom_op.h"
 #include <cstdint>
@@ -60,6 +60,12 @@ public:
     static constexpr size_t ATTR_IDX_GROUP_VC = 1;
     static constexpr size_t ATTR_IDX_RANK_VC = 0;
 
+public:
+    ge::graphStatus InferVRecvShape(gert::InferShapeContext* ctx, gert::Shape* outputShape);
+    // VC 形态 shape 推导实现 (移植 proto 三段 InferShapeV2 中的两段, AllToAll 镜像分支内联在
+    // InferShape)
+    ge::graphStatus InferVCRecvShape(gert::InferShapeContext* ctx, gert::Shape* outputShape);
+
 protected:
     ge::graphStatus ExtractParamsStatic(hccl::HcclOpState& st) override;
     ge::graphStatus CalcResourcesStatic(hccl::HcclOpState& st) override;
@@ -87,15 +93,10 @@ private:
     size_t GetExpectInputNum() const; // kind → IR input 数 (1 / 5 / 2)
     // AllToAll per-rank count: st.totalElemCount / rankSize (lowering GetCountByShape 后 /rankSize 语义)
     ge::graphStatus CalcAllToAllPerRankCount(const hccl::HcclOpState& st, uint64_t& perRankCount) const;
-    // V/VC 形态 shape 推导实现 (移植 proto 三段 InferShapeV2 中的两段, AllToAll 镜像分支内联在
-    // InferShape)
-    ge::graphStatus InferVRecvShape(gert::InferShapeContext* ctx, gert::Shape* outputShape);
-    ge::graphStatus InferVCRecvShape(gert::InferShapeContext* ctx, gert::Shape* outputShape);
-
     HcomAllToAllKind kind_;
     // 注: per-execution 状态 (totalElemCount / sendCountMatrix / V 四元组) 全部落
     // HcclOpState st — st 贯穿同一次 Execute 的全部 hook, 无需算子实例成员; 算子实例是
     // 模型级单例, 实例成员在并发执行同类型节点时互相覆盖
 };
 
-#endif // HCCL_CUSTOM_OP_GE_HCOM_ALLTOALLV_OP_H
+#endif // HCCL_HCOM_ALLTOALLV_OP_H
