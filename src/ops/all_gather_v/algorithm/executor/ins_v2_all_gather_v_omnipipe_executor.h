@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2025 Huawei Technologies Co., Ltd.
+ * Copyright (c) 2026 Huawei Technologies Co., Ltd.
  * This program is free software, you can redistribute it and/or modify it under the terms and conditions of
  * CANN Open Software License Agreement Version 2.0 (the "License").
  * Please refer to the License for details. You may not use this file except in compliance with the License.
@@ -24,7 +24,6 @@
 #include "omnipipe_data_slice_calc.h"
 #include "topo_match_base_v2.h"
 #include "topo_match_two_level.h"
-#include <type_traits>
 
 namespace ops_hccl {
 /*
@@ -71,20 +70,39 @@ private:
     HcclResult BuildSubCommAndTempMap(
         const OpParam& param, const AlgHierarchyInfoForAllLevel& algHierarchyInfo,
         std::vector<std::vector<u32>>& subCommRanks0, std::vector<std::vector<u32>>& subCommRanks1,
-        std::vector<std::vector<u32>>& subCommRanks2, std::map<u32, std::shared_ptr<InsAlgTemplateBase>>& tempMap,
-        const TopoInfoWithNetLayerDetails* topoInfo);
-    // 从param.varData解析counts/displs，并计算均匀槽位大小dataCount_（各rank counts最大值）
+        std::vector<std::vector<u32>>& subCommRanks2, std::map<u32, std::shared_ptr<InsAlgTemplateBase>>& tempMap);
+    // 从param.varData解析counts/displs，并计算均匀槽位大小dataCount_（各rank counts的最大值）
     HcclResult ParseCountsAndDispls(const OpParam& param);
     // 构造供均匀AllGather模板使用的param视图：填充DataDes（与vDataDes共享union，模板只认DataDes）
     OpParam MakeUniformParam(const OpParam& param) const;
+
+    // OrchestrateLoop按阶段拆分：等价带宽、切loop与切片计划、模板资源装配、预拷、两级流水步进、trim回拷
+    void CalcPipelineBandwidth(std::vector<double>& endpointAttrBwNew) const;
+    HcclResult CalcLoopSlicePlan(
+        const std::vector<double>& endpointAttrBwNew, u64& maxCountPerLoop, u64& loopTimes,
+        OmniPipeSliceInfo& alignSliceInfo, OmniPipeSliceInfo& tailSliceInfo) const;
+    void FillTemplateResAndParams(
+        const OpParam& param, const AlgResourceCtxSerializable& resCtx,
+        const std::map<u32, std::shared_ptr<InsAlgTemplateBase>>& tempMap, std::map<u32, TemplateResource>& tempResMap,
+        std::map<u32, TemplateDataParams>& tempAlgParamMap) const;
+    HcclResult PreCopyToCclBuff(
+        const OpParam& param, const AlgResourceCtxSerializable& resCtx, u64 currDataCount,
+        u64 processedDataCount) const;
+    HcclResult RunTemplatePipelineSteps(
+        const OpParam& param, OmniPipeSliceInfo& omniPipeSliceInfo,
+        std::map<u32, std::shared_ptr<InsAlgTemplateBase>>& tempMap, std::map<u32, TemplateResource>& tempResMap,
+        std::map<u32, TemplateDataParams>& tempAlgParamMap, u64 loop) const;
+    HcclResult TrimValidDataToOutput(
+        const OpParam& param, const AlgResourceCtxSerializable& resCtx, u64 currDataCount, u64 processedDataCount,
+        u64 loop) const;
 
     std::vector<u64> counts_; // 各rank有效数据量（元素个数）
     std::vector<u64> displs_; // 各rank数据在output中的起始偏移（元素个数）
     std::vector<uint64_t> rankSizeLevel_;
     std::vector<uint64_t> rankIdxLevel_;
-    OpMode opMode_;
+    OpMode opMode_ = OpMode::OPBASE;
 
-    ThreadHandle controlThread_;
+    ThreadHandle controlThread_ = 0;
     std::vector<ThreadHandle> threads_;
     std::vector<std::map<u32, std::vector<ChannelInfo>>> remoteRankToChannelInfo_;
 
