@@ -246,7 +246,7 @@ After installation, the user-built HCCL software package replaces the HCCL-relat
 
 ### Uninstall
 
-If you want to uninstall the built HCCL software package and restore the state as after installing the CANN Toolkit package, run the following command:
+If you want to uninstall the built HCCL software package, run the following command:
 
 ```shell
 bash ./build_out/cann-hccl_<version>_linux-<arch>.run --uninstall
