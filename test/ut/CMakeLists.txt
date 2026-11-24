@@ -47,10 +47,10 @@ add_subdirectory(alltoall_nda)
 add_subdirectory(alltoall_nda_selector)
 # kernel_launch_gate: AICPU 控核门控（判定边界/fail-open/降级）与延迟守卫（Commit/析构恰好一次）UT，双目标
 add_subdirectory(kernel_launch_gate)
-# alg_attrs: AllToAllV/VC Pairwise 选路修复的生产注册直连 UT。wrap 编译单元以 #include
-# 生产源文件的方式执行 REGISTER_ALG_ATTRS 注册（屏蔽 REGISTER_EXEC_V2，避免实例化
-# executor/模板代码），断言 AlgAttrsRegistry 中 topoCustomCheck/topoPriorityCheck 的
-# 真实生产行为。
+# alg_attrs: 选路过滤修复的生产注册直连 UT（AllToAllV/VC Pairwise、AllGather SoleNHR）。
+# wrap 编译单元以 #include 生产源文件的方式执行 REGISTER_ALG_ATTRS 注册（屏蔽
+# REGISTER_EXEC_V2，避免实例化 executor/模板代码），断言 AlgAttrsRegistry 中
+# topoCustomCheck/topoPriorityCheck/opCustomCheck 的真实生产行为。
 add_subdirectory(alg_attrs)
 # selector_mapper: AlgoNameMapper 真实现 UT（Lookup 全映射/miss/Init 幂等/晚注册检测）
 add_subdirectory(selector_mapper)

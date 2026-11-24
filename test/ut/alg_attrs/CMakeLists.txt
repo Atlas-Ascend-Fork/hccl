@@ -121,3 +121,81 @@ target_link_libraries(pairwise_alg_attrs_test PRIVATE
 )
 
 run_llt_test(TARGET pairwise_alg_attrs_test TASK_NUM 1)
+
+# AicpuAllGatherSoleNHR opCustomCheck 过滤条件（serverNum==2 收窄）的生产注册契约测试：
+# 同 wrap 直连范式（wrap/ins_v2_all_gather_sole_attrs_wrap.cc 屏蔽 REGISTER_EXEC_V2、
+# #include 生产源文件执行 REGISTER_ALG_ATTRS），断言 AlgAttrsRegistry 中
+# opCustomCheck 的真实生产行为，src/ 生产代码零改动、零复刻。
+add_executable(all_gather_sole_attrs_test
+    # 生产源码：attrs 注册表 + 算法名解析（真实实现）
+    ${_repo_root}/src/common/alg_parse.cc
+    ${_repo_root}/src/ops/op_common/selector/alg_attrs_registry.cc
+    # 既有 UT 桩：日志 / securec
+    ${_repo_root}/test/ut/common/topo_match/stub/log_stub.cc
+    ${_repo_root}/test/ut/selector_engine/stub/securec_stub.cc
+    ${CMAKE_CURRENT_SOURCE_DIR}/stub/all_gather_sole_attrs_stub.cc
+    ${CMAKE_CURRENT_SOURCE_DIR}/all_gather_sole_nhr_attrs_test.cc
+    ${CMAKE_CURRENT_SOURCE_DIR}/wrap/ins_v2_all_gather_sole_attrs_wrap.cc
+)
+
+target_include_directories(all_gather_sole_attrs_test PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/stub
+    ${_repo_root}/src/common
+    ${_repo_root}/src/common/hcomm_dlsym
+    ${_repo_root}/src/common/hcomm_dlsym/ccu
+    ${_repo_root}/src/common/op_graph
+    ${_repo_root}/src/ops
+    ${_repo_root}/src/ops/interface_graph_mode
+    ${_repo_root}/src/ops/op_common/inc
+    ${_repo_root}/src/ops/op_common
+    ${_repo_root}/src/ops/op_common/selector
+    ${_repo_root}/src/ops/op_common/topo_info
+    ${_repo_root}/src/ops/op_common/algorithm/executor
+    ${_repo_root}/src/ops/op_common/algorithm/executor/registry
+    ${_repo_root}/src/ops/op_common/algorithm/executor/channel
+    ${_repo_root}/src/ops/op_common/algorithm/topo_match
+    ${_repo_root}/src/ops/op_common/algorithm/template
+    ${_repo_root}/src/ops/op_common/algorithm/template/registry
+    ${_repo_root}/src/ops/op_common/algorithm/template/wrapper
+    ${_repo_root}/src/ops/op_common/algorithm/template/aicpu
+    ${_repo_root}/src/ops/op_common/algorithm/template/aicpu/task_cache
+    ${_repo_root}/src/ops/op_common/algorithm/template/aiv
+    ${_repo_root}/src/ops/op_common/algorithm/template/ccu
+    ${_repo_root}/src/ops/op_common/algorithm/template/dpu
+    ${_repo_root}/src/ops/all_gather/algorithm/executor
+    ${_repo_root}/src/ops/all_gather/algorithm/template/aicpu
+    ${_repo_root}/src/ops/all_gather/algorithm/template/aiv
+    ${_repo_root}/src/ops/all_gather/algorithm/template/ccu
+    ${_repo_root}/src/ops/all_gather/algorithm/template/ccu/kernel
+    ${ASCEND_HOME_PATH}/pkg_inc
+    ${ASCEND_HOME_PATH}/pkg_inc/base
+    ${ASCEND_HOME_PATH}/pkg_inc/hccl
+    ${ASCEND_HOME_PATH}/include
+    ${ASCEND_HOME_PATH}/include/hccl
+    ${ASCEND_HOME_PATH}/include/hcomm
+    ${ASCEND_HOME_PATH}/include/hcomm/ccu
+    ${ASCEND_HOME_PATH}/pkg_inc/hcomm
+    ${ASCEND_HOME_PATH}/pkg_inc/hcomm/ccu
+)
+
+target_compile_options(all_gather_sole_attrs_test PRIVATE
+    -U_FORTIFY_SOURCE
+    -g --coverage -fprofile-arcs -ftest-coverage -fno-access-control
+    $<$<COMPILE_LANGUAGE:CXX>:-std=c++17>
+)
+
+target_compile_definitions(all_gather_sole_attrs_test PRIVATE CANN_VERSION_NUM=${_UT_CANN_VERSION_NUM})
+
+target_link_libraries(all_gather_sole_attrs_test PRIVATE
+    $<BUILD_INTERFACE:intf_pub>
+    GTest::gtest
+    GTest::gtest_main
+    -lpthread
+    -Wl,--whole-archive
+    -Wl,--no-whole-archive
+    -lgcov
+    -lrt
+    -lpthread
+)
+
+run_llt_test(TARGET all_gather_sole_attrs_test TASK_NUM 1)
