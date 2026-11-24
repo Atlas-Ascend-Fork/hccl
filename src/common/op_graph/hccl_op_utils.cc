@@ -196,15 +196,17 @@ BuildTagVec(const std::string& tagSeed, const char* group, uint32_t loopMaxTime,
     return ge::GRAPH_SUCCESS;
 }
 
-// 环境推导的 CCL buf 可用尺寸 — 对照 InfoStore GetCCLBufferAvailableSize (ge 仓 hcom_base_funs.cc,
-// 常量 op_hcom_comm.h): size = HCCL_BUFFSIZE 环境变量(MB, 缺省 200) × 1MB - 1MB 保留值, 与通信域状态无关。
-// kernel_builder 与 graph_optimizer 的 opParam 组装 (SetOpParamGraphModeHCCLBufferSize) 均以
-// 此值为输入; 与 tag/loop 用的实际 in-CCL buffer 尺寸 (GetHcomInCCLbufferSize / 基类 GetOrCreateInCCLbuf) 是两个来源。
+// 环境推导的 CCL buf 可用尺寸 — 对照 InfoStore GetCCLBufferAvailableSize (ge 仓 hcom_base_funs.cc):
+// size = HCCL_BUFFSIZE(MB, 缺省 200) × 1MB − 1MB 保留值, 与通信域状态无关; 仅资源计算消费,
+// 与 tag/loop 用的实际 in-CCL buffer 尺寸 (GetOrCreateInCCLbuf) 是两个来源, 永不互写。
+// 下界对齐主线 ParseCclBufferSize: 只拒 <1MB (=1 合法, size=0 与 InfoStore 同款静默传资源计算;
+// 1MB 为生产配置, 本仓 comm_negotiation 协商子通信域即用)。
 ge::graphStatus GetCCLBufferAvailableSize(uint64_t& size)
 {
     constexpr uint64_t DEFAULT_BUFF_SIZE_MB = 200;                           // HCCL_CCL_COMM_DEFAULT_BUFFER_SIZE
     constexpr uint64_t FIXED_CALC_BUFFER_SIZE = 1ULL * 1024 * 1024;          // HCCL_CCL_COMM_FIXED_CALC_BUFFER_SIZE
     constexpr uint64_t INBUFFER_UNALIGNED_RESERVE_SIZE = 1ULL * 1024 * 1024; // CCL_COMM_INBUFFER_UNALIGNED_RESERVE_SIZE
+    constexpr uint64_t BUFFER_MIN_MB = 1;
 
     // InfoStore 注释: HCCL 校验过该环境变量, 这里直接读取
     const char* envValue = std::getenv("HCCL_BUFFSIZE");
@@ -212,9 +214,7 @@ ge::graphStatus GetCCLBufferAvailableSize(uint64_t& size)
     if (envValue != nullptr) {
         char* endPtr = nullptr;
         buffSizeMb = std::strtoull(envValue, &endPtr, 10);
-        // 结果范围检查 (对照 InfoStore SalStrToULong 的 INVALID_UINT 拦截):
-        // 负数 / 前导空白+负数 / 溢出均回绕成超范围 u64, 一个检查全拦
-        if (endPtr == envValue || *endPtr != '\0' || buffSizeMb < 2 || buffSizeMb > UINT32_MAX) {
+        if (endPtr == envValue || *endPtr != '\0' || buffSizeMb < BUFFER_MIN_MB || buffSizeMb > UINT32_MAX) {
             HCCL_ERROR("[GetCCLBufferAvailableSize] invalid HCCL_BUFFSIZE '%s'.", envValue);
             return ge::GRAPH_FAILED;
         }

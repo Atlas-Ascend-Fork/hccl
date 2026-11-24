@@ -66,6 +66,9 @@ struct HcclOpState {
     uint32_t taskNum = 0;
     uint32_t aivCoreNum = 0;
     bool ifAiv = false;
+    // 实际 in-/out-CCL buffer 尺寸 (GetOrCreateInCCLbuf / GetOrCreateOutCCLbuf 实测),
+    // 仅 Refresh/tag 切分/搬运消费 (Receive 的 loopMaxTime 用 out 侧); 与资源计算的推导
+    // available size 是两个量, 永不互写
     uint64_t cclBuffSize = 0;
     // follow 流组: RequestFollowStreams 按 st.streamNum 申请 (key 编码主流 rtStreamId+序号),
     // 静态路径 GraphMode streams[] 参数交付; 空向量 = 不申请 (ifAiv / streamNum==0, 行为同改动前)

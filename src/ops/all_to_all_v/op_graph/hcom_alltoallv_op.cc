@@ -316,12 +316,11 @@ ge::graphStatus HcomAllToAllVOp::CalcResourcesStatic(hccl::HcclOpState& st)
         return ge::GRAPH_FAILED;
     }
 
-    // 在线计算输入: 环境推导 available size — 对照 GE builder CalcOpRunningParam 末尾
-    // GetCCLBufferAvailableSize (hcom_ops_kernel_builder.cc, 对含 ALLTOALLV 的全部算子同源),
-    // 与实际 buffer 尺寸是两个来源 (AllReduce 同款双尺寸保真口径)。
-    // 旧实现 HcomGetCommCCLBufferSize 只查不建, buf 未创建时输入 0, 影响 opMemSize/算法选择
-    uint64_t cclBuffSize = 0;
-    HCCL_GE_CHK_RET(hccl::GetCCLBufferAvailableSize(cclBuffSize));
+    // 环境推导 available size (GetCCLBufferAvailableSize, 见 hccl_op_utils.h) — GE builder
+    // CalcOpRunningParam 同源; 仅在线资源计算消费。Refresh 容量守卫不走本值,
+    // 走 GetOrCreateInCCLbuf/Out 的实测尺寸 (ctx.commInputSize/commOutputSize)
+    uint64_t cclBufferAvailSize = 0;
+    HCCL_GE_CHK_RET(hccl::GetCCLBufferAvailableSize(cclBufferAvailSize));
 
     // selector count: HcomOpUtils::CalcCommonCount 语义 — 遍历全部 inputs (V 的数组 tensor 也计入)
     //   ALLTOALL 分支:   blockSize = inputSize / rankSize (不对齐)
@@ -340,16 +339,16 @@ ge::graphStatus HcomAllToAllVOp::CalcResourcesStatic(hccl::HcclOpState& st)
     }
     st.count = totalSize / unitSize;
 
-    return CalcOnlineResources(st, rankSize, cclBuffSize);
+    return CalcOnlineResources(st, rankSize, cclBufferAvailSize);
 }
 
-// opParam 组装: 公共 setter 组 (aivCoreLimit/opType/dataType/rankSize/count/cclBuffSize) +
+// opParam 组装: 公共 setter 组 (aivCoreLimit/opType/dataType/rankSize/count/cclBufferAvailSize) +
 // V 形态 dataCount 覆写 (CalcOpRunningParam ALLTOALLV 分支: max(sendCounts), GE builder L2114 同口径) —
 // 消费 ExtractParamsStatic 经 D2H 读出的 host 副本 st.sendCounts (图模式下 counts tensor 是
 // device 地址且未必 host 可读, host 直接解引用会段错误); 错误路径不 Destroy, 由调用方统一处理
 static ge::graphStatus SetOpParams(
     OpParamGraphMode* opParam, const hccl::HcclOpState& st, const char* opType, HcomAllToAllKind kind,
-    uint32_t rankSize, uint64_t cclBuffSize)
+    uint32_t rankSize, uint64_t cclBufferAvailSize)
 {
     // setter 返回码逐个检查: 失败静默继续会用缺参 opParam 计算资源
     HcclResult setRet = HcclSetAivSelectOpParamGraphMode(opParam, st.aivCoreLimit);
@@ -357,7 +356,7 @@ static ge::graphStatus SetOpParams(
         || (setRet = HcclSetOpParamGraphModeDataType(opParam, st.dataType)) != HCCL_SUCCESS
         || (setRet = HcclSetOpParamGraphModeRankSize(opParam, &rankSize)) != HCCL_SUCCESS
         || (setRet = HcclSetOpParamGraphModeDataCount(opParam, &st.count)) != HCCL_SUCCESS
-        || (setRet = HcclSetOpParamGraphModeHCCLBufferSize(opParam, &cclBuffSize)) != HCCL_SUCCESS) {
+        || (setRet = HcclSetOpParamGraphModeHCCLBufferSize(opParam, &cclBufferAvailSize)) != HCCL_SUCCESS) {
         HCCL_ERROR("[HcomAllToAllVOp][SetOpParams] HcclSet*OpParamGraphMode failed, ret=%d.", static_cast<int>(setRet));
         return ge::GRAPH_FAILED;
     }
@@ -414,7 +413,8 @@ static ge::graphStatus SelectAlgAndApplyAiv(hccl::HcclOpState& st, HcclCMDType c
 // 不复用公共 hccl::CalcOnlineResources: V 形态 dataCount 与 selector count 双口径
 // (dataCount = max(sendCounts), selector count = CalcResourcesStatic 的 totalSize/unitSize),
 // 公共版单一 st.count 无法表达
-ge::graphStatus HcomAllToAllVOp::CalcOnlineResources(hccl::HcclOpState& st, uint32_t rankSize, uint64_t cclBuffSize)
+ge::graphStatus
+HcomAllToAllVOp::CalcOnlineResources(hccl::HcclOpState& st, uint32_t rankSize, uint64_t cclBufferAvailSize)
 {
     OpParamGraphMode* opParam = nullptr;
     HcclResult ret = HcclCreateOpParamGraphMode(&opParam);
@@ -424,7 +424,7 @@ ge::graphStatus HcomAllToAllVOp::CalcOnlineResources(hccl::HcclOpState& st, uint
         return ge::GRAPH_FAILED;
     }
 
-    if (SetOpParams(opParam, st, GetOpTypeStr(), kind_, rankSize, cclBuffSize) != ge::GRAPH_SUCCESS) {
+    if (SetOpParams(opParam, st, GetOpTypeStr(), kind_, rankSize, cclBufferAvailSize) != ge::GRAPH_SUCCESS) {
         HcclDestroyOpParamGraphMode(opParam);
         return ge::GRAPH_FAILED;
     }
@@ -447,13 +447,14 @@ ge::graphStatus HcomAllToAllVOp::CalcOnlineResources(hccl::HcclOpState& st, uint
     HcclDestroyOpParamGraphMode(opParam);
 
     st.scratchMemSize = opMemSize;
-    st.cclBuffSize = cclBuffSize;
+    // 资源计算不触碰 buffer 实测尺寸 — Refresh 走 ctx.commInputSize/commOutputSize (实测),
+    // AllToAll 系列单 tag 不按 CCL buf 切分, st.cclBuffSize 本算子不消费/不写
 
     HCCL_INFO(
         "[HcomAllToAllVOp][CalcOnlineResources] kind=%d rankSize=%u count=%lu scratchMemSize=%lu streamNum=%u "
-        "taskNum=%u ifAiv=%d cclBuffSize=%lu.",
+        "taskNum=%u ifAiv=%d cclBufferAvailSize=%lu.",
         static_cast<int>(kind_), rankSize, st.count, st.scratchMemSize, st.streamNum, st.taskNum, st.ifAiv,
-        st.cclBuffSize);
+        cclBufferAvailSize);
     return ge::GRAPH_SUCCESS;
 }
 

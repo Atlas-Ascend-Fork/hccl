@@ -296,9 +296,28 @@ TEST_F(GetCCLBufferAvailableSizeTest, EnvValueUsedWhenValid)
     EXPECT_EQ(2047ULL * 1024 * 1024, size);
 }
 
+TEST_F(GetCCLBufferAvailableSizeTest, BuffSizeOneMbYieldsZeroAvailable)
+{
+    // 主线契约 (ParseCclBufferSize: 只拒 <1): 1MB 合法 — availableSize = 1MB − 1MB 保留值 = 0,
+    // 0 静默进资源计算 (InfoStore 同款); 本仓 comm_negotiation 的协商子通信域即 1MB 配置
+    setenv("HCCL_BUFFSIZE", "1", 1);
+    uint64_t size = 999;
+    ASSERT_EQ(ge::GRAPH_SUCCESS, GetCCLBufferAvailableSize(size));
+    EXPECT_EQ(0U, size);
+}
+
+TEST_F(GetCCLBufferAvailableSizeTest, BuffSizeTwoMbYieldsOneMbAvailable)
+{
+    setenv("HCCL_BUFFSIZE", "2", 1);
+    uint64_t size = 0;
+    ASSERT_EQ(ge::GRAPH_SUCCESS, GetCCLBufferAvailableSize(size));
+    EXPECT_EQ(1ULL * 1024 * 1024, size);
+}
+
 TEST_F(GetCCLBufferAvailableSizeTest, InvalidEnvFails)
 {
-    const char* invalid[] = {"abc", "-5", "0", "1", "12x", "4294967296"};
+    // 与主线 ParseCclBufferSize 同判: 0 (低于 1MB 下界) / 非数字 / 负数 / 溢出 / 带尾缀
+    const char* invalid[] = {"abc", "-5", "0", "12x", "4294967296"};
     for (const char* v : invalid) {
         setenv("HCCL_BUFFSIZE", v, 1);
         uint64_t size = 0;

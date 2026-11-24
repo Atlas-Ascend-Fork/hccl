@@ -74,7 +74,7 @@ protected:
 
 private:
     // 静态路径: offline 资源计算 (OpParamGraphMode 创建/设置/计算/selector/销毁)
-    ge::graphStatus CalcOnlineResources(hccl::HcclOpState& st, uint32_t rankSize, uint64_t cclBuffSize);
+    ge::graphStatus CalcOnlineResources(hccl::HcclOpState& st, uint32_t rankSize, uint64_t cclBufferAvailSize);
     // 共享: 生成单 tag — AllToAll 系列不在 GetOpKernelLoopTime 覆盖列表, 无 "_looptime_" 后缀
     ge::graphStatus GenerateTag(hccl::HcclOpState& st);
     // 共享: 按 kind 分发到三个 GraphMode 入口, 直传用户地址 (数组地址无法切片, 无 batch)
