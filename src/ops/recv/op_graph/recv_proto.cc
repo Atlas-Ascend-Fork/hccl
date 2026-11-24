@@ -42,11 +42,13 @@ static ge::graphStatus HcomReceiveInferShapeV2(gert::InferShapeContext* context)
     outputShape->SetDimNum(shapeAttr->GetSize());
 
     for (size_t i = 0; i < shapeAttr->GetSize(); ++i) {
-        if (sizesArray[i] <= 0) {
-            OP_LOGE(opName, "value of sizes[%ld] must greater than 0, but got %lu", i, sizesArray[i]);
+        const int64_t dim = sizesArray[i];
+        // -1 is a valid dynamic dimension; zero and other negative values are invalid.
+        if ((dim <= 0) && (dim != ge::UNKNOWN_DIM)) {
+            OP_LOGE(opName, "value of sizes[%zu] must be greater than 0 or equal to -1, but got %ld", i, dim);
             return GRAPH_FAILED;
         }
-        outputShape->SetDim(i, sizesArray[i]);
+        outputShape->SetDim(i, dim);
     }
 
     OP_INFER_SHAPE_END;
