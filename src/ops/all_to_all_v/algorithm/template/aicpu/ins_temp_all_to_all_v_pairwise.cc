@@ -222,13 +222,7 @@ HcclResult InsTempAllToAllVPairwise::InitParam(
 {
     HCCL_INFO("[InsTempAllToAllVPairwise][InitParam] Run Start");
 
-    // 对称内存路径强制 loopTimes=1，单轮数据量不受 cclBuff 槽容量约束（槽位已按 round 独占扩容）；
-    // 本模板未适配零拷贝，显式拒绝防槽越界
-    if (tempAlgParams.enableRemoteMemAccess) {
-        HCCL_ERROR("[InsTempAllToAllVPairwise][InitParam] symmetric memory not supported, "
-                   "single-pair data may exceed cclBuff slot capacity.");
-        return HCCL_E_INTERNAL;
-    }
+    opType_ = param.opType;
 
     // 拓扑校验与参数推导（与 CalcRes 共用入口，HCCL_ALGO 显式配置绕过 selector 守卫时兜底）
     CHK_RET(CheckAndDeriveTopology());
@@ -366,6 +360,14 @@ HcclResult InsTempAllToAllVPairwise::RunRingStep(
         tempAlgParams.recvCounts[targetRank], dataTypeSize_, effChList, recvCountsSplit_, recvSizeSplit_,
         recvOffsetSplit_, validChNum));
 
+    // 对称内存直达：TX 直写对端 output，跳过 cclBuff 槽与 PostCopy 中转。
+    const bool isSymDirect = tempAlgParams.enableRemoteMemAccess;
+    u64 txDstBaseBytes = 0;
+    if (isSymDirect && sendSize > 0) {
+        // 计算对称直达 TX 目标基址
+        CHK_RET(CalcSymDirectTxDstBase(tempAlgParams, opType_, targetRank, myAlgRank_, dataTypeSize_, txDstBaseBytes));
+    }
+
     std::vector<DataSlice> emptySrcSlices;
     std::vector<DataSlice> emptyDstSlices;
     SlicesList rxSlicesList(emptySrcSlices, emptyDstSlices);
@@ -379,25 +381,34 @@ HcclResult InsTempAllToAllVPairwise::RunRingStep(
         const ChannelInfo& channelSendRecv = effChList[ch];
 
         if (hasSend) {
-            // 发送：写入对端槽的偏移须与对端读出偏移一致。对端 PostCopy 按其 recvCounts[me]
-            // 切分读（== 我的 sendCounts[target]，同一切分函数+同一 channel 确定性输出），
-            // 故此处用 sendOffsetSplit_ 而非本端 recvOffsetSplit_（非对称 pair 二者不同）
+            if (isSymDirect) {
+                CHK_PRT_RET(
+                    channelSendRecv.remoteOutputGraphMode.addr == nullptr,
+                    HCCL_ERROR(
+                        "[InsTempAllToAllVPairwise][RunRingStep] remote output is null, targetRank[%u].", targetRank),
+                    HCCL_E_INTERNAL);
+                // 校验对端 output 切片是否越界
+                CHK_RET(CheckSymDirectPeerOutputSlice(
+                    tempAlgParams, opType_, targetRank, txDstBaseBytes, sendOffsetSplit_[ch], sendSizeSplit_[ch],
+                    channelSendRecv.remoteOutputGraphMode.size));
+            }
             DataSlice txSrcSlice = DataSlice(
                 tempAlgParams.buffInfo.inputPtr,
                 tempAlgParams.sdispls[targetRank] * dataTypeSize_ + sendOffsetSplit_[ch], sendSizeSplit_[ch],
                 sendCountsSplit_[ch]);
+            const u64 txDstOff = isSymDirect ? txDstBaseBytes + sendOffsetSplit_[ch] :
+                                               (CCL_BUFF_BASE_SLOT + remoteCclBuffIdx + ch) * scratchBufferSizePerRank_
+                                                   + sendOffsetSplit_[ch];
             DataSlice txDstSlice = DataSlice(
-                channelSendRecv.remoteCclMem.addr,
-                (CCL_BUFF_BASE_SLOT + remoteCclBuffIdx + ch) * scratchBufferSizePerRank_ + sendOffsetSplit_[ch],
+                isSymDirect ? channelSendRecv.remoteOutputGraphMode.addr : channelSendRecv.remoteCclMem.addr, txDstOff,
                 sendSizeSplit_[ch], sendCountsSplit_[ch]);
             std::vector<DataSlice> txSrcSlices{txSrcSlice};
             std::vector<DataSlice> txDstSlices{txDstSlice};
             HCCL_INFO(
                 "[RunRingStep] ch[%u] TX src inputPtr+offset[%llu] size[%llu] -> "
-                "dst remoteCclMem+offset[%llu] size[%llu]",
+                "dst remoteMem+offset[%llu] size[%llu]",
                 ch, tempAlgParams.sdispls[targetRank] * dataTypeSize_ + sendOffsetSplit_[ch], sendSizeSplit_[ch],
-                (CCL_BUFF_BASE_SLOT + remoteCclBuffIdx + ch) * scratchBufferSizePerRank_ + sendOffsetSplit_[ch],
-                sendSizeSplit_[ch]);
+                txDstOff, sendSizeSplit_[ch]);
 
             SlicesList txSlicesList(txSrcSlices, txDstSlices);
             if (hasRecv) {
@@ -414,7 +425,7 @@ HcclResult InsTempAllToAllVPairwise::RunRingStep(
         }
 
         // 子流自拷 PostCopy（接收侧）：独立于发送判定，send=0/recv>0 时数据由对端 SendWrite 写入
-        if (hasRecv) {
+        if (hasRecv && !isSymDirect) {
             std::vector<u64> recvOffset{recvOffsetSplit_[ch]};
             std::vector<u64> recvSize{recvSizeSplit_[ch]};
             CHK_RET(PostCopy(tempAlgParams, subThreads[ch], myCclBuffIdx + ch, targetRank, recvOffset, recvSize));
@@ -499,23 +510,42 @@ InsTempAllToAllVPairwise::RunFullMesh(const TemplateDataParams& tempAlgParams, T
             myCclBuffIdx = fullmeshCclBuffBase_ + myPartnerIdx;
             remoteCclBuffIdx = fullmeshCclBuffBase_ + rmtPartnerIdx;
 
+            const bool isSymDirect = tempAlgParams.enableRemoteMemAccess;
             if (hasSend) {
-                // 发送 → 对端 cclBuff 槽（偏移基于 CCL_BUFF_BASE_SLOT，与 scratch 分离）
+                // 发送 → 对端 cclBuff 槽（偏移基于 CCL_BUFF_BASE_SLOT，与 scratch 分离）；
+                // 对称直达直写对端 output，对端偏移推导与 RunRingStep 同口径
                 DataSlice txSrcSlice = DataSlice(
                     tempAlgParams.buffInfo.inputPtr, tempAlgParams.sdispls[targetRank] * dataTypeSize_,
                     tempAlgParams.sendCounts[targetRank] * dataTypeSize_, tempAlgParams.sendCounts[targetRank]);
+                u64 txDstBaseBytes = 0;
+                if (isSymDirect) {
+                    // 本端只发不收时 output 窗口为空，对端地址无法填充，显式失败防非法写
+                    CHK_PRT_RET(
+                        channelSendRecv.remoteOutputGraphMode.addr == nullptr,
+                        HCCL_ERROR(
+                            "[InsTempAllToAllVPairwise][RunFullMesh] remote output is null, targetRank[%u].",
+                            targetRank),
+                        HCCL_E_INTERNAL);
+                    CHK_RET(CalcSymDirectTxDstBase(
+                        tempAlgParams, opType_, targetRank, myAlgRank_, dataTypeSize_, txDstBaseBytes));
+                    CHK_RET(CheckSymDirectPeerOutputSlice(
+                        tempAlgParams, opType_, targetRank, txDstBaseBytes, 0,
+                        tempAlgParams.sendCounts[targetRank] * dataTypeSize_,
+                        channelSendRecv.remoteOutputGraphMode.size));
+                }
+                const u64 txDstOff = isSymDirect ? txDstBaseBytes :
+                                                   (CCL_BUFF_BASE_SLOT + remoteCclBuffIdx) * scratchBufferSizePerRank_;
                 DataSlice txDstSlice = DataSlice(
-                    channelSendRecv.remoteCclMem.addr,
-                    (CCL_BUFF_BASE_SLOT + remoteCclBuffIdx) * scratchBufferSizePerRank_,
-                    tempAlgParams.sendCounts[targetRank] * dataTypeSize_, tempAlgParams.sendCounts[targetRank]);
+                    isSymDirect ? channelSendRecv.remoteOutputGraphMode.addr : channelSendRecv.remoteCclMem.addr,
+                    txDstOff, tempAlgParams.sendCounts[targetRank] * dataTypeSize_,
+                    tempAlgParams.sendCounts[targetRank]);
                 std::vector<DataSlice> txSrcSlices{txSrcSlice};
                 std::vector<DataSlice> txDstSlices{txDstSlice};
                 HCCL_INFO(
                     "[RunFullMesh] TX targetRank[%u] src inputPtr+offset[%llu] size[%llu] -> "
-                    "dst remoteCclMem+offset[%llu] size[%llu]",
+                    "dst remoteMem+offset[%llu] size[%llu]",
                     targetRank, tempAlgParams.sdispls[targetRank] * dataTypeSize_,
-                    tempAlgParams.sendCounts[targetRank] * dataTypeSize_,
-                    (CCL_BUFF_BASE_SLOT + remoteCclBuffIdx) * scratchBufferSizePerRank_,
+                    tempAlgParams.sendCounts[targetRank] * dataTypeSize_, txDstOff,
                     tempAlgParams.sendCounts[targetRank] * dataTypeSize_);
 
                 if (hasRecv) {
@@ -539,8 +569,8 @@ InsTempAllToAllVPairwise::RunFullMesh(const TemplateDataParams& tempAlgParams, T
                 CHK_RET(RecvWrite(recvInfo, fullMeshThread));
             }
 
-            // 子流自拷：cclBuff myCclBuffIdx 槽 → OUTPUT（接收侧，独立于发送判定）
-            if (hasRecv) {
+            // 子流自拷：cclBuff myCclBuffIdx 槽 → OUTPUT（接收侧，独立于发送判定）；对称直达无中转
+            if (hasRecv && !isSymDirect) {
                 std::vector<u64> recvOffset{0};
                 std::vector<u64> recvSize{tempAlgParams.recvCounts[targetRank] * dataTypeSize_};
                 CHK_RET(PostCopy(tempAlgParams, fullMeshThread, myCclBuffIdx, targetRank, recvOffset, recvSize));
@@ -585,6 +615,51 @@ HcclResult InsTempAllToAllVPairwise::KernelRun(
     }
 
     HCCL_INFO("[InsTempAllToAllVPairwise][KernelRun] Run End");
+    return HCCL_SUCCESS;
+}
+
+HcclResult CalcSymDirectTxDstBase(
+    const TemplateDataParams& tempAlgParams, HcclCMDType opType, u32 targetRank, u32 myAlgRank, u64 dataTypeSize,
+    u64& txDstBaseBytes)
+{
+    // 对端接收基址（字节）：V 按各 rank 一致的发送布局推导，VC 由对端 displs 矩阵直给
+    const u64 peerRecvOffBase = (opType == HcclCMDType::HCCL_CMD_ALLTOALLVC) ?
+                                    tempAlgParams.peerRdispls[targetRank] :
+                                    static_cast<u64>(myAlgRank) * tempAlgParams.sendCounts[targetRank];
+    txDstBaseBytes = peerRecvOffBase * dataTypeSize;
+
+    // 发送切片不得越本端 input 界
+    const u64 sendOffsetBytes = tempAlgParams.sdispls[targetRank] * dataTypeSize;
+    const u64 sendBytes = tempAlgParams.sendCounts[targetRank] * dataTypeSize;
+    const u64 inputSize = tempAlgParams.buffInfo.inputSize;
+    CHK_PRT_RET(
+        sendOffsetBytes > inputSize || sendBytes > inputSize - sendOffsetBytes,
+        HCCL_ERROR(
+            "[InsTempAllToAllVPairwise][%s] symmetric send slice out of range, targetRank[%u] "
+            "sendOffset[%llu] sendSize[%llu] inputSize[%llu].",
+            __func__, targetRank, sendOffsetBytes, sendBytes, inputSize),
+        HCCL_E_INTERNAL);
+    return HCCL_SUCCESS;
+}
+
+HcclResult CheckSymDirectPeerOutputSlice(
+    const TemplateDataParams& tempAlgParams, HcclCMDType opType, u32 targetRank, u64 txDstBaseBytes, u64 sliceOffBytes,
+    u64 sliceBytes, u64 remoteOutputSize)
+{
+    // VC 的偏移与上界同源于发送矩阵，本地推不出对端独立上界，不做校验（与 mesh_1D 同口径）
+    if (opType == HcclCMDType::HCCL_CMD_ALLTOALLVC) {
+        return HCCL_SUCCESS;
+    }
+    const u64 peerRecvOffBytes = txDstBaseBytes + sliceOffBytes;
+    // 对端 output 窗口未填 size 时，各 rank 布局一致约定下用本地 outputSize 兜底
+    const u64 peerOutputSize = remoteOutputSize > 0 ? remoteOutputSize : tempAlgParams.buffInfo.outputSize;
+    CHK_PRT_RET(
+        peerRecvOffBytes > peerOutputSize || sliceBytes > peerOutputSize - peerRecvOffBytes,
+        HCCL_ERROR(
+            "[InsTempAllToAllVPairwise][%s] peer output slice out of range, targetRank[%u] "
+            "peerRecvOffset[%llu] sliceSize[%llu] peerOutputSize[%llu].",
+            __func__, targetRank, peerRecvOffBytes, sliceBytes, peerOutputSize),
+        HCCL_E_INTERNAL);
     return HCCL_SUCCESS;
 }
 

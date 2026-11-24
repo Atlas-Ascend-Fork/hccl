@@ -10,7 +10,7 @@
 
 // 断言 AllToAllV / AllToAllVC Pairwise 选路修复的生产注册行为（PR 核心三项变更）：
 //   1) AicpuAllToAllVSolePairwise / AicpuAllToAllVCSolePairwise 新增 topoPriorityCheck，
-//      与 topoCustomCheck 共用同一收紧条件（deviceNumPerModule==8、rankSize>=16 且 %16==0、
+//      与 topoCustomCheck 共用同一收紧条件（deviceNumPerModule==8、rankSize>64 且 %16==0、
 //      level0Symmetric、<=128P）；
 //   2) AicpuAllToAllVSoleMesh 移除对 Pairwise 场景的 topoCustomCheck 硬排除，
 //      恢复 supportLevel0Topos = LEVEL0_TOPO_ANY，Pairwise 场景仍保留候选兜底；
@@ -53,6 +53,15 @@ TopoInfoWithNetLayerDetails MakeTopo(u32 rankSize, u32 devPerModule, bool symmet
     t.level0Symmetric = symmetric;
     t.level0Topo = Level0Shape::MESH_1D; // Pairwise 注册的 supportLevel0Topos
     t.topoLevelNums = 2;                 // 跨框场景（minTopoLevelNum = TOPO_LEVEL_NUM_2）
+    // 物理视图：最高层单分区覆盖全域，满足准入 lambda 的"最高层全连接"条件
+    PhysicalLevelInfo topLayer;
+    topLayer.localRanks.resize(rankSize);
+    for (u32 i = 0; i < rankSize; ++i) {
+        topLayer.localRanks[i] = i;
+    }
+    topLayer.view = PhysicalLevelView::GLOBAL;
+    topLayer.instSizeListByLayer = {rankSize};
+    t.physicalLevels.push_back(std::move(topLayer));
     return t;
 }
 
@@ -91,7 +100,7 @@ TEST(PairwiseAlgAttrsTest, VPairwiseCustomAndPriorityCheckAcceptPairwiseScenario
     ASSERT_NE(nullptr, attrs->topo.topoCustomCheck);
     ASSERT_NE(nullptr, attrs->topo.topoPriorityCheck);
 
-    const u32 positiveRankSizes[] = {PAIRWISE_UNIT_RANK_SIZE, 64, PAIRWISE_MAX_RANK_SIZE};
+    const u32 positiveRankSizes[] = {80, PAIRWISE_MAX_RANK_SIZE};
     for (u32 rankSize : positiveRankSizes) {
         auto t = MakeTopo(rankSize, PAIRWISE_DEV_PER_MODULE, true);
         EXPECT_TRUE(attrs->topo.topoCustomCheck(&t)) << "rankSize=" << rankSize;
@@ -99,7 +108,7 @@ TEST(PairwiseAlgAttrsTest, VPairwiseCustomAndPriorityCheckAcceptPairwiseScenario
     }
 }
 
-// 变更 1b：V Pairwise 非准入场景（单框 8P、24P 非整除、4 卡模块、>128P、非对称）
+// 变更 1b：V Pairwise 非准入场景（单框 8P、88P 非整除、80P+4 卡模块、64P 边界、>128P、非对称），
 // customCheck 与 priorityCheck 同时不命中：Pairwise 被硬过滤 / 不参与排他，Mesh 保留候选。
 TEST(PairwiseAlgAttrsTest, VPairwiseChecksRejectNonPairwiseScenario)
 {
@@ -109,11 +118,12 @@ TEST(PairwiseAlgAttrsTest, VPairwiseChecksRejectNonPairwiseScenario)
     ASSERT_NE(nullptr, attrs->topo.topoPriorityCheck);
 
     const TopoInfoWithNetLayerDetails negatives[] = {
-        MakeTopo(PAIRWISE_DEV_PER_MODULE, PAIRWISE_DEV_PER_MODULE, true),    // 8P：低于 16P 下限
-        MakeTopo(24, PAIRWISE_DEV_PER_MODULE, true),                         // 24P：非 16 倍数
-        MakeTopo(PAIRWISE_UNIT_RANK_SIZE, 4, true),                          // 每模块 4 卡
-        MakeTopo(2 * PAIRWISE_MAX_RANK_SIZE, PAIRWISE_DEV_PER_MODULE, true), // 256P：超 128P 上限
-        MakeTopo(PAIRWISE_MAX_RANK_SIZE, PAIRWISE_DEV_PER_MODULE, false),    // 128P 非对称
+        MakeTopo(PAIRWISE_DEV_PER_MODULE, PAIRWISE_DEV_PER_MODULE, true),     // 8P：低于 64P 下限
+        MakeTopo(88, PAIRWISE_DEV_PER_MODULE, true),                          // 88P：>64P 但非 16 倍数
+        MakeTopo(80, 4, true),                                                // 80P 但每模块 4 卡
+        MakeTopo(4 * PAIRWISE_UNIT_RANK_SIZE, PAIRWISE_DEV_PER_MODULE, true), // 64P：边界，不满足 >64
+        MakeTopo(2 * PAIRWISE_MAX_RANK_SIZE, PAIRWISE_DEV_PER_MODULE, true),  // 256P：超 128P 上限
+        MakeTopo(PAIRWISE_MAX_RANK_SIZE, PAIRWISE_DEV_PER_MODULE, false),     // 128P 非对称
     };
     for (const auto& t : negatives) {
         EXPECT_FALSE(attrs->topo.topoCustomCheck(&t)) << "rankSize=" << t.userRankSize;
@@ -130,7 +140,7 @@ TEST(PairwiseAlgAttrsTest, VCPairwiseCustomAndPriorityCheckAcceptPairwiseScenari
     ASSERT_NE(nullptr, attrs->topo.topoCustomCheck);
     ASSERT_NE(nullptr, attrs->topo.topoPriorityCheck);
 
-    const u32 positiveRankSizes[] = {PAIRWISE_UNIT_RANK_SIZE, 64, PAIRWISE_MAX_RANK_SIZE};
+    const u32 positiveRankSizes[] = {80, PAIRWISE_MAX_RANK_SIZE};
     for (u32 rankSize : positiveRankSizes) {
         auto t = MakeTopo(rankSize, PAIRWISE_DEV_PER_MODULE, true);
         EXPECT_TRUE(attrs->topo.topoCustomCheck(&t)) << "rankSize=" << rankSize;
@@ -147,8 +157,9 @@ TEST(PairwiseAlgAttrsTest, VCPairwiseChecksRejectNonPairwiseScenario)
 
     const TopoInfoWithNetLayerDetails negatives[] = {
         MakeTopo(PAIRWISE_DEV_PER_MODULE, PAIRWISE_DEV_PER_MODULE, true),
-        MakeTopo(24, PAIRWISE_DEV_PER_MODULE, true),
-        MakeTopo(PAIRWISE_UNIT_RANK_SIZE, 4, true),
+        MakeTopo(88, PAIRWISE_DEV_PER_MODULE, true),                          // >64P 但非 16 倍数
+        MakeTopo(80, 4, true),                                                // 每模块 4 卡
+        MakeTopo(4 * PAIRWISE_UNIT_RANK_SIZE, PAIRWISE_DEV_PER_MODULE, true), // 64P：边界，不满足 >64
         MakeTopo(2 * PAIRWISE_MAX_RANK_SIZE, PAIRWISE_DEV_PER_MODULE, true),
         MakeTopo(PAIRWISE_MAX_RANK_SIZE, PAIRWISE_DEV_PER_MODULE, false),
     };
@@ -220,7 +231,7 @@ TEST(PairwiseAlgAttrsTest, TopoPriorityExclusionNetEffectOnPairwiseScenario)
     ASSERT_NE(nullptr, pairwise);
     ASSERT_NE(nullptr, mesh);
 
-    auto t = MakeTopo(PAIRWISE_UNIT_RANK_SIZE, PAIRWISE_DEV_PER_MODULE, true);
+    auto t = MakeTopo(80, PAIRWISE_DEV_PER_MODULE, true);
 
     // 条件 1：Pairwise 命中 topoPriorityCheck → 进入 keepSet
     ASSERT_NE(nullptr, pairwise->topo.topoPriorityCheck);
@@ -243,7 +254,7 @@ TEST(PairwiseAlgAttrsTest, VCTopoPriorityExclusionNetEffectOnPairwiseScenario)
     ASSERT_NE(nullptr, pairwise);
     ASSERT_NE(nullptr, mesh);
 
-    auto t = MakeTopo(PAIRWISE_UNIT_RANK_SIZE, PAIRWISE_DEV_PER_MODULE, true);
+    auto t = MakeTopo(80, PAIRWISE_DEV_PER_MODULE, true);
 
     ASSERT_NE(nullptr, pairwise->topo.topoPriorityCheck);
     EXPECT_TRUE(pairwise->topo.topoPriorityCheck(&t));
@@ -268,14 +279,14 @@ TEST(PairwiseAlgAttrsTest, AllToAllPairwiseKeepsCostCompetitionCondition)
     auto overLimit = MakeTopo(2 * PAIRWISE_MAX_RANK_SIZE, PAIRWISE_DEV_PER_MODULE, true);
     EXPECT_TRUE(attrs->topo.topoCustomCheck(&overLimit));
 
-    // 非对称仍参与 cost 竞争
-    auto asymmetric = MakeTopo(PAIRWISE_UNIT_RANK_SIZE, PAIRWISE_DEV_PER_MODULE, false);
-    EXPECT_TRUE(attrs->topo.topoCustomCheck(&asymmetric));
+    // 非对称不再参与 cost 竞争：非 V 场景 level0Symmetric 同样是准入硬条件，不豁免
+    auto asymmetric = MakeTopo(80, PAIRWISE_DEV_PER_MODULE, false);
+    EXPECT_FALSE(attrs->topo.topoCustomCheck(&asymmetric));
 
-    // 基础条件（8 卡模块、>=16P、%16==0）仍为准入硬条件
+    // 基础条件（8 卡模块、>64P、%16==0）仍为准入硬条件
     auto singleBoard = MakeTopo(PAIRWISE_DEV_PER_MODULE, PAIRWISE_DEV_PER_MODULE, true);
     EXPECT_FALSE(attrs->topo.topoCustomCheck(&singleBoard));
-    auto notDivisible = MakeTopo(24, PAIRWISE_DEV_PER_MODULE, true);
+    auto notDivisible = MakeTopo(88, PAIRWISE_DEV_PER_MODULE, true);
     EXPECT_FALSE(attrs->topo.topoCustomCheck(&notDivisible));
 }
 
@@ -293,10 +304,9 @@ TEST(PairwiseAlgAttrsTest, HCCL_ALGOInjectNotAffectTopoPriorityCheck)
     ASSERT_NE(nullptr, pairwise);
     ASSERT_NE(nullptr, pairwise->topo.topoPriorityCheck);
 
-    auto t = MakeTopo(PAIRWISE_UNIT_RANK_SIZE, PAIRWISE_DEV_PER_MODULE, true);
-
     // 基线：默认（未配置 HCCL_ALGO）Pairwise 场景命中
     ResetAlgAttrsStub();
+    auto t = MakeTopo(80, PAIRWISE_DEV_PER_MODULE, true);
     EXPECT_TRUE(pairwise->topo.topoPriorityCheck(&t));
 
     // 注入"用户显式否定 Pairwise"后，topoPriorityCheck 仍命中——

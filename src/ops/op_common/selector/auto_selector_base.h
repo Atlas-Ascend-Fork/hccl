@@ -127,23 +127,29 @@ protected:
         return algos;
     }
 
-    // Pairwise 能力守卫：跨框 MESH_1D 拓扑、每框恰好 8 卡，且 rankSize 为 16 的倍数
-    // （boardNumPerStreamSet = rankSize/16 任意 ≥1 均可：2 的幂走 XOR 配对，
-    //   非 2 的幂走反射配对 (t-i) mod N，自环轮由 fullMesh 填空，奇数板同样支持）
     static bool IsPairwiseCapable(const TopoInfoWithNetLayerDetails* topoInfo)
     {
-        constexpr u32 PAIRWISE_RANK_NUM_PER_BOARD = 8; // 模板硬约束：每板 8 卡，逻辑板须与物理框对齐
-        constexpr u32 PAIRWISE_UNIT_RANK_SIZE = 2 * PAIRWISE_RANK_NUM_PER_BOARD; // 2 套流集合 × 8 卡/板
+        constexpr u32 PAIRWISE_RANK_NUM_PER_BOARD = 8;                           // 模板硬约束：每板 8 卡
+        constexpr u32 PAIRWISE_UNIT_RANK_SIZE = 2 * PAIRWISE_RANK_NUM_PER_BOARD; // 2 套流 × 8 卡/板
+        constexpr u32 PAIRWISE_MIN_RANK_SIZE = 64; // 单pod不走 Pairwise，仅跨 pod 场景启用
 
         if (topoInfo->topoLevelNums <= 1 || topoInfo->level0Topo != Level0Shape::MESH_1D) {
             return false;
         }
-        // 每框非 8 卡时逻辑板与物理框错位，板内 HCCS 带宽与板间跨框的流量假设失效
+
         if (topoInfo->deviceNumPerModule != PAIRWISE_RANK_NUM_PER_BOARD) {
             return false;
         }
-        return topoInfo->userRankSize >= PAIRWISE_UNIT_RANK_SIZE
-               && topoInfo->userRankSize % PAIRWISE_UNIT_RANK_SIZE == 0;
+
+        if (topoInfo->physicalLevels.empty()) {
+            return false;
+        }
+        const auto& topLayer = topoInfo->physicalLevels.back();
+
+        return topoInfo->userRankSize > PAIRWISE_MIN_RANK_SIZE
+               && (topoInfo->userRankSize % PAIRWISE_UNIT_RANK_SIZE == 0) && topoInfo->level0Symmetric
+               && (topLayer.instSizeListByLayer.size() == 1)
+               && (topoInfo->userRankSize == topLayer.localRanks.size()); // 最高层全连接
     }
 
 private:

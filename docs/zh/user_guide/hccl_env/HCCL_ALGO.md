@@ -47,7 +47,7 @@ export HCCL_ALGO="<ExecutorType>{level0=<algoType>,level1=<algoType>};not(<Execu
       - MeshChunkTwoShot（meshchunktwoshot）：TwoShot版MeshChunk算法，AllReduce走ReduceScatter+AllGather两步，其中ReduceScatter阶段使用mesh chunk。
       - MeshChunkConcur（meshchunkconcur）：Chunk轮转+CLOS轴绕路并发算法，在MeshChunk分块逐步交换的基础上，同时合并level0直连mesh链路与level1 CLOS上行链路，按两侧带宽比对每个chunk的数据分流；收发与归约在DMA传输侧融合，消除通信后的串行本地归约；适用于两级拓扑（server/pod/PC16）下大数据量ReduceScatter。
       - MeshSingleChannel（meshsinglechannel）：单通道Mesh算法，与默认mesh同算法，但每对rank只建立1条channel、不做多通道数据切分；适合需要降低通道/流同步开销或链路资源受限的AllToAll算子场景。
-      - Pairwise（pairwise）：逐对通信算法，多机多卡场景下，每机（单机多卡）作为一组，每轮按对称配对矩阵配对一个目标组（避免网络一打多），本机各卡与目标组的对端逐对建立channel并发收发。当前仅AllToAll/AllToAllV/AllToAllVC（AICPU）支持，要求level0为MESH_1D、单机8卡、rankSize ≥ 16且为16的倍数；其中AllToAllV/AllToAllVC还要求level0对称且rankSize ≤ 128，超出范围自动回退到Mesh算法。
+      - Pairwise（pairwise）：逐对通信算法，多机多卡场景下，每机（单机多卡）作为一组，每轮按对称配对矩阵配对一个目标组（避免网络一打多），本机各卡与目标组的对端逐对建立channel并发收发。当前仅AllToAll/AllToAllV/AllToAllVC（AICPU）支持，要求level0为MESH_1D、单机8卡、level0对称、最高层只有一个网络实例且覆盖全部rank（最高层全连接）、rankSize > 64且为16的倍数；其中AllToAllV/AllToAllVC还要求rankSize ≤ 128，超出范围自动回退到Mesh算法。
       - MeshMultiLink（meshmultilink）：多链路Mesh算法，适用于每对rank有多条链路的拓扑。按本端Die划分链路，数据根据各链路包含的port数量在两个Die的链路上分流并发，适用于端口分布在两个Die上的AllToAll/AllToAllV算子。
       - NHRMultiLink（nhrmultilink）：多链路NHR算法，每条链路可含多个物理port，每步交换的数据按port数切片到各条链路并发；适用于每对rank有多条链路的拓扑。
       - MeshMultiJetty（meshmultijetty）：多Jetty Mesh算法，对每个对端建多条channel（每个channel一个jetty），数据按jetty切片在多端口上聚合并发，可用于每对rank有多个物理端口的AllToAll/AllToAllV算子。

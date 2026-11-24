@@ -27,7 +27,9 @@ The Pairwise algorithm is supported only for AlltoAll, AlltoAllV, and AlltoAllVC
 
 - level0 topology is MESH_1D
 - 8 NPUs per module (deviceNumPerModule = 8)
-- rankSize ≥ 16 and a multiple of 16
-- (AlltoAllV/AlltoAllVC only) level0 is symmetric (level0Symmetric = true) and rankSize ≤ 128
+- Symmetric level0 (level0Symmetric = true)
+- The top layer has only one network instance covering all ranks (fully connected at the top layer)
+- rankSize > 64 and a multiple of 16
+- (AlltoAllV/AlltoAllVC only) rankSize ≤ 128
 
-For AlltoAllV/AlltoAllVC, when these conditions are not met, the Mesh algorithm is used as a fallback.
+For all three operators, when these conditions are not met, the Mesh algorithm is used as a fallback.

@@ -563,6 +563,7 @@ AlgNetMeta InsV2AlltoAllVSoleExecutor<AlgTopoMatch, InsAlgTemplate>::GetAlgNetMe
 
 constexpr u32 PAIRWISE_RANK_NUM_PER_BOARD = InsTempAllToAllVPairwise::RANK_NUM_PER_BOARD;
 constexpr u32 PAIRWISE_UNIT_RANK_SIZE = InsTempAllToAllVPairwise::THREAD_SET_NUM * PAIRWISE_RANK_NUM_PER_BOARD;
+constexpr u32 PAIRWISE_MIN_RANK_SIZE = 64;
 // 当前暂时限制128P以内选择Pairwise算法，条件改变后需同步适配
 constexpr u32 PAIRWISE_MAX_RANK_SIZE = 128;
 
@@ -622,25 +623,38 @@ REGISTER_EXEC_V2(
 REGISTER_ALG_ATTRS(
     AicpuAllToAllSolePairwise, topo.supportLevel0Topos = LEVEL0_TOPO_MESH_1D; topo.minTopoLevelNum = TOPO_LEVEL_NUM_2;
     // AlltoAll 非V 可通过 cost 竞争区分算法优先级，无需 topoPriorityCheck 排他
+    // 当前ranksize暂无上限要求
     topo.topoCustomCheck = [](const TopoInfoWithNetLayerDetails* t) -> bool {
-        return t->deviceNumPerModule == PAIRWISE_RANK_NUM_PER_BOARD && t->userRankSize >= PAIRWISE_UNIT_RANK_SIZE
-               && t->userRankSize % PAIRWISE_UNIT_RANK_SIZE == 0;
+        const u32 rankSize = t->userRankSize;
+        if (t->physicalLevels.empty()) {
+            return false;
+        }
+        const auto& topLayer = t->physicalLevels.back();
+        return (t->deviceNumPerModule == PAIRWISE_RANK_NUM_PER_BOARD) && t->level0Symmetric
+               && (rankSize > PAIRWISE_MIN_RANK_SIZE) && (rankSize % PAIRWISE_UNIT_RANK_SIZE == 0)
+               && (topLayer.instSizeListByLayer.size() == 1)
+               && (rankSize == topLayer.localRanks.size()); // 最高层全连接
     };);
 REGISTER_EXEC_V2(
     HcclCMDType::HCCL_CMD_ALLTOALLV, AicpuAllToAllVSolePairwise, InsV2AlltoAllVSoleExecutor, TopoMatchOneLevel,
     InsTempAllToAllVPairwise);
 REGISTER_ALG_ATTRS(
     AicpuAllToAllVSolePairwise, topo.supportLevel0Topos = LEVEL0_TOPO_MESH_1D; topo.minTopoLevelNum = TOPO_LEVEL_NUM_2;
-    // topoCustomCheck与topoPriorityCheck 共用同一收紧条件（含 level0Symmetric && <=128P）。
     // 刻意收紧准入：Pairwise 仅适用于对称且 <=128P 的场景，超出范围由 AicpuAllToAllVSoleMesh（LEVEL0_TOPO_ANY）兜底。
     // topoPriorityCheck 在 Pairwise 场景声明优先排他同 (opType, engine) 组内未声明 priority 的 AICPU 算法；
     // 当前命中者含 AicpuAllToAllVSoleMesh 与 AicpuAllToAllVSequenceMeshMesh（后者 cost 仍为 MDE 占位值，
     // 标定后需重新评估排他范围）。
     // V 类算子 cost 为固定引擎常量（同引擎内无差异），不能用 cost 竞争区分同引擎多算法优先级。
     auto isPairwiseScenario = [](const TopoInfoWithNetLayerDetails* t) -> bool {
-        return t->deviceNumPerModule == PAIRWISE_RANK_NUM_PER_BOARD && t->userRankSize >= PAIRWISE_UNIT_RANK_SIZE
-               && t->userRankSize % PAIRWISE_UNIT_RANK_SIZE == 0 && t->level0Symmetric
-               && t->userRankSize <= PAIRWISE_MAX_RANK_SIZE;
+        const u32 rankSize = t->userRankSize;
+        if (t->physicalLevels.empty()) {
+            return false;
+        }
+        const auto& topLayer = t->physicalLevels.back();
+        return (t->deviceNumPerModule == PAIRWISE_RANK_NUM_PER_BOARD) && t->level0Symmetric
+               && (rankSize % PAIRWISE_UNIT_RANK_SIZE == 0) && (rankSize > PAIRWISE_MIN_RANK_SIZE)
+               && (rankSize <= PAIRWISE_MAX_RANK_SIZE) && (topLayer.instSizeListByLayer.size() == 1)
+               && (rankSize == topLayer.localRanks.size()); // 最高层全连接
     };
     topo.topoCustomCheck = isPairwiseScenario; topo.topoPriorityCheck = isPairwiseScenario;);
 REGISTER_EXEC_V2(
@@ -648,13 +662,18 @@ REGISTER_EXEC_V2(
     InsTempAllToAllVPairwise);
 REGISTER_ALG_ATTRS(
     AicpuAllToAllVCSolePairwise, topo.supportLevel0Topos = LEVEL0_TOPO_MESH_1D; topo.minTopoLevelNum = TOPO_LEVEL_NUM_2;
-    // 与 ALLTOALLV 保持一致：topoCustomCheck 与 topoPriorityCheck 共用同一收紧条件（含 level0Symmetric && <=128P）。
     // 刻意收紧准入：超出范围由 AicpuAllToAllVCSoleMesh（LEVEL0_TOPO_ANY）兜底。
     // topoPriorityCheck 排他范围同 V 侧：含 AicpuAllToAllVCSoleMesh 与 AicpuAllToAllVCSequenceMeshMesh。
     auto isVCPairwiseScenario = [](const TopoInfoWithNetLayerDetails* t) -> bool {
-        return t->deviceNumPerModule == PAIRWISE_RANK_NUM_PER_BOARD && t->userRankSize >= PAIRWISE_UNIT_RANK_SIZE
-               && t->userRankSize % PAIRWISE_UNIT_RANK_SIZE == 0 && t->level0Symmetric
-               && t->userRankSize <= PAIRWISE_MAX_RANK_SIZE;
+        const u32 rankSize = t->userRankSize;
+        if (t->physicalLevels.empty()) {
+            return false;
+        }
+        const auto& topLayer = t->physicalLevels.back();
+        return (t->deviceNumPerModule == PAIRWISE_RANK_NUM_PER_BOARD) && t->level0Symmetric
+               && (rankSize % PAIRWISE_UNIT_RANK_SIZE == 0) && (rankSize > PAIRWISE_MIN_RANK_SIZE)
+               && (rankSize <= PAIRWISE_MAX_RANK_SIZE) && (topLayer.instSizeListByLayer.size() == 1)
+               && (rankSize == topLayer.localRanks.size()); // 最高层全连接
     };
     topo.topoCustomCheck = isVCPairwiseScenario; topo.topoPriorityCheck = isVCPairwiseScenario;);
 #if CANN_VERSION_NUM >= CANN_VERSION(9, 0, 0)

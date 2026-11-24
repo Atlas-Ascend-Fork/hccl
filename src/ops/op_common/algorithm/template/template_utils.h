@@ -861,7 +861,7 @@ inline void FillMeshJettyNums(std::vector<uint32_t>& jettyNums, u32 rankSize, u3
 {
     constexpr u32 SINGLE_JETTY_NUM = 1;
     jettyNums.resize(rankSize, 0);
-    for (int i = 0; i < rankSize; i++) {
+    for (u32 i = 0; i < rankSize; i++) {
         if (i == myRank) {
             jettyNums[i] = SINGLE_JETTY_NUM;
         } else if (multijetty) {

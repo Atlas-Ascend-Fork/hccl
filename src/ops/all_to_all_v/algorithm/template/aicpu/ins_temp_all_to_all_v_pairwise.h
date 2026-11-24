@@ -14,6 +14,7 @@
 #include "alg_v2_template_base.h"
 #include "executor_base.h"
 #include "alg_data_trans_wrapper.h"
+#include "alg_param.h"
 
 namespace ops_hccl {
 
@@ -77,6 +78,7 @@ private:
         const std::vector<u64>& recvOffsetSplit, const std::vector<u64>& recvSizeSplit);
 
     u64 dataTypeSize_{0};
+    HcclCMDType opType_{HcclCMDType::HCCL_CMD_INVALID};
     u32 boardNumPerStreamSet_{0};  // 每套流集合负责的板数，由 templateRankSize_ 推导
     u32 ringStepNum_{0};           // 每 round ring 内步数 = RANK_NUM_PER_BOARD
     u32 ringInSubThreadNum_{0};    // 组内 ring 子流数 = RANK_NUM_PER_BOARD × 2
@@ -103,5 +105,18 @@ private:
     std::vector<u64> recvSizeSplit_;
     std::vector<u64> recvOffsetSplit_;
 };
+
+// 对称直达 TX 目标基址推导（单一事实源，RunRingStep/RunFullMesh 共用，UT 钉死口径）：
+// V = myAlgRank × sendCounts[targetRank]（各 rank 发送布局一致）；VC = peerRdispls[targetRank]（矩阵直给）。
+// 同时校验发送切片 [sdispls, sdispls + sendCounts) 不越本端 input 界。
+HcclResult CalcSymDirectTxDstBase(
+    const TemplateDataParams& tempAlgParams, HcclCMDType opType, u32 targetRank, u32 myAlgRank, u64 dataTypeSize,
+    u64& txDstBaseBytes);
+
+// 对称直达写切片越界校验：对端 output 窗口只填地址不填 size（恒 0），各 rank 布局一致时用本地
+// outputSize 兜底；VC 偏移与上界同源于矩阵、本地推不出独立上界，不做校验直接放行（与 mesh_1D 同口径）。
+HcclResult CheckSymDirectPeerOutputSlice(
+    const TemplateDataParams& tempAlgParams, HcclCMDType opType, u32 targetRank, u64 txDstBaseBytes, u64 sliceOffBytes,
+    u64 sliceBytes, u64 remoteOutputSize);
 } // namespace ops_hccl
 #endif // INS_TEMP_ALL_TO_ALL_V_PAIRWISE_H

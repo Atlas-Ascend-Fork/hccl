@@ -20,6 +20,7 @@ set(SOURCE_FILES
     ${PROJECT_SOURCE_DIR}/src/ops/barrier/algorithm/template/aicpu/barrier_rhd_utils.cc
     ${PROJECT_SOURCE_DIR}/src/ops/barrier/algorithm/template/aicpu/ins_temp_barrier_rhd_aicpu.cc
     ${PROJECT_SOURCE_DIR}/src/ops/barrier/algorithm/template/aicpu/ins_temp_barrier_rhd_dpu.cc
+    ${PROJECT_SOURCE_DIR}/src/ops/all_to_all_v/algorithm/template/aicpu/ins_temp_all_to_all_v_pairwise.cc
 )
 
 add_executable(template_utils_test ${UT_FILES} ${SOURCE_FILES})
@@ -37,6 +38,8 @@ endif()
 
 target_include_directories(template_utils_test PRIVATE
     ${PROJECT_SOURCE_DIR}/src/ops/barrier/algorithm/template/aicpu
+    ${PROJECT_SOURCE_DIR}/src/ops/all_to_all_v/algorithm/template
+    ${PROJECT_SOURCE_DIR}/src/ops/all_to_all_v/algorithm/template/aicpu
     ${CMAKE_CURRENT_SOURCE_DIR}
     ${PROJECT_SOURCE_DIR}/src/ops/op_common/algorithm/template
     ${PROJECT_SOURCE_DIR}/src/ops/op_common/algorithm/template/registry
@@ -64,6 +67,7 @@ target_include_directories(template_utils_test PRIVATE
 target_compile_options(template_utils_test PRIVATE
     -U_FORTIFY_SOURCE
     -g --coverage -fprofile-arcs -ftest-coverage -fno-access-control
+    -ffunction-sections -fdata-sections
     $<$<COMPILE_LANGUAGE:CXX>:-std=c++17>
 )
 
@@ -93,6 +97,7 @@ target_link_libraries(template_utils_test PRIVATE
     -lpthread
     -lgcov
     -lrt
+    -Wl,--gc-sections
 )
 
 run_llt_test(TARGET template_utils_test TASK_NUM 1)

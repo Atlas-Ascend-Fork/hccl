@@ -5314,8 +5314,8 @@ static bool IsSymMemInplaceOverlap(const OpParam& param)
     return (inStart < outStart + outSize) && (outStart < inStart + inSize);
 }
 
-// UBX 上 alltoall 类的对称内存放行规则（与 all_to_all_v.cc 的入口门禁逐条一致）：
-// 算法白名单（MultiJetty 单级 / Concurrent，排除 pairwise 系列）+ 小数据仍走非对称的阈值。
+// UBX 上 alltoall 类的对称内存放行规则（本函数为 alltoall 对称资格的唯一判定点）：
+// 算法白名单（MultiJetty 单级 / Concurrent）+ 小数据仍走非对称的阈值。
 static bool IsUbxAicpuTsAllToAllSymAlg(const OpParam& param, const TopoInfoWithNetLayerDetails* topoInfo)
 {
     const std::string alg(param.algName);
@@ -5326,11 +5326,6 @@ static bool IsUbxAicpuTsAllToAllSymAlg(const OpParam& param, const TopoInfoWithN
     if (param.opType != HcclCMDType::HCCL_CMD_ALLTOALL) {
         // 仅 ALLTOALL 入口按算法白名单探测；ALLTOALLVC/ALLTOALLV 不做对称路径
         // （其算法选择未经过本白名单，UBX 上会选到不支持对称窗口的算法）
-        return false;
-    }
-    // pairwise 系列不支持对称内存
-    if (alg == "AicpuAllToAllSolePairwise" || alg == "AicpuAllToAllVSolePairwise"
-        || alg == "AicpuAllToAllVCSolePairwise") {
         return false;
     }
     const bool multiJetty = (alg == "AicpuAllToAllSoleMeshMultiJetty") && singleLevel;
@@ -5428,18 +5423,6 @@ static bool IsUbxAivSymAlg(const OpParam& param)
     }
 }
 
-// alltoall 的 pairwise 系列算法不支持对称内存；UBX 分支已在 IsUbxAicpuTsAllToAllSymAlg 排除，
-// server MESH_1D 分支在此排除，与 all_to_all_v.cc 入口门禁的 isPairwiseAlgo 一致。
-static bool IsAllToAllPairwiseAlg(const OpParam& param)
-{
-    if ((param.opType != HcclCMDType::HCCL_CMD_ALLTOALL) && (param.opType != HcclCMDType::HCCL_CMD_ALLTOALLVC)) {
-        return false;
-    }
-    const std::string alg(param.algName);
-    return alg == "AicpuAllToAllSolePairwise" || alg == "AicpuAllToAllVSolePairwise"
-           || alg == "AicpuAllToAllVCSolePairwise";
-}
-
 HcclResult RefreshSymmetricMemory(OpParam& param, const TopoInfoWithNetLayerDetails* topoInfo)
 {
     // 基础门禁与算子入口一致：版本、单算子模式、AICPU_TS引擎、MESH_1D一级拓扑、非 PCIe（含混合）组网。
@@ -5493,11 +5476,6 @@ HcclResult RefreshSymmetricMemory(OpParam& param, const TopoInfoWithNetLayerDeta
                 break;
         }
     }
-    // server MESH_1D 分支同样要排除 alltoall 的 pairwise 系列（UBX 分支已在 helper 内排除）
-    if (symMemAllowed && IsAllToAllPairwiseAlg(param)) {
-        symMemAllowed = false;
-    }
-
     if (!symMemAllowed) {
         // 回退后入口条件块对「旧引擎/旧算法」的判定已过期（AIV→AICPU_TS、algName 被替换等），
         // 必须在此统一清掉 flag，否则会把入口已禁止的组合（如 UBX + AICPU_TS + 非白名单算法）带进执行路径。

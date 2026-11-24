@@ -25,7 +25,9 @@ $(p-1)\alpha + \beta\cdot\underset{k}{\Sigma}\underset{i}{\max}(n_{i,i+k})$
 
 - level0拓扑为MESH_1D
 - 单机8卡（deviceNumPerModule = 8）
-- rankSize ≥ 16且为16的倍数
-- （仅AlltoAllV/AlltoAllVC）level0对称（level0Symmetric = true）且rankSize ≤ 128
+- level0对称（level0Symmetric = true）
+- 最高层只有一个网络实例且覆盖全部rank（最高层全连接）
+- rankSize > 64且为16的倍数
+- （仅AlltoAllV/AlltoAllVC）rankSize ≤ 128
 
-AlltoAllV/AlltoAllVC超出上述范围时，自动回退到Mesh算法。
+三个算子超出上述范围时，自动回退到Mesh算法。
