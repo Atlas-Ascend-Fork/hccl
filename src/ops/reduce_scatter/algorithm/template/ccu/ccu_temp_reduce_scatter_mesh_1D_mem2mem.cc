@@ -18,7 +18,7 @@ namespace ops_hccl {
 std::vector<CostModelParam> CcuTempReduceScatterMesh1DMem2Mem::CalcCostCoeff(CalcCostCoeffParam param)
 {
     // int portNum = (param.portNum.size() == 1) ? param.portNum[0] : (param.portNum[0] + param.portNum[1]);
-    int portNum = (param.netType == CommTopo::COMM_TOPO_1DMESH) ? param.portNum[0] : param.portNum[0];
+    int portNum = param.portNum[0];
     // int kernelNum = static_cast<int>(0.7f * param.rankSize);
     // kernelNum = (kernelNum > 6) ? kernelNum : 6;
     // int RTT1 = (param.netType == CommTopo::COMM_TOPO_CLOS) ? 4 : 2;

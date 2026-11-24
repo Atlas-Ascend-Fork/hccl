@@ -509,8 +509,11 @@ InsV2AllReduceOrderPreservedExecutor<AlgTopoMatch, InsAlgTemplateRS, InsAlgTempl
 REGISTER_EXEC_V2_MULTI(
     HcclCMDType::HCCL_CMD_ALLREDUCE, AicpuAllReduceStrictOrderedMesh, InsV2AllReduceOrderPreservedExecutor,
     TopoMatchOneLevel, InsTempReduceScatterOrderPreservedGroup, InsTempAllGatherMesh1D, InsTempAllGatherNHR);
-REGISTER_ALG_ATTRS(AicpuAllReduceStrictOrderedMesh, topo.supportLevel0Topos = LEVEL0_TOPO_MESH_1D | LEVEL0_TOPO_CLOS;
-                   topo.isSupportLevel1Nhr = true; op.supportedDataTypes = SUPPORTED_FLOAT_ONLY;
-                   op.isSupportFloatOrderPreserved = true);
+REGISTER_ALG_ATTRS(
+    AicpuAllReduceStrictOrderedMesh, topo.supportLevel0Topos = LEVEL0_TOPO_MESH_1D | LEVEL0_TOPO_CLOS;
+    topo.isSupportLevel1Nhr = true; topo.topoPrecondCheck = [](const TopoInfoWithNetLayerDetails* topo) -> bool {
+        return HasGlobalDeviceSourceOnHighestLayer(topo->physicalLevels, OpExecuteConfig::AICPU_TS, topo->userRankSize);
+    };
+    op.supportedDataTypes = SUPPORTED_FLOAT_ONLY; op.isSupportFloatOrderPreserved = true);
 
 } // namespace ops_hccl

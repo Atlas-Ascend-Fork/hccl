@@ -263,9 +263,14 @@ u64 InsV2ReduceScatterOrderPreservedExecutor<AlgTopoMatch, InsAlgTemplate>::Roun
 REGISTER_EXEC_V2(
     HcclCMDType::HCCL_CMD_REDUCE_SCATTER, AicpuReduceScatterStrictOrderedMesh, InsV2ReduceScatterOrderPreservedExecutor,
     TopoMatchOneLevel, InsTempReduceScatterOrderPreservedGroup);
-REGISTER_ALG_ATTRS(AicpuReduceScatterStrictOrderedMesh,
-                   topo.supportLevel0Topos = LEVEL0_TOPO_MESH_1D | LEVEL0_TOPO_MESH_1D_CLOS | LEVEL0_TOPO_CLOS;
-                   topo.isSupportLevel0PcieMix = true; topo.isSupportLevel1Nhr = true;
-                   op.isSupportFloatOrderPreserved = true; op.supportedDataTypes = SUPPORTED_FLOAT_ONLY;);
+REGISTER_ALG_ATTRS(
+    AicpuReduceScatterStrictOrderedMesh,
+    topo.supportLevel0Topos = LEVEL0_TOPO_MESH_1D | LEVEL0_TOPO_MESH_1D_CLOS | LEVEL0_TOPO_CLOS;
+    topo.isSupportLevel0PcieMix = true; topo.isSupportLevel1Nhr = true;
+    // 分组AllToAll需要一个覆盖全域的设备侧来源，首选算法和tuner均须满足这个前提。
+    topo.topoPrecondCheck = [](const TopoInfoWithNetLayerDetails* topo) -> bool {
+        return HasGlobalDeviceSourceOnHighestLayer(topo->physicalLevels, OpExecuteConfig::AICPU_TS, topo->userRankSize);
+    };
+    op.isSupportFloatOrderPreserved = true; op.supportedDataTypes = SUPPORTED_FLOAT_ONLY;);
 
 } // namespace ops_hccl

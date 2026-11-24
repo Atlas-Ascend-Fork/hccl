@@ -145,6 +145,26 @@ static u32 FindGlobalDeviceLayer(
     return globalLayer;
 }
 
+bool HasGlobalDeviceSourceOnHighestLayer(
+    const std::vector<PhysicalLevelInfo>& physicalLevels, OpExecuteConfig engine, u32 userRankSize)
+{
+    const auto effective = CollectEffectiveIndices(physicalLevels, engine);
+    const u32 globalLayer = FindGlobalDeviceLayer(physicalLevels, effective, userRankSize);
+    if (globalLayer == INVALID_UINT) {
+        return false;
+    }
+    // 与ResolveMapping一致：全域来源在Server/Pod层且Layer2多实例时，按rank范围恢复层次。
+    const bool orderByRankScope
+        = engine != OpExecuteConfig::HOSTCPU && globalLayer < RAIL_NET_LAYER && HasLayer2Partition(physicalLevels);
+    return std::none_of(
+        effective.begin(), effective.end(), [&physicalLevels, globalLayer, userRankSize, orderByRankScope](u32 idx) {
+            const auto& level = physicalLevels[idx];
+            return level.locType == ENDPOINT_LOC_TYPE_DEVICE && level.ref.netLayer != INVALID_UINT
+                   && level.ref.netLayer > globalLayer
+                   && (!orderByRankScope || level.localRanks.size() >= userRankSize);
+        });
+}
+
 bool ShouldUseRailHierarchy(
     const std::vector<PhysicalLevelInfo>& physicalLevels, OpExecuteConfig engine, u32 userRankSize)
 {

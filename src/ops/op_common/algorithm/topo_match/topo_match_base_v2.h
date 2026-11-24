@@ -48,6 +48,10 @@ HcclResult ValidateGroup(const std::vector<u32>& group, u32 dim, u32 myRank, con
 // 引擎过滤：非 hostdpu 排除 HOST 层，AIV 排除含 UBG 链路的层
 std::vector<u32> CollectEffectiveIndices(const std::vector<PhysicalLevelInfo>& physicalLevels, OpExecuteConfig engine);
 
+// 最高可用DEVICE层须有覆盖全域的TopoInstance。Server/Pod层全域且Layer2多实例时按rank范围恢复层次。
+bool HasGlobalDeviceSourceOnHighestLayer(
+    const std::vector<PhysicalLevelInfo>& physicalLevels, OpExecuteConfig engine, u32 userRankSize);
+
 // layer2多实例且不存在当前引擎可用的DEVICE全域来源时, 使用分轨匹配, 不限定全域来源层号。
 // HOSTCPU固定走普通匹配。来源必须具有GLOBAL单实例分区和TopoInstance, 不能仅凭本地规模判定。
 bool ShouldUseRailHierarchy(
