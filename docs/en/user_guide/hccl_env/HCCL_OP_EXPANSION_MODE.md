@@ -73,7 +73,7 @@ Configures the expansion mode of communication operators.
 
     This mode does not support inplace use cases.
 
-    This config supports the Broadcast, AllGather, ReduceScatter, AllReduce, Reduce, Scatter, AlltoAll, AlltoAllV, AlltoAllVC, AllGatherV, and ReduceScatterV operators. For the AllReduce, ReduceScatter, and Reduce operators, only int8, int16, int32, float16, float32, and bfp16 are supported. For the ReduceScatterV operator, only int16, int32, float16, float32, and bfp16 are supported. For the data types supported by other communication operators, see the corresponding collective communication API reference.
+    This config supports the Broadcast, AllGather, ReduceScatter, AllReduce, Reduce, Scatter, AlltoAll, AlltoAllV, AlltoAllVC, AllGatherV, and ReduceScatterV operators. For the AllReduce, ReduceScatter, and Reduce operators, only int16, int32, float16, float32, and bfp16 are supported; when the communication algorithm is NHR, int8 is additionally supported, and using the int8 data type in non-NHR scenarios may fall back to the AI CPU mode. For the ReduceScatterV operator, only int16, int32, float16, float32, and bfp16 are supported. For the data types supported by other communication operators, see the corresponding collective communication API reference.
 
     In single-device communication use cases, when the data volume exceeds a certain threshold, the HCCL AllReduce, ReduceScatter, and Reduce operators automatically fall back to the AI CPU expansion mode for dispatch to avoid performance degradation. This threshold is not fixed and is adjusted based on factors such as the operator running mode and network scale.
 
