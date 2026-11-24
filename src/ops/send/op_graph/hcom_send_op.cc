@@ -49,6 +49,7 @@ HcclSend(void* sendBuf, uint64_t count, HcclDataType dataType, uint32_t destRank
 HcclResult HcclSendGraphMode(
     void* sendBuf, uint64_t count, HcclDataType dataType, uint32_t destRank, const char* group, aclrtStream stream,
     const char* tag, void** streams, size_t streamCount, void* scratchMemAddr, uint64_t scratchMemSize);
+HcclResult HcclSetAivCoreLimitGraphMode(const char* group, uint32_t aivCoreLimit);
 }
 
 namespace {
@@ -180,6 +181,14 @@ ge::graphStatus HcomSendOp::GenerateTagVec(hccl::HcclOpState& st)
 
 ge::graphStatus HcomSendOp::LaunchHcclOpStatic(hccl::HcclOpState& st)
 {
+    // AIV 算力上限写入 group 级 AivParamStorage (缺省 0), AIV 资源计算与 Selector 判定消费该值
+    HcclResult ret = HcclSetAivCoreLimitGraphMode(st.group, st.aivCoreLimit);
+    if (ret != HCCL_SUCCESS) {
+        HCCL_ERROR(
+            "[HcomSendOp][LaunchHcclOpStatic] HcclSetAivCoreLimitGraphMode failed, ret=%d.", static_cast<int>(ret));
+        return ge::GRAPH_FAILED;
+    }
+
     HCCL_GE_CHK_RET(GenerateTagVec(st));
 
     // attach 流申请 + 交付 (双流: graph/group 粒度, 对照旧 InfoStore SetAttachedStream 每 op 一次;
@@ -322,9 +331,16 @@ ge::graphStatus HcomSendOp::ExtractParamsDynamic(hccl::HcclOpState& st)
 
 ge::graphStatus HcomSendOp::LaunchHcclOpDynamic(hccl::HcclOpState& st)
 {
+    // host 侧参数写入, 置于 WorkflowMode 相位包裹之前
+    HcclResult ret = HcclSetAivCoreLimitGraphMode(st.group, st.aivCoreLimit);
+    if (ret != HCCL_SUCCESS) {
+        HCCL_ERROR(
+            "[HcomSendOp][LaunchHcclOpDynamic] HcclSetAivCoreLimitGraphMode failed, ret=%d.", static_cast<int>(ret));
+        return ge::GRAPH_FAILED;
+    }
     // WorkflowMode 相位复刻通用链: OP_BASE + LaunchKernelMode(true) 贯穿两次 HcclSend 至 launch 完成
     const HcclWorkflowMode lastMode = HcomGetWorkflowMode();
-    HcclResult ret = HcomSetWorkflowMode(HcclWorkflowMode::HCCL_WORKFLOW_MODE_OP_BASE);
+    ret = HcomSetWorkflowMode(HcclWorkflowMode::HCCL_WORKFLOW_MODE_OP_BASE);
     if (ret != HCCL_SUCCESS) {
         HCCL_ERROR(
             "[HcomSendOp][LaunchHcclOpDynamic] HcomSetWorkflowMode(OP_BASE) failed, ret=%d.", static_cast<int>(ret));

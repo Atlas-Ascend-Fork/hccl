@@ -52,6 +52,7 @@ HcclRecv(void* recvBuf, uint64_t count, HcclDataType dataType, uint32_t srcRank,
 HcclResult HcclRecvGraphMode(
     void* recvBuf, uint64_t count, HcclDataType dataType, uint32_t srcRank, const char* group, aclrtStream stream,
     const char* tag, void** streams, size_t streamCount, void* scratchMemAddr, uint64_t scratchMemSize);
+HcclResult HcclSetAivCoreLimitGraphMode(const char* group, uint32_t aivCoreLimit);
 }
 
 namespace {
@@ -247,6 +248,14 @@ ge::graphStatus HcomReceiveOp::GenerateTagVec(hccl::HcclOpState& st)
 
 ge::graphStatus HcomReceiveOp::LaunchHcclOpStatic(hccl::HcclOpState& st)
 {
+    // AIV 算力上限写入 group 级 AivParamStorage (缺省 0), AIV 资源计算与 Selector 判定消费该值
+    HcclResult ret = HcclSetAivCoreLimitGraphMode(st.group, st.aivCoreLimit);
+    if (ret != HCCL_SUCCESS) {
+        HCCL_ERROR(
+            "[HcomReceiveOp][LaunchHcclOpStatic] HcclSetAivCoreLimitGraphMode failed, ret=%d.", static_cast<int>(ret));
+        return ge::GRAPH_FAILED;
+    }
+
     HCCL_GE_CHK_RET(GenerateTagVec(st));
 
     // attach 流申请 + 交付 (双流: graph/group 粒度, 对照旧 InfoStore SetAttachedStream 每 op 一次;
@@ -377,12 +386,19 @@ ge::graphStatus HcomReceiveOp::ExtractParamsDynamic(hccl::HcclOpState& st)
 
 ge::graphStatus HcomReceiveOp::LaunchHcclOpDynamic(hccl::HcclOpState& st)
 {
+    // host 侧参数写入, 置于 WorkflowMode 相位包裹之前
+    HcclResult ret = HcclSetAivCoreLimitGraphMode(st.group, st.aivCoreLimit);
+    if (ret != HCCL_SUCCESS) {
+        HCCL_ERROR(
+            "[HcomReceiveOp][LaunchHcclOpDynamic] HcclSetAivCoreLimitGraphMode failed, ret=%d.", static_cast<int>(ret));
+        return ge::GRAPH_FAILED;
+    }
     const uint64_t unitSize = hccl::GetHcclDataTypeSize(st.dataType);
 
     // WorkflowMode 相位复刻对照专用链: OP_BASE + LaunchKernelMode(true) 进入,
     // 元数据协商与分配阶段保持 true, 数据段 HcclRecv 前置 false, 末尾恢复
     const HcclWorkflowMode lastMode = HcomGetWorkflowMode();
-    HcclResult ret = HcomSetWorkflowMode(HcclWorkflowMode::HCCL_WORKFLOW_MODE_OP_BASE);
+    ret = HcomSetWorkflowMode(HcclWorkflowMode::HCCL_WORKFLOW_MODE_OP_BASE);
     if (ret != HCCL_SUCCESS) {
         HCCL_ERROR(
             "[HcomReceiveOp][LaunchHcclOpDynamic] HcomSetWorkflowMode(OP_BASE) failed, ret=%d.", static_cast<int>(ret));
