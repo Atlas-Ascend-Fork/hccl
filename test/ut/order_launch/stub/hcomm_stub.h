@@ -38,6 +38,7 @@ extern int32_t g_addRet;
 extern int32_t g_notifyRecordRet;
 extern int32_t g_notifyWaitRet;
 extern int32_t g_exportRet;
+extern int32_t g_hcommVersion; // GetHcommVersion桩旋钮
 // 顺序锚点：共享单调调用序号（自 1 起，0 = 未调用），固化「先入图、后握手」。
 extern uint32_t g_callSeq;
 extern uint32_t g_addSeq;               // 首次入图的序号

@@ -32,6 +32,7 @@ int32_t g_addRet = 0; // RT_ERROR_NONE
 int32_t g_notifyRecordRet = 0;
 int32_t g_notifyWaitRet = 0;
 int32_t g_exportRet = 0;
+int32_t g_hcommVersion = CANN_VERSION(9, 2, 0, 2); // 默认按序枚举进入交付头的版本
 uint32_t g_callSeq = 0;
 uint32_t g_addSeq = 0;
 uint32_t g_firstNotifyRecordSeq = 0;
@@ -55,6 +56,7 @@ void Reset()
     g_notifyRecordRet = 0;
     g_notifyWaitRet = 0;
     g_exportRet = 0;
+    g_hcommVersion = CANN_VERSION(9, 2, 0, 2);
     g_callSeq = 0;
     g_addSeq = 0;
     g_firstNotifyRecordSeq = 0;
@@ -63,6 +65,9 @@ void Reset()
 } // namespace OrderLaunchUtStub
 
 using namespace OrderLaunchUtStub;
+
+// GetHcommVersion桩（生产实现位于hcomm_dlsym.cc，UT未编译），值由旋钮控制
+extern "C" int GetHcommVersion(void) { return g_hcommVersion; }
 
 // 强符号覆写生产弱默认，返回值由桩旋钮控制
 extern "C" {

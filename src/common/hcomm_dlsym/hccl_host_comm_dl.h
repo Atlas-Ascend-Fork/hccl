@@ -36,6 +36,7 @@ typedef HcclOpExpansionMode HcclConfigTypeOpExpansionMode;
 #define HCCL_CONFIG_TYPE_UB_MULTI_CHANNEL_NUM 2
 #define HCCL_CONFIG_TYPE_DETERMINISTIC 3
 #define HCCL_CONFIG_TYPE_UDI 4
+#define HCCL_CONFIG_TYPE_AICPU_ORDER_LAUNCH_ENABLE 5
 
 // HcclOpExpansionMode兼容处理定义：外部头文件枚举名随版本不一致或暂未收录，统一按数值引用，后续新增取值参照此处定义
 // 命名不得与枚举名重名，故加EXT段区分
