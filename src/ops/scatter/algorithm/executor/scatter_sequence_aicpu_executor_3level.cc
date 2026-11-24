@@ -184,8 +184,20 @@ ScatterSequenceAicpu3LevelExecutor<AlgTopoMatch, InsAlgTemplate0, InsAlgTemplate
     threads_ = resCtx.threads;
     supportSymmetricMemory_ = param.supportSymmetricMemory;
     if (supportSymmetricMemory_) {
-        SetSymmetricMemoryInfo(param);
-        HCCL_INFO("[ScatterSequenceAicpu3LevelExecutor][Orchestrate] %s: symmetric memory enabled", param.algName);
+        // RHD 模板未适配「对称 + 中转层」的 outBuffType==OUTPUT 分派契约（直写会踩脏中转 CCL），
+        // 对称内存暂不支持 RHD 系算法：按算法名拦截，显式配置 RHD + 已注册对称窗口时
+        // 静默回退非对称路径（不报错），行为与未注册对称窗口一致
+        const bool isRhdAlg = std::string(param.algName).find("RHD") != std::string::npos;
+        if (isRhdAlg) {
+            supportSymmetricMemory_ = false;
+            HCCL_INFO(
+                "[ScatterSequenceAicpu3LevelExecutor][Orchestrate] %s: RHD not supported for symmetric "
+                "memory yet, fallback to CCL",
+                param.algName);
+        } else {
+            SetSymmetricMemoryInfo(param);
+            HCCL_INFO("[ScatterSequenceAicpu3LevelExecutor][Orchestrate] %s: symmetric memory enabled", param.algName);
+        }
     }
 
     if (algHierarchyInfo_.infos.size() < TOPO_LEVEL_NUM_2 || algHierarchyInfo_.infos[0].empty()
@@ -352,7 +364,7 @@ ScatterSequenceAicpu3LevelExecutor<AlgTopoMatch, InsAlgTemplate0, InsAlgTemplate
     tempAlgParamsLevel0.buffInfo.inBuffType = BufferType::INPUT;
     tempAlgParamsLevel0.buffInfo.outBuffType = BufferType::HCCL_BUFFER;
     tempAlgParamsLevel0.buffInfo.hcclBuffType = BufferType::HCCL_BUFFER;
-    tempAlgParamsLevel0.enableRemoteMemAccess = param.supportSymmetricMemory;
+    tempAlgParamsLevel0.enableRemoteMemAccess = supportSymmetricMemory_;
     tempAlgParamsLevel0.buffInfo.inputPtr = param.inputPtr;
     tempAlgParamsLevel0.buffInfo.outputPtr = resCtx.cclMem.addr;
     tempAlgParamsLevel0.buffInfo.hcclBuff = resCtx.cclMem;
@@ -370,7 +382,7 @@ ScatterSequenceAicpu3LevelExecutor<AlgTopoMatch, InsAlgTemplate0, InsAlgTemplate
     TemplateDataParams tempAlgParamsLevel1;
     tempAlgParamsLevel1.buffInfo.inBuffType = BufferType::HCCL_BUFFER;
     tempAlgParamsLevel1.buffInfo.hcclBuffType = BufferType::HCCL_BUFFER;
-    tempAlgParamsLevel1.enableRemoteMemAccess = param.supportSymmetricMemory;
+    tempAlgParamsLevel1.enableRemoteMemAccess = supportSymmetricMemory_;
     tempAlgParamsLevel1.buffInfo.inputPtr = resCtx.cclMem.addr;
     tempAlgParamsLevel1.buffInfo.hcclBuff = resCtx.cclMem;
     if (skipLevel2_) {
@@ -392,7 +404,7 @@ ScatterSequenceAicpu3LevelExecutor<AlgTopoMatch, InsAlgTemplate0, InsAlgTemplate
     tempAlgParamsLevel2.buffInfo.inBuffType = BufferType::HCCL_BUFFER;
     tempAlgParamsLevel2.buffInfo.outBuffType = BufferType::OUTPUT;
     tempAlgParamsLevel2.buffInfo.hcclBuffType = BufferType::HCCL_BUFFER;
-    tempAlgParamsLevel2.enableRemoteMemAccess = param.supportSymmetricMemory;
+    tempAlgParamsLevel2.enableRemoteMemAccess = supportSymmetricMemory_;
     tempAlgParamsLevel2.buffInfo.inputPtr = resCtx.cclMem.addr;
     tempAlgParamsLevel2.buffInfo.outputPtr = param.outputPtr;
     tempAlgParamsLevel2.buffInfo.hcclBuff = resCtx.cclMem;
