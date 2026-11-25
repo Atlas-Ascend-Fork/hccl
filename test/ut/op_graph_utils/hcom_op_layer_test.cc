@@ -195,11 +195,51 @@ TEST(CalcBatchSlicesTest, ExactCapacityStaysOneSlice)
     EXPECT_EQ(2U, slices[0]);
 }
 
-TEST(CalcBatchSlicesTest, InputExceedsCapacityFails)
+TEST(CalcBatchSlicesTest, SingleInputExceedsCapacityBecomesDirectSlice)
 {
+    // 4239 语义 (对照 lowering sliceIdx==0 分支): 单 input 超容独立成 slice(1) 直传, 不报错
     auto st = MakeStateWithCounts({401});
     std::vector<uint32_t> slices;
-    EXPECT_EQ(ge::GRAPH_FAILED, HcomAllReduceOp::CalcBatchSlices(st, 400, slices));
+    EXPECT_EQ(ge::GRAPH_SUCCESS, HcomAllReduceOp::CalcBatchSlices(st, 400, slices));
+    ASSERT_EQ(1U, slices.size());
+    EXPECT_EQ(1U, slices[0]);
+}
+
+TEST(CalcBatchSlicesTest, MidPositionOversizeFlushesPendingSlice)
+{
+    // 中位超容: else 分支 flush 前段({300}), pending=1, 尾部收口 push(size-sliceSum)
+    // 300≤400 累入 sliceIdx=1; 500 超界 flush [1], sliceIdx 重置 1 待定; 末尾 push(2-1)=1
+    auto st = MakeStateWithCounts({300, 500});
+    std::vector<uint32_t> slices;
+    EXPECT_EQ(ge::GRAPH_SUCCESS, HcomAllReduceOp::CalcBatchSlices(st, 400, slices));
+    ASSERT_EQ(2U, slices.size());
+    EXPECT_EQ(1U, slices[0]);
+    EXPECT_EQ(1U, slices[1]);
+}
+
+TEST(CalcBatchSlicesTest, ConsecutiveOversizeEachIndependent)
+{
+    // 连续超容: 首 100 走累加分支 (sliceIdx=1 待定), 两个 500 依次走 else 分支
+    // flush 待定段再自身待定, 尾部收口补齐 — 覆盖中位超容的 flush+收口链
+    auto st = MakeStateWithCounts({100, 500, 500});
+    std::vector<uint32_t> slices;
+    EXPECT_EQ(ge::GRAPH_SUCCESS, HcomAllReduceOp::CalcBatchSlices(st, 400, slices));
+    ASSERT_EQ(3U, slices.size());
+    EXPECT_EQ(1U, slices[0]);
+    EXPECT_EQ(1U, slices[1]);
+    EXPECT_EQ(1U, slices[2]);
+}
+
+TEST(CalcBatchSlicesTest, OversizeThenSmallInputsSliceCorrectly)
+{
+    // 超容独立成 slice 后, 后续小 inputs 正常累积分段
+    auto st = MakeStateWithCounts({500, 100, 200});
+    std::vector<uint32_t> slices;
+    EXPECT_EQ(ge::GRAPH_SUCCESS, HcomAllReduceOp::CalcBatchSlices(st, 400, slices));
+    // [500] 独立直传 + [100,200]=300≤400 同段
+    ASSERT_EQ(2U, slices.size());
+    EXPECT_EQ(1U, slices[0]);
+    EXPECT_EQ(2U, slices[1]);
 }
 
 TEST(CalcBatchSlicesTest, ZeroCountInputsGroupWithOthers)

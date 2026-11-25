@@ -22,6 +22,7 @@
 #include "hcom_reduce_op.h"
 #include "hcom_reduce_scatter_op.h"
 #include "hcom_broadcast_op.h"
+#include "hcom_receive_op.h"
 #include "hcom_send_op.h"
 
 // 桩层注入项
@@ -401,4 +402,105 @@ TEST_F(ExecuteTest, BroadcastNegativeShapeSizeRejected)
 
     EXPECT_EQ(ge::GRAPH_FAILED, op.Execute(ctx.Build()));
     EXPECT_EQ(0U, g_stubBcastCalls.size());
+}
+
+// ---------------------------------------------------------------------------
+// Send/Recv Refresh 多迭代分片 (检视: count=k*maxCountPerLoop+r 三组边界,
+// 锁死递减量回归 — P0 修复前的下溢正是非整除形态)
+// ---------------------------------------------------------------------------
+TEST_F(ExecuteTest, SendRefreshSingleIterationWhenDataSmallerThanBuf)
+{
+    // k=0 形态: count(100) < maxCountPerLoop(128) → 单迭代, 最常见场景
+    // (P0 前该形态必触发下溢假失败)
+    uint8_t data[100] = {};
+    uint8_t out[1] = {};
+    g_stubCtxVal[kIdxAddrRefresh] = 1; // Refresh 路径
+    g_stubCclBufSize = 128;            // INT8: maxCountPerLoop = 128
+    HcomSendOp op;
+    hcut::CtxBuilder ctx;
+    ctx.Input({100}, ge::DT_INT8, data).Output({1}, ge::DT_INT8, out);
+    ctx.Attr(0, "ut_group").Attr(1, static_cast<int64_t>(7)).Attr(2, static_cast<int64_t>(0));
+
+    EXPECT_EQ(ge::GRAPH_SUCCESS, op.Execute(ctx.Build()));
+    ASSERT_EQ(1U, g_stubSendCalls.size()); // 恰一次: 多于一次=下溢多跑, 少于=短路
+    EXPECT_EQ(100U, g_stubSendCalls[0].count);
+}
+
+TEST_F(ExecuteTest, SendRefreshNonDivisibleCountSlicesCorrectly)
+{
+    // k*max + r (r≠0) 形态: count=300, max=128 → 3 轮: 128+128+44
+    uint8_t data[300] = {};
+    uint8_t out[1] = {};
+    g_stubCtxVal[kIdxAddrRefresh] = 1;
+    g_stubCclBufSize = 128;
+    HcomSendOp op;
+    hcut::CtxBuilder ctx;
+    ctx.Input({300}, ge::DT_INT8, data).Output({1}, ge::DT_INT8, out);
+    ctx.Attr(0, "ut_group").Attr(1, static_cast<int64_t>(7)).Attr(2, static_cast<int64_t>(0));
+
+    EXPECT_EQ(ge::GRAPH_SUCCESS, op.Execute(ctx.Build()));
+    // 迭代数 = ceil(300/128) = 3; 末轮 count = 300-2*128 = 44
+    ASSERT_EQ(3U, g_stubSendCalls.size());
+    EXPECT_EQ(128U, g_stubSendCalls[0].count);
+    EXPECT_EQ(128U, g_stubSendCalls[1].count);
+    EXPECT_EQ(44U, g_stubSendCalls[2].count); // 末轮取余量, 非整除关键断言
+    // tag 逐迭代唯一 (带 _looptime_ 序号)
+    EXPECT_NE(g_stubSendCalls[0].tag, g_stubSendCalls[1].tag);
+    EXPECT_NE(g_stubSendCalls[1].tag, g_stubSendCalls[2].tag);
+}
+
+TEST_F(ExecuteTest, SendRefreshExactMultipleSlicesCorrectly)
+{
+    // k*max (r=0) 形态: count=256, max=128 → 恰 2 轮, 无多余第 3 轮
+    uint8_t data[256] = {};
+    uint8_t out[1] = {};
+    g_stubCtxVal[kIdxAddrRefresh] = 1;
+    g_stubCclBufSize = 128;
+    HcomSendOp op;
+    hcut::CtxBuilder ctx;
+    ctx.Input({256}, ge::DT_INT8, data).Output({1}, ge::DT_INT8, out);
+    ctx.Attr(0, "ut_group").Attr(1, static_cast<int64_t>(7)).Attr(2, static_cast<int64_t>(0));
+
+    EXPECT_EQ(ge::GRAPH_SUCCESS, op.Execute(ctx.Build()));
+    ASSERT_EQ(2U, g_stubSendCalls.size());
+    EXPECT_EQ(128U, g_stubSendCalls[0].count);
+    EXPECT_EQ(128U, g_stubSendCalls[1].count);
+}
+
+TEST_F(ExecuteTest, RecvRefreshNonDivisibleCountSlicesCorrectly)
+{
+    // Recv 同构: output CCL buf 压小 → 多迭代收; 300/128 → 3 轮 (128+128+44)
+    uint8_t out[300] = {};
+    g_stubCtxVal[kIdxAddrRefresh] = 1;
+    g_stubCclBufSize = 128;
+    HcomReceiveOp op;
+    hcut::CtxBuilder ctx;
+    ctx.Output({300}, ge::DT_INT8, out);
+    ctx.Attr(0, "ut_group").Attr(1, static_cast<int64_t>(7)).Attr(2, static_cast<int64_t>(0));
+    ctx.AttrListInt(3, {300});                      // ATTR_SHAPE: 静态 shape [300]
+    ctx.Attr(4, static_cast<int64_t>(ge::DT_INT8)); // ATTR_DTYPE
+
+    EXPECT_EQ(ge::GRAPH_SUCCESS, op.Execute(ctx.Build()));
+    ASSERT_EQ(3U, g_stubRecvCalls.size());
+    EXPECT_EQ(128U, g_stubRecvCalls[0].count);
+    EXPECT_EQ(128U, g_stubRecvCalls[1].count);
+    EXPECT_EQ(44U, g_stubRecvCalls[2].count);
+    EXPECT_NE(g_stubRecvCalls[0].tag, g_stubRecvCalls[1].tag);
+}
+
+TEST_F(ExecuteTest, RecvRefreshSingleIterationWhenDataSmallerThanBuf)
+{
+    uint8_t out[50] = {};
+    g_stubCtxVal[kIdxAddrRefresh] = 1;
+    g_stubCclBufSize = 128;
+    HcomReceiveOp op;
+    hcut::CtxBuilder ctx;
+    ctx.Output({50}, ge::DT_INT8, out);
+    ctx.Attr(0, "ut_group").Attr(1, static_cast<int64_t>(7)).Attr(2, static_cast<int64_t>(0));
+    ctx.AttrListInt(3, {50}); // ATTR_SHAPE: 静态 shape [50]
+    ctx.Attr(4, static_cast<int64_t>(ge::DT_INT8));
+
+    EXPECT_EQ(ge::GRAPH_SUCCESS, op.Execute(ctx.Build()));
+    ASSERT_EQ(1U, g_stubRecvCalls.size());
+    EXPECT_EQ(50U, g_stubRecvCalls[0].count);
 }

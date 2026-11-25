@@ -223,21 +223,21 @@ ge::graphStatus HcomSendOp::LaunchDirect(hccl::HcclOpState& st)
 
 ge::graphStatus HcomSendOp::LaunchRefresh(hccl::HcclOpState& st)
 {
-    // 地址刷新路径 (对应 InfoStore HcomSendLoop 的 ②→③, 950 单迭代简化):
+    // 地址刷新路径 (对应 InfoStore HcomSendLoop 的多迭代循环):
     //   ①④ (H2D 写 CCL buf 地址) 由 MallocReadOnlyDevArgs 统一管理
-    //   ②  D2D ADDR: 用户 input → CCL input (间接寻址)
-    //   ③  HcclSendGraphMode(commInputPtr, ...)
+    //   ②  D2D ADDR 带偏移: 用户 input+inputOffset 段 → CCL buf 头部 (每迭代滑动窗口)
+    //   ③  HcclSendGraphMode(commInputPtr, curCount, tags[loopTime])
+    // 超大数据量由循环自动分片 (curCount = min(maxCountPerLoop, countLeft)), 永不因超容失败
     void* commInputPtr = nullptr;
     uint64_t commInputSize = 0;
     HCCL_GE_CHK_RET(GetOrCreateInCCLbuf(st.group, commInputPtr, commInputSize));
 
-    const uint64_t curSize = st.count * hccl::GetHcclDataTypeSize(st.dataType);
-    // 超限守卫: 严格大于报错 (Send 只判 input 侧; 多迭代 loop 属 legacy 设备, 不在本切片范围)
-    if (curSize > commInputSize) {
+    const uint64_t unitSize = hccl::GetHcclDataTypeSize(st.dataType);
+    const uint64_t maxCountPerLoop = commInputSize / unitSize;
+    if (maxCountPerLoop == 0) {
         HCCL_ERROR(
-            "[HcomSendOp][LaunchRefresh] curSize=%lu exceeds input CCL buf size=%lu; multi-iteration "
-            "loop not supported.",
-            curSize, commInputSize);
+            "[HcomSendOp][LaunchRefresh] cclBuffSize=%lu cannot hold one element (unitSize=%lu).", commInputSize,
+            unitSize);
         return ge::GRAPH_FAILED;
     }
 
@@ -252,32 +252,49 @@ ge::graphStatus HcomSendOp::LaunchRefresh(hccl::HcclOpState& st)
     void* devCclInputPtr = devArgsBase + offsetof(HcomSendArgs, cclInputPtr);
     void* devInputAddr = devArgsBase + offsetof(HcomSendArgs, inputAddr);
 
-    // ② D2D ADDR: 用户 input → CCL input (间接寻址; src/dst 均为二级指针, 硬件 deref)
-    HcclResult ret = hccl::HcclRtMemAsyncCopy(
-        devCclInputPtr, curSize, devInputAddr, curSize, hccl::HcclRtMemcpyKind::HCCL_RT_MEMCPY_ADDR_DEVICE_TO_DEVICE,
-        static_cast<aclrtStream>(st.stream));
-    if (ret != HCCL_SUCCESS) {
-        HCCL_ERROR(
-            "[HcomSendOp][LaunchRefresh] D2D ADDR input->CCL failed, curSize=%lu, ret=%d.", curSize,
-            static_cast<int>(ret));
-        return ge::GRAPH_FAILED;
-    }
+    uint64_t curCount = 0;
+    uint64_t inputOffset = 0;
+    uint32_t loopTime = 0;
+    for (uint64_t countLeft = st.count; countLeft > 0; countLeft -= curCount) {
+        // tag 越界守卫 (对照原版 HcomSendLoop 同款): GenerateTagVec 已按 loopMaxTime 生成
+        if (loopTime >= st.tags.size()) {
+            HCCL_ERROR(
+                "[HcomSendOp][LaunchRefresh] loopTime=%u exceeds tags=%zu (tag/iteration mismatch).", loopTime,
+                st.tags.size());
+            return ge::GRAPH_FAILED;
+        }
+        curCount = (countLeft > maxCountPerLoop) ? maxCountPerLoop : countLeft;
+        const uint64_t curSize = curCount * unitSize;
 
-    // ③ HcclSendGraphMode (从 CCL input buf 发送; 单迭代 tag 带 _looptime_0 后缀)
-    ret = HcclSendGraphMode(
-        commInputPtr, st.count, st.dataType, st.destRank, st.group, static_cast<aclrtStream>(st.stream),
-        st.tags[0].c_str(), st.followStreams.empty() ? nullptr : st.followStreams.data(), st.followStreams.size(),
-        nullptr, 0);
-    if (ret != HCCL_SUCCESS) {
-        HCCL_ERROR(
-            "[HcomSendOp][LaunchRefresh] HcclSendGraphMode failed, count=%lu, ret=%d.", st.count,
-            static_cast<int>(ret));
-        return ge::GRAPH_FAILED;
-    }
+        // ② D2D ADDR 带偏移: 用户 input+inputOffset 段 → CCL buf 头部 (src 二级指针硬件 deref;
+        // dstOffset=0 + srcOffset=inputOffset, 对照原版 hrtMemcpyAddrAsync 同参数序)
+        HcclResult ret = hccl::HcclRtMemAddrAsyncCopyWithOffset(
+            devCclInputPtr, commInputSize, 0, devInputAddr, curSize, inputOffset, static_cast<aclrtStream>(st.stream));
+        if (ret != HCCL_SUCCESS) {
+            HCCL_ERROR(
+                "[HcomSendOp][LaunchRefresh] D2D ADDR input->CCL failed, loopTime=%u, curSize=%lu, ret=%d.", loopTime,
+                curSize, static_cast<int>(ret));
+            return ge::GRAPH_FAILED;
+        }
 
-    HCCL_INFO(
-        "[HcomSendOp][LaunchRefresh] devArgs=%p curSize=%lu cclInput=%p inputAddr=%p tag=%s.", devArgs->args_data,
-        curSize, commInputPtr, st.inputPtrs[0], st.tags[0].c_str());
+        // ③ HcclSendGraphMode (从 CCL buf 头部发送本段; tag 逐迭代唯一)
+        ret = HcclSendGraphMode(
+            commInputPtr, curCount, st.dataType, st.destRank, st.group, static_cast<aclrtStream>(st.stream),
+            st.tags[loopTime].c_str(), st.followStreams.empty() ? nullptr : st.followStreams.data(),
+            st.followStreams.size(), nullptr, 0);
+        if (ret != HCCL_SUCCESS) {
+            HCCL_ERROR(
+                "[HcomSendOp][LaunchRefresh] HcclSendGraphMode failed, loopTime=%u, curCount=%lu, ret=%d.", loopTime,
+                curCount, static_cast<int>(ret));
+            return ge::GRAPH_FAILED;
+        }
+
+        HCCL_INFO(
+            "[HcomSendOp][LaunchRefresh] loopTime=%u inputOffset=%lu curCount=%lu cclInput=%p inputAddr=%p tag=%s.",
+            loopTime, inputOffset, curCount, commInputPtr, st.inputPtrs[0], st.tags[loopTime].c_str());
+        inputOffset += curSize;
+        loopTime++;
+    }
     return ge::GRAPH_SUCCESS;
 }
 

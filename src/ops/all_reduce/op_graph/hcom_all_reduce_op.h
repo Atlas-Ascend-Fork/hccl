@@ -36,7 +36,8 @@ public:
     static constexpr size_t ATTR_FUSION = 2;
     static constexpr size_t ATTR_FUSION_ID = 3;
 
-    // 动态路径分段: 按 CCL buffer 容量将 inputs 分段
+    // 动态路径分段纯函数 (不触成员状态): 按 CCL buffer 容量将 inputs 分段,
+    // 单 input 超容时独立成 slice 走直传 (对照 lowering 同款)
     static ge::graphStatus
     CalcBatchSlices(const hccl::HcclOpState& st, uint64_t maxCommCount, std::vector<uint32_t>& sliceIdxs);
 
