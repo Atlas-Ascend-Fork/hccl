@@ -45,9 +45,16 @@ int GetHcommVersion(void)
 
     char hcommPkgName[] = "hcomm";
     int tmpVersion = 0;
-    if (aclsysGetVersionNum(hcommPkgName, &tmpVersion) == ACL_SUCCESS) {
+    aclError aclRet = aclsysGetVersionNum(hcommPkgName, &tmpVersion);
+    if (aclRet == ACL_SUCCESS) {
         gHcommVersion.store(tmpVersion, std::memory_order_relaxed);
         version = tmpVersion;
+    } else {
+        // 获取失败只报错一次, 避免刷屏; 失败不缓存, 环境修复后无需重启进程即可恢复
+        static std::once_flag versionFailLogOnce;
+        std::call_once(versionFailLogOnce, [aclRet]() {
+            HCCL_COMPAT_ERROR("[GetHcommVersion]failed to get hcomm version, aclRet[%d].", aclRet);
+        });
     }
 
     return version;
