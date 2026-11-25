@@ -47,17 +47,17 @@ protected:
     HcclResult InitRecvInfo(
         const HcclComm comm, const OpParam& param, const TopoInfoWithNetLayerDetails* topoInfo,
         const AlgHierarchyInfoForAllLevel& algHierarchyInfo);
-    // 图模式
+    // 数据面统一入口：Orchestrate 与 OrchestrateWithThread 仅主线程来源不同，收敛到此处
+    HcclResult RunDataPlane(const OpParam& param, const AlgResourceCtxSerializable& resCtx, ThreadHandle mainThread);
+    // 图模式：每通道一个线程并发（参考集合通信多通道模板 threads[queIdx] 模式）
     HcclResult OrchestrateOffload(
-        const OpParam& param, const AlgResourceCtxSerializable& resCtx, const ThreadHandle& thread,
-        const ChannelInfo& channel);
+        const OpParam& param, const AlgResourceCtxSerializable& resCtx, const std::vector<ThreadHandle>& dataThreads,
+        const std::vector<ChannelInfo>& channels);
     // 单算子
     HcclResult OrchestrateOpbase(
-        const OpParam& param, const AlgResourceCtxSerializable& resCtx, const ThreadHandle& thread,
-        const ChannelInfo& channel);
+        const OpParam& param, const AlgResourceCtxSerializable& resCtx, const std::vector<ThreadHandle>& dataThreads,
+        const std::vector<ChannelInfo>& channels);
 
-    // 是否使用dma read
-    bool isDmaRead_{false};
     // 单算子|图模式
     OpMode opMode_;
     u32 remoteRank_;

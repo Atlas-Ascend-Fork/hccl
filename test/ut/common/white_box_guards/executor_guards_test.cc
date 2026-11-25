@@ -135,7 +135,7 @@ namespace {
         ChannelInfo channel;
         channel.remoteCclMem.size = 0; // maxLoopTransSize_ = min(UB_MAX_DATA_SIZE, 0) = 0
 
-        EXPECT_EQ(executor.OrchestrateOpbase(param, resCtx, 0, channel), HCCL_E_INTERNAL);
+        EXPECT_EQ(executor.OrchestrateOpbase(param, resCtx, {}, {channel}), HCCL_E_INTERNAL);
     }
 
     TEST(ExecutorGuardTest, InsRecvExecutorRejectsZeroLoopTransCount)
@@ -147,7 +147,7 @@ namespace {
         ChannelInfo channel;
         channel.remoteCclMem.size = 0;
 
-        EXPECT_EQ(executor.OrchestrateOpbase(param, resCtx, 0, channel), HCCL_E_INTERNAL);
+        EXPECT_EQ(executor.OrchestrateOpbase(param, resCtx, {}, {channel}), HCCL_E_INTERNAL);
     }
 
     TEST(ExecutorGuardTest, V2SendSoleExecutorRejectsZeroRoundTransferSize)

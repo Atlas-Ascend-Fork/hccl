@@ -20,6 +20,7 @@
 #include <cmath>
 #include <algorithm>
 #include "alg_param.h"
+#include "alg_template_base.h"
 #include "binary_stream.h"
 
 HcclResult __attribute__((weak)) HcommThreadJoin(ThreadHandle thread, uint32_t timeout);
@@ -31,6 +32,61 @@ constexpr u32 MAX_JETTY_NUM = 4;
 constexpr u32 SMALL_SIZE_512KB = 512 * 1024;
 
 constexpr s32 INVALID_RANKID = INT32_MAX;
+
+// P2P Send/Recv 按通道带宽加权切分：权重取 ChannelInfo.portGroupSize（0 时按 1 防御），口径同
+// CalcDataSplitByPortGroupCommon。通道均为对角/直连链路，两端 portGroupSize 对称，切分确定一致。
+// 按 HCCL_MIN_SLICE_ALIGN(128B) 向下对齐，加权余数归权重最大通道，尾块归最后一个通道
+// （保证非末尾通道的偏移始终 128B 对齐）。elemCountOut 为元素个数；sizeOut/elemOffset 为字节。
+inline HcclResult CalcDataSplitByChannel(
+    const u64 totalDataCount, const u64 dataTypeSize, const std::vector<ChannelInfo>& channels,
+    std::vector<u64>& elemCountOut, std::vector<u64>& sizeOut, std::vector<u64>& elemOffset)
+{
+    const u32 channelNum = static_cast<u32>(channels.size());
+    CHK_PRT_RET(
+        channelNum == 0, HCCL_ERROR("[CalcDataSplitByChannel] channelNum[%u] is 0.", channelNum),
+        HcclResult::HCCL_E_PARA);
+    CHK_PRT_RET(
+        dataTypeSize == 0, HCCL_ERROR("[CalcDataSplitByChannel] dataTypeSize[%llu] is 0.", dataTypeSize),
+        HcclResult::HCCL_E_PARA);
+    elemCountOut.assign(channelNum, 0);
+    sizeOut.assign(channelNum, 0);
+    elemOffset.assign(channelNum, 0);
+    const u64 alignElems = (dataTypeSize >= HCCL_MIN_SLICE_ALIGN) ? 1 : (HCCL_MIN_SLICE_ALIGN / dataTypeSize);
+    const u64 totalChunks = totalDataCount / alignElems;
+    const u64 tailCount = totalDataCount - totalChunks * alignElems;
+
+    std::vector<u64> weights(channelNum);
+    u64 totalWeight = 0;
+    u32 maxWeightIdx = 0;
+    u64 maxWeight = 0;
+    for (u32 channelIdx = 0; channelIdx < channelNum; channelIdx++) {
+        weights[channelIdx] = (channels[channelIdx].portGroupSize > 0) ? channels[channelIdx].portGroupSize : 1;
+        totalWeight += weights[channelIdx];
+        if (weights[channelIdx] >= maxWeight) {
+            maxWeight = weights[channelIdx];
+            maxWeightIdx = channelIdx;
+        }
+    }
+
+    std::vector<u64> chunkCounts(channelNum);
+    u64 sumChunks = 0;
+    for (u32 channelIdx = 0; channelIdx < channelNum; channelIdx++) {
+        chunkCounts[channelIdx] = totalChunks * weights[channelIdx] / totalWeight;
+        sumChunks += chunkCounts[channelIdx];
+    }
+    chunkCounts[maxWeightIdx] += totalChunks - sumChunks;
+
+    u64 offset = 0;
+    for (u32 channelIdx = 0; channelIdx < channelNum; channelIdx++) {
+        const bool isLastChannel = (channelIdx == channelNum - 1);
+        const u64 elemCount = chunkCounts[channelIdx] * alignElems + (isLastChannel ? tailCount : 0);
+        elemCountOut[channelIdx] = elemCount;
+        sizeOut[channelIdx] = elemCount * dataTypeSize;
+        elemOffset[channelIdx] = offset;
+        offset += elemCount * dataTypeSize;
+    }
+    return HcclResult::HCCL_SUCCESS;
+}
 
 struct SliceInfo {
     u64 offset{0};
