@@ -26,10 +26,24 @@ namespace ops_hccl {
 constexpr u32 A2A_HIER_UNROLL_MIN = 2;
 constexpr u32 A2A_SEQ_MAX_RANK_SIZE = 1024;
 constexpr u32 A2A_SEQ_CCU_MAX_PEER_NUM = 128;          // CCU 单 kernel 通道数上限
-constexpr u32 A2A_SEQ_CC_KERNEL_MAX_INTER = 2;         // CCU 框间段 kernel 上界（2+6 双 kernel）
-constexpr u32 A2A_SEQ_CC_KERNEL_INTRA = 1;             // CCU 板内段 kernel 数
 constexpr u32 A2A_SEQ_AICPU_KERNEL_NUM_PER_STAGE = 12; // AICPU 每段 kernel 任务数
-constexpr float A2A_SEQ_B_CONST = 2e-6f;               // AICPU 序列编排常量（AG seqBConst 惯例）
+constexpr float A2A_SEQ_B_CONST = 2e-6f; // 序列编排常量（两段衔接开销，两引擎统一，对标 AG seqBConst）
+constexpr u32 A2A_SEQ_CCU_KERNEL_CALI_MESH = 5; // CCU mesh 段 kernelNum 标定（AG 模板口径，非字面 kernel 数）
+constexpr int A2A_SEQ_CCU_KERNEL_CALI_CLOS_MIN = 8; // CCU CLOS 段 kernelNum 下限
+constexpr u32 A2A_SEQ_CALI_POD_DIVISOR = 8;         // pod 折算基准：L0 段 8 rank/pod，L1 段 8 分组/pod 当量
+constexpr float A2A_SEQ_CCU_KERNEL_CALI_CLOS_SLOPE = 2.5f; // CLOS 段 kernelNum/pod 斜率（AG 同款）
+constexpr float A2A_SEQ_AICPU_YIELD_FIXED = 1000.0f;       // N<=64 让位惩罚固定项（非标定值）
+
+// CCU 段 kernelNum 标定：与 CcuSchedAllGatherSequenceMeshMesh 同式同值（AG 序列 L1 段亦传 d1），
+// ΣC 高于 SoleMeshMultiLink，N<=64 让位 Sole 族；segSize 单位随段：L0 = 组内 rank 数，L1 = 对端分组数
+static int CalcA2ASegCcuKernelCali(CommTopo netType, u32 segSize)
+{
+    if (netType == CommTopo::COMM_TOPO_CLOS) {
+        u32 pods = segSize / A2A_SEQ_CALI_POD_DIVISOR;
+        return std::max(static_cast<int>(A2A_SEQ_CCU_KERNEL_CALI_CLOS_SLOPE * pods), A2A_SEQ_CCU_KERNEL_CALI_CLOS_MIN);
+    }
+    return static_cast<int>(A2A_SEQ_CCU_KERNEL_CALI_MESH);
+}
 
 static CostModelParam
 CalcA2ASegCost(u32 groupSize, float dataRatio, CommTopo netType, int portNum, bool isPod, bool isCcu, int kernelNum)
@@ -38,11 +52,13 @@ CalcA2ASegCost(u32 groupSize, float dataRatio, CommTopo netType, int portNum, bo
     float B = 0.0f;
     float C = 0.0f;
     float D = 0.0f;
+    // A: 1DMESH=n/BW（专链并行）；CLOS=n*(g-1)/(p*BW)（共享端口串行，isPod 减半）
     CostModelManager::Global()->CalcMeshParam(dataRatio, netType, portNum, groupSize, A, isPod);
     CostModelManager::Global()->CalcLatencyParams(kernelNum, isCcu ? EngineType::CCU : EngineType::AICPU, C);
+    C += A2A_SEQ_B_CONST;
     if (!isCcu) {
+        // B/D 仅 AICPU：本地拷贝与 launch 下限（taskNum=9*(g-1)+1）
         CostModelManager::Global()->CalcLocalCopyParams(dataRatio, EngineType::AICPU, B);
-        C += A2A_SEQ_B_CONST;
         int taskNum
             = CostModelManager::CalcTransTaskNum(groupSize) + CostModelManager::CalcSyncTaskNum(groupSize) * 2 + 1;
         CostModelManager::Global()->CalcLaunchParams(taskNum, EngineType::AICPU, D);
@@ -568,14 +584,21 @@ std::vector<CostModelParam> InsV2AlltoAllSequenceExecutor<AlgTopoMatch>::CalcCos
         return sum > 0 ? sum : 1;
     };
 
+    // 段序 [L0, L1] 与 GetAlgNetMeta 逐位对齐：L0 段组 d0/每对端 d1 槽，L1 段组 d1/每对端 d0 块；
+    // CCU 标定对齐 AG 序列：L0 传组内 rank 数 d0，L1 传对端分组数 d1
     int aicpuKernelNum = static_cast<int>(A2A_SEQ_AICPU_KERNEL_NUM_PER_STAGE);
     std::vector<CostModelParam> params;
     params.push_back(CalcA2ASegCost(
         d0, 1.0f * d1, phyLevelNetTypes[0][0], sumPort(phyLevelPortNums[0][0]), topoInfo->isPod, isCcu,
-        isCcu ? static_cast<int>(A2A_SEQ_CC_KERNEL_INTRA) : aicpuKernelNum));
+        isCcu ? CalcA2ASegCcuKernelCali(phyLevelNetTypes[0][0], d0) : aicpuKernelNum));
     params.push_back(CalcA2ASegCost(
         d1, 1.0f * d0, phyLevelNetTypes[1][0], sumPort(phyLevelPortNums[1][0]), topoInfo->isPod, isCcu,
-        isCcu ? static_cast<int>(A2A_SEQ_CC_KERNEL_MAX_INTER) : aicpuKernelNum));
+        isCcu ? CalcA2ASegCcuKernelCali(phyLevelNetTypes[1][0], d1) : aicpuKernelNum));
+    // N<=64：C 置惩罚值使其全区间落选，仅 HCCL_ALGO 显式指定可选回
+    if (!isCcu && topoInfo->userRankSize <= CCU_SCHED_MAX_RANK_SIZE) {
+        params[0].C = A2A_SEQ_AICPU_YIELD_FIXED;
+        params[1].C = A2A_SEQ_AICPU_YIELD_FIXED;
+    }
     return params;
 }
 

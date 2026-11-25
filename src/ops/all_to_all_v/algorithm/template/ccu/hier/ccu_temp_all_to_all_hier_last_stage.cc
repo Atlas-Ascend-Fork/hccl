@@ -125,8 +125,7 @@ HcclResult CcuTempAlltoAllHierLastStage::KernelRun(
            goSize[1],
            goSize[2],
            goSize[3]};
-    // otherDim 即末 Stage 语义的 srcSliceNum（=totalRankSize/stageRankSize=d1）；成员 srcSliceNum_ 执行路径实例恒
-    // 0，不可直打
+    // otherDim 即末 Stage 语义的 srcSliceNum（=totalRankSize/stageRankSize=d1）
     HCCL_INFO(
         "[CcuTempAlltoAllHierLastStage][KernelRun] sliceSize[%llu], blockStride[%llu], slotStride[%llu], "
         "myAlgRank[%u], otherDimRankSize[%llu]",
