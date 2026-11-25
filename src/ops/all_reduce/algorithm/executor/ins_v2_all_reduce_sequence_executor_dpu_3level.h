@@ -75,7 +75,6 @@ protected:
         TemplateStage<InsAlgTemplate4> agLevel1;
         TemplateStage<InsAlgTemplate5> agLevel0;
         u32 scratchMult2{0};
-        u64 scratchMultiplier{0};
         u64 maxCountPerLoop{0};
         u32 totalRankAlign{0};
     };

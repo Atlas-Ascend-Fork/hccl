@@ -17,6 +17,11 @@
 #include "channel.h"
 #include "coll_alg_v2_exec_registry.h"
 #include "template_utils.h"
+#include "cost_model.h"
+#include "alg_template_base.h"
+#ifndef AICPU_COMPILE
+#include "hccl/hccl_res.h"
+#endif
 
 namespace ops_hccl {
 
@@ -239,6 +244,48 @@ inline void ArSeq3LevelGenAGL0Params(
     tempAlgParamsAGL0.inputRepeatStride = 0;
     tempAlgParamsAGL0.outputRepeatStride = 0;
 }
+
+/* 多轮 loop 固定开销折算（host-only）：运行态单轮容量有限，中大消息被切成 L=⌈dataSize/P⌉ 轮，
+ * 每轮完整付出全部模板固定时延 C+D；cost 模型 C/D 只按单轮计一次 → 低估 L 倍。
+ * HcclGetHcclBuffer 按 HCOMM 分层为 host-only API（设备镜像不可引用），与 host-only 方法
+ * 守卫惯例一致用 AICPU_COMPILE 裁剪；设备侧算法名由 host 选定后传入，不重选，无需折算。 */
+#ifndef AICPU_COMPILE
+// 单轮处理量 P（字节），镜像 PrepareLoopBuffers 的布局与 maxCountPerLoop 公式：
+// slot = cclMem/cclBuffSliceNum（对齐 dts，布局按 d0+1 切），单轮 = rsResult(1 slot)×d0；
+// 失败/退化返回 0（不折算）。reservedBytes：最坏情况预扣（RHD 尾块 2·slot），
+// 先扣再算，保证 P ≤ 运行态容量
+inline u64 ArSeq3LevelCalcPerLoopDataSize(
+    HcclComm comm, u64 cclBuffSliceNum, u64 rankSizeLevel0, u64 dataTypeSize, u64 totalRankAlign, u64 reservedBytes = 0)
+{
+    if (comm == nullptr || cclBuffSliceNum == 0 || rankSizeLevel0 == 0 || dataTypeSize == 0 || totalRankAlign == 0) {
+        return 0;
+    }
+    void* cclBuffAddr = nullptr;
+    uint64_t cclBuffSize = 0; // hccl_res.h 形参为 uint64_t（与 u64 同宽但不同类型）
+    if (HcclGetHcclBuffer(comm, &cclBuffAddr, &cclBuffSize) != HCCL_SUCCESS || cclBuffSize <= reservedBytes) {
+        return 0;
+    }
+    cclBuffSize -= reservedBytes;
+    u64 rsResultBuffSize = cclBuffSize / cclBuffSliceNum / dataTypeSize * dataTypeSize;
+    u64 maxLoopBytes = rsResultBuffSize * rankSizeLevel0;
+    u64 maxCountPerLoop
+        = maxLoopBytes / HCCL_MIN_SLICE_ALIGN * HCCL_MIN_SLICE_ALIGN / dataTypeSize / totalRankAlign * totalRankAlign;
+    return maxCountPerLoop * dataTypeSize;
+}
+
+// 多轮固定开销折算进斜率：B += (C+D)/P，模型隐含轮数 1+x/P，对真实 ⌈x/P⌉ 的偏差恒 ≤ 一轮 C+D；
+// 单轮区间（x≤P）模型值有界抬高 (C+D)·x/P，方向安全——高估使本算法小消息更难被选中，属期望行为。
+// C/D 角色不变：C 保留在求和项，D 仍作 max 地板
+inline void ArSeq3LevelFoldPerLoopFixedCost(std::vector<CostModelParam>& params, u64 perLoopDataSize)
+{
+    if (perLoopDataSize == 0) {
+        return;
+    }
+    for (CostModelParam& p : params) {
+        p.B += (p.C + p.D) / static_cast<float>(perLoopDataSize);
+    }
+}
+#endif // AICPU_COMPILE
 
 } // namespace ops_hccl
 

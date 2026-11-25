@@ -60,6 +60,14 @@ struct ArSeqRhdTail {
     u64 outputOffset{0};
 };
 
+// 尾块 slot 向上对齐到 HCCL_MIN_SLICE_ALIGN 的公共口径（host 成本模型 reservedBytes 与运行态共用，
+// 防止两侧独立调整对齐常量或口径时静默漂移导致 P 与运行态容量不一致）
+inline u64 ArSeqRhdTailSlotBytes(u64 tileBytes)
+{
+    return (tileBytes / HCCL_MIN_SLICE_ALIGN + static_cast<u64>(tileBytes % HCCL_MIN_SLICE_ALIGN != 0))
+           * HCCL_MIN_SLICE_ALIGN;
+}
+
 inline HcclResult
 ArSeqRhdPrepareTailWorkspace(u64 dataCount, u64 rankAlign, u64 dataTypeSize, HcclMem& workspace, ArSeqRhdTail& tail)
 {
@@ -74,8 +82,7 @@ ArSeqRhdPrepareTailWorkspace(u64 dataCount, u64 rankAlign, u64 dataTypeSize, Hcc
         rankAlign > workspace.size / dataTypeSize / 2,
         HCCL_ERROR("[ArSeqRhdPrepareTailWorkspace] CCL buffer too small for tail tiles"), HCCL_E_INTERNAL);
     const u64 tileBytes = rankAlign * dataTypeSize;
-    const u64 slotBytes = (tileBytes / HCCL_MIN_SLICE_ALIGN + static_cast<u64>(tileBytes % HCCL_MIN_SLICE_ALIGN != 0))
-                          * HCCL_MIN_SLICE_ALIGN;
+    const u64 slotBytes = ArSeqRhdTailSlotBytes(tileBytes);
     CHK_PRT_RET(
         workspace.addr == nullptr || slotBytes >= workspace.size / 2,
         HCCL_ERROR("[ArSeqRhdPrepareTailWorkspace] no CCL workspace left after tail reservation"), HCCL_E_INTERNAL);
