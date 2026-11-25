@@ -33,7 +33,7 @@ export HCCL_HOST_RDMA_UDP_PORTS_LIST="0:10000,10015;1:10016,10031"
 ## 使用约束
 
 - 该环境变量仅在使用Host侧RoCE网卡时生效。
-- 仅通过`HCCL_HOST_RDMA_UDP_PORTS_LIST`为当前NPU物理设备配置1个UDP源端口，未设置`HCCL_RDMA_QPS_PER_CONNECTION`且无其他QP数量配置生效时，创建的QP数量以Host侧RoCE网卡支持的总线路径数量为准。若设置了`HCCL_RDMA_QPS_PER_CONNECTION`，或`HCCL_RDMA_QP_PORT_CONFIG_PATH`指定的文件中有匹配当前IP对的配置，则按[配置文件方式](#配置文件方式)中的优先级确定QP数量。
+- 仅通过`HCCL_HOST_RDMA_UDP_PORTS_LIST`为当前NPU物理设备配置1个UDP源端口，未设置`HCCL_RDMA_QPS_PER_CONNECTION`且无其他QP数量配置生效时，创建的QP数量以Host侧RoCE网卡支持的总线路径数量为准。
 - 环境变量中未配置当前使用的NPU物理设备ID时，本环境变量不指定UDP源端口。
 - 本环境变量的优先级低于`/etc/hcomm.cfg`中的UDP源端口配置，高于环境变量[HCCL_RDMA_QP_PORT_CONFIG_PATH](HCCL_RDMA_QP_PORT_CONFIG_PATH.md)。当`/etc/hcomm.cfg`未提供当前使用的NPU物理设备的配置时，优先使用本环境变量中匹配该设备的UDP源端口列表；本环境变量未提供该设备的配置时，继续使用HCCL_RDMA_QP_PORT_CONFIG_PATH中匹配当前IP对的配置或默认方式。
 - 配置格式或取值非法时，通信域初始化失败。
@@ -83,7 +83,7 @@ NPU物理设备0使用4个QP，UDP源端口依次为10000、10015、10030和1004
 ### 使用约束
 
 - 本配置仅在使用Host侧RoCE网卡时生效。
-- 每个配置的NPU物理设备必须同时提供`udp_port_mode`、`multi_qp_count`和`multi_qp_udp_ports`。端口列表留空时，仍须保留`multi_qp_udp_ports_<phy_dev_id>=`这一行。
+- 每个配置的NPU物理设备必须同时提供`udp_port_mode`、`multi_qp_count`和`multi_qp_udp_ports`。端口列表留空时，仍须保留`multi_qp_udp_ports_<phy_dev_id>=`这一行。空列表表示使用默认方式，由驱动分配UDP源端口号。
 - 任一设备缺少必配项、物理设备ID格式非法或取值非法时，通信域初始化失败，不会回退到其他配置方式。重复配置同一配置项时，使用第一次出现的取值。
 - 文件不存在或无法打开时，不使用文件配置，继续使用其他配置或默认方式。文件中未配置当前使用的NPU物理设备ID时，该设备继续使用其他配置或默认方式。
 - 使用Host侧RoCE网卡时，QP数量和UDP源端口列表的选择顺序如下。表中优先级由高到低，仅使用匹配当前设备或IP对的配置。
@@ -91,7 +91,7 @@ NPU物理设备0使用4个QP，UDP源端口依次为10000、10015、10030和1004
     | 配置内容 | 选择顺序 |
     | --- | --- |
     | QP数量 | 通信通道显式指定的QP数量 > `/etc/hcomm.cfg`中的`multi_qp_count` > [HCCL_RDMA_QP_PORT_CONFIG_PATH](HCCL_RDMA_QP_PORT_CONFIG_PATH.md)指定文件中的端口数量 > [HCCL_RDMA_QPS_PER_CONNECTION](HCCL_RDMA_QPS_PER_CONNECTION.md)（默认值为1）。按此顺序选出的值为1时，创建的QP数量以Host侧RoCE网卡支持的总线路径数量为准。 |
-    | UDP源端口列表 | 当前设备的端口列表 > [HCCL_RDMA_QP_PORT_CONFIG_PATH](HCCL_RDMA_QP_PORT_CONFIG_PATH.md)指定文件中匹配当前IP对的端口列表 > 默认方式（由驱动分配UDP源端口号） |
+    | UDP源端口列表 | 当前设备的端口列表（在`/etc/hcomm.cfg`中显式留空时，由驱动分配UDP源端口号） > [HCCL_RDMA_QP_PORT_CONFIG_PATH](HCCL_RDMA_QP_PORT_CONFIG_PATH.md)指定文件中匹配当前IP对的端口列表 > 默认方式（由驱动分配UDP源端口号） |
 
 - 配置在进程内首次初始化配置管理器时读取，成功后缓存。修改文件后需重新启动通信业务进程，使新配置生效。
 

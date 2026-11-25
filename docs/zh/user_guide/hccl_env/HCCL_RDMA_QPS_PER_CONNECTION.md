@@ -19,9 +19,17 @@ export HCCL_RDMA_QPS_PER_CONNECTION=4
 ## 使用约束
 
 - 该环境变量仅支持单算子调用方式，不支持静态图模式。
-- QP相关配置的优先级如下：
+- 以下两个环境变量的优先级由高到低排列：
 
     环境变量HCCL_RDMA_QP_PORT_CONFIG_PATH \> 环境变量HCCL_RDMA_QPS_PER_CONNECTION。
+
+<!-- npu="950" id7 -->
+- 针对Ascend 950PR&950DT系列产品，使用Host侧RoCE网卡时，QP数量按以下优先级由高到低选择：
+
+    通信通道显式指定的QP数量 \> `/etc/hcomm.cfg`中当前NPU物理设备的`multi_qp_count` \> [HCCL_RDMA_QP_PORT_CONFIG_PATH](HCCL_RDMA_QP_PORT_CONFIG_PATH.md)指定文件中匹配当前IP对的端口数量 \> `HCCL_RDMA_QPS_PER_CONNECTION`（默认值为1）。
+
+    按上述顺序选出的值为1时，创建的QP数量以Host侧RoCE网卡支持的总线路径数量为准。
+<!-- end id7 -->
 
 <!-- npu="A3,910b" id6 -->
 - 针对Atlas A3系列产品与Atlas A2系列产品，QP相关配置还可以通过hccn_tool工具设置，hccn_tool工具配置与该环境变量的优先级如下：
