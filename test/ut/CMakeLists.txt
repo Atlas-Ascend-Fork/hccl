@@ -35,6 +35,11 @@ add_subdirectory(op_graph_utils)
 # reduce_scatter_nhr_dpu: NHR DPU 模板 host 半（几何/布局/序列化/KernelRun 错误路径），
 # 定义 AICPU_COMPILE 裁掉 RunNHR；DPU 半由 common/hostdpu_inline_reduce 覆盖。
 add_subdirectory(reduce_scatter_nhr_dpu)
+# all_gather_rhd_dpu: AllGather RHD DPU 模板真实 KernelRun 的 batch 模式守卫覆盖
+# （5 个中间错误出口析构恢复恰 1 次 Start、成功路径显式恢复无重复 Start）。
+# 编入 ins_temp_all_gather_rhd_dpu.cc + 基类 ins_temp_all_gather_rhd.cc，AICPU_COMPILE
+# 裁掉 DPU 下发段；HCOMM 原语/基类虚函数链依赖由 ag_rhd_test_stubs.cc 桩满足。
+add_subdirectory(all_gather_rhd_dpu)
 add_subdirectory(common/hostdpu_inline_reduce)
 add_subdirectory(alltoall_hier)
 add_subdirectory(hccl_gen_task_superkernel)

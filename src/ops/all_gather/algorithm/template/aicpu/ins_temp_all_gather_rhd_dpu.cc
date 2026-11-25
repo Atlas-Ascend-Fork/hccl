@@ -8,6 +8,8 @@
  * See LICENSE in the root of the software repository for the full text of the License.
  */
 
+#include <string>
+
 #include "ins_temp_all_gather_rhd_dpu.h"
 #include "alg_data_trans_wrapper.h"
 #include "alg_v2_template_register.h"
@@ -16,6 +18,41 @@
 #include "template_utils.h"
 
 namespace ops_hccl {
+
+namespace {
+    // batch 模式恢复守卫：KernelRun 在 HcommBatchModeEnd 切 eager 后存在 5 个中间错误出口
+    // （含 HcommBatchModeEnd 自身失败——HCOMM SetLaunchMode 先置 mode 后收尾，End 失败时
+    // thread_local 已残留 EAGER；其余为 HcommThreadSynchronize/HcommSendRequest/
+    // HcommWaitResponse 失败、recvMsgId 不一致），任一出口提前 return 都会使 comm 级执行模式
+    // 残留 eager。本守卫在构造时记录 algTag 拷贝，析构（未 Dismiss 时）调用 HcommBatchModeStart
+    // 恢复 batch；恢复失败仅记日志，不改变调用方既有的错误码返回。禁拷贝，文件内私有定义。
+    struct BatchModeGuard {
+        explicit BatchModeGuard(const char* algTag) : algTag_(algTag) {}
+
+        ~BatchModeGuard()
+        {
+            if (dismissed_) {
+                return;
+            }
+            // 恢复失败只记日志不上抛（析构 noexcept 语义）：调用方已在错误返回路径上，
+            // 恢复失败不追加改变其错误码，仅留可诊断日志
+            if (HcommBatchModeStart(algTag_.c_str()) != HCCL_SUCCESS) {
+                HCCL_ERROR(
+                    "[InsTempAllGatherRHDDPU] ~BatchModeGuard failed to restore batch mode, tag is %s.",
+                    algTag_.c_str());
+            }
+        }
+
+        BatchModeGuard(const BatchModeGuard&) = delete;
+        BatchModeGuard& operator=(const BatchModeGuard&) = delete;
+
+        void Dismiss() { dismissed_ = true; }
+
+    private:
+        std::string algTag_; // 构造期拷贝，与 algTag 源生命周期解耦
+        bool dismissed_ = false;
+    };
+} // namespace
 
 std::vector<CostModelParam> InsTempAllGatherRHDDPU::CalcCostCoeff(CalcCostCoeffParam param)
 {
@@ -105,6 +142,11 @@ HcclResult InsTempAllGatherRHDDPU::KernelRun(
 
     CHK_RET(LocalDataCopy(tempAlgParams, templateResource));
 
+    // eager 窗口守卫：构造前置于 End 调用，接管 End 调用至显式恢复之间的全部 5 个中间错误
+    // 出口（End/HcommThreadSynchronize/HcommSendRequest/HcommWaitResponse 失败、recvMsgId
+    // 不一致），提前 return 时由析构兜底恢复 batch；成功路径构造/Dismiss 零副作用，行为不变
+    BatchModeGuard batchGuard(param.algTag);
+
     // 转换成eager-mode，保障AICPU指令下发执行完成
     if (HcommBatchModeEnd(param.algTag) != HCCL_SUCCESS) {
         HCCL_ERROR("[InsTempAllGatherRHDDPU] failed set eager mode, tag is %s.", param.algTag);
@@ -155,6 +197,9 @@ HcclResult InsTempAllGatherRHDDPU::KernelRun(
     }
 
     // 将执行模式转换回到batch
+    // 先 Dismiss 再显式恢复：显式恢复失败时不做二次重试；恢复成功后 PostLocalCopy 的错误
+    // 出口不再触发重复 Start（模式已回 batch，重复 Start 会破坏 Start/End 配对）
+    batchGuard.Dismiss();
     if (HcommBatchModeStart(param.algTag) != HCCL_SUCCESS) {
         HCCL_ERROR("[InsTempAllGatherRHDDPU] failed set batch mode, tag is %s.", param.algTag);
         return HCCL_E_INTERNAL;
