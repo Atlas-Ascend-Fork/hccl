@@ -33,6 +33,16 @@ extern uint64_t g_stubCclBufSize; // CCL buffer 桩尺寸 (Refresh 多迭代控�
 namespace hcut {
 
 // ---- C 头同字段序镜像 (标准布局, 勿改字段顺序) ----
+// TypedContinuousVector<int64_t> 镜像 (gert::ContinuousVector 布局: capacity_/size_/
+// reserved_[40]/elements[] 内联), 供 GetListInt 属性桩
+struct StubCV {
+    size_t capacity;
+    size_t size;
+    unsigned char reserved[40];
+    static constexpr size_t kStubCVMaxElems = 4;
+    int64_t elements[kStubCVMaxElems];
+};
+static_assert(sizeof(StubCV) >= 8 + 40 + 8, "StubCV 布局兜底");
 struct StubAnyValue {
     void* pointer;
     void* deleter;
@@ -105,6 +115,20 @@ public:
         return *this;
     }
 
+    // list int 属性 (shape attr 等): ContinuousVector 为 POD 且数据内联 —
+    // 每次注册构造独立存储 (连续 push_back 不搬迁), 返回指针给 GetListInt 解引用
+    CtxBuilder& AttrListInt(size_t index, const std::vector<int64_t>& values)
+    {
+        StubCV& cv = listInts_.emplace_back();
+        cv.capacity = values.size();
+        cv.size = values.size();
+        for (size_t i = 0; i < values.size() && i < StubCV::kStubCVMaxElems; i++) {
+            cv.elements[i] = values[i];
+        }
+        g_stubAttrs[index] = &cv;
+        return *this;
+    }
+
     gert::EagerOpExecutionContext* Build()
     {
         g_stubOutputCursor = 0;
@@ -146,7 +170,9 @@ private:
     std::vector<StubAnyValue> chains_;
     std::deque<gert::Tensor> inTensors_; // deque: push_back 不搬移既有元素, 指针长期有效
     std::deque<gert::Tensor> outTensors_;
-    std::deque<int64_t> int64s_; // deque: 连续 Attr(int64) 注册不搬迁既有元素, 指针不悬垂
+    std::deque<int64_t> int64s_;
+    std::deque<StubCV>
+        listInts_; // deque: push 不搬迁, 指针稳定 // deque: 连续 Attr(int64) 注册不搬迁既有元素, 指针不悬垂
 };
 
 } // namespace hcut

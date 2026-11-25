@@ -389,18 +389,17 @@ HcomAllReduceOp::CalcBatchSlices(const hccl::HcclOpState& st, uint64_t maxCommCo
     uint64_t commCount = 0;
 
     for (size_t i = 0; i < st.inputCounts.size(); i++) {
-        if (st.inputCounts[i] > maxCommCount) {
-            HCCL_ERROR(
-                "[HcomAllReduceOp][CalcBatchSlices] input[%zu] count %lu exceeds CCL buffer capacity %lu.", i,
-                st.inputCounts[i], maxCommCount);
-            return ge::GRAPH_FAILED;
-        }
         commCount += st.inputCounts[i];
         if (commCount <= maxCommCount) {
             sliceIdx++;
+        } else if (sliceIdx == 0) {
+            // 对照 lowering HcomGetBatchAllReduceInfo 的 sliceIdx==0 分支 (逐字移植):
+            // 单 input 超 CCL 容量时该 input 独立成 slice (记 1) → 执行期走单 tensor
+            // 直传用户 buffer, 不经 CCL 中转 (超大数据量由 HCCL 底层自行处理), 而非报错
+            sliceIdxs.push_back(1);
+            sliceSum += 1;
+            commCount = 0;
         } else {
-            // sliceIdx 必非 0: 循环首已拦截 inputCounts[i] > maxCommCount, 而 commCount 超界
-            // 仅发生在本轮累加后, 此前 sliceIdx==0 意味着 commCount==inputCounts[i] ≤ 容量, 矛盾
             sliceIdxs.push_back(sliceIdx);
             sliceSum += sliceIdx;
             commCount = st.inputCounts[i];
