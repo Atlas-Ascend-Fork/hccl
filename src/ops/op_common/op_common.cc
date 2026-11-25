@@ -2577,6 +2577,29 @@ static HcclResult CheckNdaMainboardSupported(bool& isSupported)
     return HCCL_SUCCESS;
 }
 
+static HcclResult CheckDayuMainboard(bool& isDayu)
+{
+    isDayu = false;
+    s32 userDevId = 0;
+    aclError aclRet = aclrtGetDevice(&userDevId);
+    if (aclRet != ACL_SUCCESS) {
+        HCCL_WARNING("[CheckDayuMainboard] get current device failed, ret[%d]. treat as not dayu.", aclRet);
+        return HCCL_SUCCESS;
+    }
+    s64 mainBoardId = 0;
+    HcclResult ret = hcalrtGetDeviceInfo(static_cast<u32>(userDevId), ACL_DEV_ATTR_MAINBOARD_ID, mainBoardId, true);
+    if (ret != HCCL_SUCCESS) {
+        HCCL_WARNING(
+            "[CheckDayuMainboard] get mainboard id failed, ret[%d], userDevId[%d]. treat as not dayu.", ret, userDevId);
+        return HCCL_SUCCESS;
+    }
+    isDayu = (mainBoardId == DAYU_MAINBOARD_ID);
+    HCCL_INFO(
+        "[CheckDayuMainboard] userDevId[%d] mainBoardId[0x%llx] isDayu[%d]", userDevId, static_cast<u64>(mainBoardId),
+        static_cast<s32>(isDayu));
+    return HCCL_SUCCESS;
+}
+
 HcclResult HcclGetChannel(
     HcclComm comm, const OpParam& param, AlgResourceRequest& resRequest, AlgResourceCtxSerializable* resCtxHost)
 {
@@ -5423,6 +5446,19 @@ static bool IsUbxAivSymAlg(const OpParam& param)
     }
 }
 
+static bool IsDayuSymMemAllowedOp(HcclCMDType opType)
+{
+    switch (opType) {
+        case HcclCMDType::HCCL_CMD_ALLGATHER:
+        case HcclCMDType::HCCL_CMD_ALLTOALL:
+        case HcclCMDType::HCCL_CMD_ALLREDUCE:
+        case HcclCMDType::HCCL_CMD_REDUCE_SCATTER:
+            return true;
+        default:
+            return false;
+    }
+}
+
 HcclResult RefreshSymmetricMemory(OpParam& param, const TopoInfoWithNetLayerDetails* topoInfo)
 {
     // 基础门禁与算子入口一致：版本、单算子模式、AICPU_TS引擎、MESH_1D一级拓扑、非 PCIe（含混合）组网。
@@ -5444,9 +5480,12 @@ HcclResult RefreshSymmetricMemory(OpParam& param, const TopoInfoWithNetLayerDeta
     bool symMemAllowedUBX = isUBX && (ubxAicpuTsAlgOk || ubxAivAlgOk);
     bool symMemAllowedServer = topoInfo->level0Topo == Level0Shape::MESH_1D
                                && param.engine == CommEngine::COMM_ENGINE_AICPU_TS && !topoInfo->level0PcieMix;
-    // 基础门禁与算子入口一致：版本、单算子模式、引擎与一级拓扑
+    bool isDayu = false;
+    CHK_RET(CheckDayuMainboard(isDayu));
+    const bool symMemAllowedDayu
+        = isDayu && param.engine == CommEngine::COMM_ENGINE_AICPU_TS && topoInfo->topoLevelNums == TOPO_LEVEL_NUM_1;
     bool symMemAllowed = GetHcommVersion() >= CANN_VERSION(9, 1, 0) && param.opMode == OpMode::OPBASE
-                         && (symMemAllowedUBX || symMemAllowedServer);
+                         && (symMemAllowedUBX || symMemAllowedServer || symMemAllowedDayu);
     if (symMemAllowed) {
         switch (param.opType) {
             case HcclCMDType::HCCL_CMD_ALLGATHER_V:
@@ -5476,6 +5515,10 @@ HcclResult RefreshSymmetricMemory(OpParam& param, const TopoInfoWithNetLayerDeta
                 break;
         }
     }
+    if (symMemAllowed && symMemAllowedDayu && !IsDayuSymMemAllowedOp(param.opType)) {
+        symMemAllowed = false;
+    }
+
     if (!symMemAllowed) {
         // 回退后入口条件块对「旧引擎/旧算法」的判定已过期（AIV→AICPU_TS、algName 被替换等），
         // 必须在此统一清掉 flag，否则会把入口已禁止的组合（如 UBX + AICPU_TS + 非白名单算法）带进执行路径。

@@ -16,6 +16,17 @@ int g_utSymWinGetRet = HCCL_SUCCESS;
 bool g_utSymWinReturnNull = false;
 unsigned g_utSymWinGetCalls = 0;
 unsigned g_utSymWinFailFirstN = 0;
+bool g_utDeviceQueryOk = true;
+bool g_utMainboardInfoOk = false;
+long long g_utMainboardId = 0;
+
+void UtDeviceStubReset()
+{
+    // 默认：取 device 成功，但取不到主板 ID（与无 NPU 的真实环境一致，判非大禹）
+    g_utDeviceQueryOk = true;
+    g_utMainboardInfoOk = false;
+    g_utMainboardId = 0;
+}
 
 void UtSymWinStubReset()
 {
@@ -24,6 +35,9 @@ void UtSymWinStubReset()
     g_utSymWinReturnNull = false;
     g_utSymWinGetCalls = 0;
     g_utSymWinFailFirstN = 0;
+    // device/主板桩同为门禁输入，一并复位，使所有 fixture 共用同一复位点，
+    // 避免机型状态跨用例残留导致顺序相关结果
+    UtDeviceStubReset();
 }
 } // namespace ut_stub
 

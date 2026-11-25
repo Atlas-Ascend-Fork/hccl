@@ -10,6 +10,7 @@
 
 #include <gtest/gtest.h>
 
+#include "hcomm_stub.h"
 #include "adapter_acl.h"
 #include "auto_selector_base.h"
 #include "hccl_aiv_utils.h"
@@ -78,14 +79,30 @@ HcclResult ClearAivTagCb(HcclComm, HcclCommStatePhase, void*)
     return HCCL_E_NOT_SUPPORT;
 }
 
-// op_common.cc CheckNdaMainboardSupported 引用，定义在 adapter_acl.cc（本 UT 不链接），按取不到主板信息处理
+// op_common.cc CheckNdaMainboardSupported / CheckDayuMainboard 引用，定义在 adapter_acl.cc（本 UT 不链接）。
+// 默认按取不到主板信息处理（非大禹）；机型用例通过 ut_stub 控制返回指定主板 ID。
 HcclResult hcalrtGetDeviceInfo(u32 deviceId, aclrtDevAttr devAttr, s64& val, bool quiet)
 {
     (void)deviceId;
     (void)devAttr;
-    (void)val;
     (void)quiet;
-    return HCCL_E_NOT_SUPPORT;
+    if (!ut_stub::g_utMainboardInfoOk) {
+        return HCCL_E_NOT_SUPPORT;
+    }
+    val = static_cast<s64>(ut_stub::g_utMainboardId);
+    return HCCL_SUCCESS;
+}
+
+// op_common.cc CheckDayuMainboard 引用 aclrtGetDevice：可控成功/失败，避免依赖真实驱动
+extern "C" aclError aclrtGetDevice(int32_t* deviceId)
+{
+    if (!ut_stub::g_utDeviceQueryOk) {
+        return static_cast<aclError>(1);
+    }
+    if (deviceId != nullptr) {
+        *deviceId = 0;
+    }
+    return ACL_SUCCESS;
 }
 
 // op_common.cc IsUbxAicpuTsAllToAllSymAlg 引用，真实实现定义在 auto_selector_base.cc（本 UT 不链接）。

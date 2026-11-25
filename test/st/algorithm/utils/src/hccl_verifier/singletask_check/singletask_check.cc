@@ -106,6 +106,11 @@ HcclResult SingleTaskCheck::CheckTwoSliceOverlap(
         return HCCL_SUCCESS;
     }
 
+    // src与dst完全相同的拷贝是no-op, 不算读写踩踏; 部分重叠仍按冲突拦截
+    if (sliceA.GetOffset() == sliceB.GetOffset() && sliceA.GetSize() == sliceB.GetSize()) {
+        return HCCL_SUCCESS;
+    }
+
     bool conflictCase1
         = sliceA.GetOffset() >= sliceB.GetOffset() && sliceA.GetOffset() < (sliceB.GetOffset() + sliceB.GetSize());
     bool conflictCase2

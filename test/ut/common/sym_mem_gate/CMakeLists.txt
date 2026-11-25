@@ -41,6 +41,9 @@ endif()
 
 set(SYMEM_UT_FILES
     sym_mem_gate_test.cc
+    reduce_scatter_gate_test.cc
+    all_gather_gate_test.cc
+    all_to_all_gate_test.cc
     stub/hcomm_stub.cc
     stub/op_common_stub.cc
     ${PROJECT_SOURCE_DIR}/src/ops/op_common/op_common.cc
