@@ -15,3 +15,5 @@ add_subdirectory(reduce_scatter_birs)
 add_subdirectory(alltoall_hier)
 add_subdirectory(ccu_fallback)
 add_subdirectory(all_reduce_order_preserved)
+
+add_subdirectory(clos_topo_selector)

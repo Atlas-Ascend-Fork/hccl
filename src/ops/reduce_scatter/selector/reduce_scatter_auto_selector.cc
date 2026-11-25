@@ -25,6 +25,8 @@ constexpr u64 RS_AICPU_1D_TWO_LEVEL_DATA_SIZE_THRESHOLD = 1536 * 1024 * 1024;
 constexpr u64 RS_CCU_64P_MIN_DATA_SIZE = 128 * 1024 * 1024;
 constexpr u64 RS_CCU_64P_SEQ_DATA_SIZE = 16 * 1024 * 1024;
 constexpr u64 RS_CCU_8P_MIN_DATA_SIZE = 64 * 1024 * 1024;
+// CLOS 单层组网下 Mesh/NHR 选路阈值，小数据量场景 Mesh 性能优于 NHR
+constexpr u64 RS_CCU_CLOS_MESH_SMALL_DATA_SIZE = 1024 * 1024;
 
 constexpr u32 RS_CCU_MAX_RANK_SIZE = 64;
 constexpr u64 RS_2P_DETOUR_DATA_SIZE = 4 * 1024 * 1024;
@@ -384,7 +386,13 @@ SelectorStatus ReduceScatterAutoSelector::SelectMeshAlgoCcuSchedule(
             HCCL_WARNING("[ReduceScatterAutoSelector] pcie mixed topo is not supported yet for ccu schedule mode.");
             return SelectorStatus::NOT_MATCH;
         }
-        selectAlgName = "CcuSchedReduceScatterSoleNHR";
+        // CLOS 建链要求拓扑中只有一个 die 的 channel，不满足时回退 NHR
+        // INT8/64bit/PROD 已由本函数入口拦截, 此处无需重复过滤
+        if (dataSize < RS_CCU_CLOS_MESH_SMALL_DATA_SIZE && IsLevel0SingleClosInst(topoInfo)) {
+            selectAlgName = "CcuSchedReduceScatterSoleMesh";
+        } else {
+            selectAlgName = "CcuSchedReduceScatterSoleNHR";
+        }
     } else {
         HCCL_DEBUG("[ReduceScatterAutoSelector] MESH_1D_CLOS not match.");
         return SelectorStatus::NOT_MATCH;

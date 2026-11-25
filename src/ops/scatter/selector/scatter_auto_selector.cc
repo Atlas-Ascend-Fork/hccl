@@ -15,6 +15,8 @@
 namespace ops_hccl {
 constexpr u64 OMNI2D_UBX_SC_DATA_SIZE = 16 * 1024 * 1024;
 constexpr u64 UBX_SC_CONCURRENT_DATA_SIZE = 8 * 1024 * 1024;
+// CLOS 单层组网下 Mesh/NHR 选路阈值，小数据量场景 Mesh 性能优于 NHR
+constexpr u64 SC_CCU_CLOS_MESH_SMALL_DATA_SIZE = 2 * 1024 * 1024;
 constexpr uint32_t TOPO_LEVEL_3 = 3;
 
 SelectorStatus ScatterAutoSelector::SelectCcuMsAlgo(
@@ -138,7 +140,13 @@ SelectorStatus ScatterAutoSelector::SelectMeshAlgoCcuSchedule(
             HCCL_WARNING("[ScatterAutoSelector] pcie mixed topo is not supported yet for ccu schedule mode.");
             return SelectorStatus::NOT_MATCH;
         }
-        selectAlgName = "CcuSchedScatterSoleNHR";
+        // mesh 算法不支持 in-place 场景，且 CLOS 建链要求拓扑中只有一个 die 的 channel，不满足时回退 NHR
+        if (dataSize < SC_CCU_CLOS_MESH_SMALL_DATA_SIZE && IsInputOutputOverlap(opParam) == false
+            && IsLevel0SingleClosInst(topoInfo)) {
+            selectAlgName = "CcuSchedScatterSoleMesh";
+        } else {
+            selectAlgName = "CcuSchedScatterSoleNHR";
+        }
     } else {
         HCCL_WARNING(
             "[Algo][ScatterAutoSelector] level0Topo[%d] is not supported yet for ccu_schedule "

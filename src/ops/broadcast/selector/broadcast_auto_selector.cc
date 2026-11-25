@@ -21,6 +21,8 @@ constexpr u64 OMNI2D_UBX_BR_DATA_SIZE = 16 * 1024 * 1024;
 constexpr u32 BROADCAST_CCU_MAX_RANK_SIZE = 64;
 constexpr u32 BROADCAST_UBX_AIV_MAX_RANK = 8;
 constexpr u32 UBX_BC_CONCURRENT_DATA_SIZE = 2 * 1024 * 1024;
+// CLOS 单层组网下 Mesh/NHR 选路阈值，小数据量场景 Mesh 性能优于 NHR
+constexpr u64 BROADCAST_CCU_CLOS_MESH_SMALL_DATA_SIZE = 1024 * 1024;
 
 SelectorStatus BroadcastAutoSelector::SelectCcuMsAlgo(
     const TopoInfoWithNetLayerDetails* topoInfo, const OpParam& opParam,
@@ -192,7 +194,12 @@ SelectorStatus BroadcastAutoSelector::SelectMeshAlgoCcuSchedule(
             HCCL_WARNING("[BroadcastAutoSelector] pcie mixed topo is not supported yet for ccu schedule mode.");
             return SelectorStatus::NOT_MATCH;
         }
-        selectAlgName = "CcuSchedBroadcastSoleNHR";
+        // CLOS 建链要求拓扑中只有一个 die 的 channel，存在两个 CLOS 实例时回退 NHR
+        if (dataSize < BROADCAST_CCU_CLOS_MESH_SMALL_DATA_SIZE && IsLevel0SingleClosInst(topoInfo)) {
+            selectAlgName = "CcuSchedBroadcastSoleMesh";
+        } else {
+            selectAlgName = "CcuSchedBroadcastSoleNHR";
+        }
     } else {
         HCCL_WARNING(
             "[Algo][BroadcastAutoSelector] level0Shape[%d] is not supported yet for ccu "
