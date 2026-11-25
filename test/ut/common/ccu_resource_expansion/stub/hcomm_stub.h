@@ -49,6 +49,8 @@ struct Descriptor {
 };
 
 struct MockResources {
+    int hcommVersion = CANN_VERSION_NUM;
+    std::string algoEnv = "EmptyString";
     HcclDevType device = HcclDevType::DEV_TYPE_950;
     uint32_t remain = DEVICE_REMAIN;
     HcclResult callbackRegistrationResult = HCCL_SUCCESS;

@@ -29,6 +29,7 @@ HcclResult InsTempBarrierRhdAicpu::CalcRes(
 HcclResult InsTempBarrierRhdAicpu::KernelRun(
     const OpParam& param, const TemplateDataParams& tempAlgParams, TemplateResource& resource)
 {
+    (void)param;
     (void)tempAlgParams;
     std::vector<BarrierRhdStep> steps;
     CHK_RET(BuildBarrierRhdSteps(myRank_, subCommRanks_, steps));
@@ -37,14 +38,10 @@ HcclResult InsTempBarrierRhdAicpu::KernelRun(
     }
     CHK_PRT_RET(resource.threads.empty(), HCCL_ERROR("[BarrierRHD] missing main thread."), HCCL_E_INTERNAL);
     CHK_RET(CheckBarrierRhdChannels(steps, resource.channels, ENDPOINT_LOC_TYPE_DEVICE));
-    // 先提交已入队的批量任务，再等待 AICPU 线程完成。
-    CHK_RET(static_cast<HcclResult>(HcommBatchModeEnd(param.algTag)));
-    HcclResult ret = static_cast<HcclResult>(HcommThreadSynchronize(resource.threads[0]));
+    // 所有步骤使用同一通信线程，前一步的 notify wait 约束下一步及下一层的执行顺序。
+    // 公共 AICPU kernel 结束批量模式并统一提交，模板只负责入队。
     const std::vector<DataSlice> emptySlices;
     for (const auto& step : steps) {
-        if (ret != HCCL_SUCCESS) {
-            break;
-        }
         const auto& channel = resource.channels.at(step.peerRank)[0];
         TxRxChannels pair(channel, channel);
         TxRxSlicesList slices({emptySlices, emptySlices}, {emptySlices, emptySlices});
@@ -60,17 +57,9 @@ HcclResult InsTempBarrierRhdAicpu::KernelRun(
                 "[BarrierRHD] rank[%u] phase[%u] step[%u] peer[%u] payloadBytes=0.", myRank_,
                 static_cast<u32>(step.phase), step.step, step.peerRank);
         }
-        ret = SendRecvWrite(info, resource.threads[0]);
-        if (ret == HCCL_SUCCESS) {
-            // 相邻步骤可能使用不同通道，当前步骤完成后才能进入下一步或下一层。
-            ret = static_cast<HcclResult>(HcommThreadSynchronize(resource.threads[0]));
-        }
+        CHK_RET(SendRecvWrite(info, resource.threads[0]));
     }
-    const HcclResult restoreRet = static_cast<HcclResult>(HcommBatchModeStart(param.algTag));
-    if (restoreRet != HCCL_SUCCESS) {
-        HCCL_ERROR("[BarrierRHD] failed to restore batch mode, rank[%u], ret[%d].", myRank_, restoreRet);
-    }
-    return ret != HCCL_SUCCESS ? ret : restoreRet;
+    return HCCL_SUCCESS;
 }
 
 REGISTER_TEMPLATE_V2("InsTempBarrierRhdAicpu", InsTempBarrierRhdAicpu);

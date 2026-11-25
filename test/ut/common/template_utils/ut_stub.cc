@@ -19,6 +19,7 @@
 
 namespace barrier_rhd_sync_ut {
 std::vector<std::string> calls;
+std::vector<uint64_t> sendThreads;
 int failSyncCall = 0;
 int failSendCall = 0;
 int failDpuSendCall = 0;
@@ -30,6 +31,7 @@ bool useHostRemoteEndpoint = false;
 void Reset()
 {
     calls.clear();
+    sendThreads.clear();
     failSyncCall = 0;
     failSendCall = 0;
     failDpuSendCall = 0;
@@ -99,9 +101,10 @@ HcclResult GetSymWinRemoteMem(HcclCommSymWindow winHandle, size_t offset, uint32
 }
 
 namespace ops_hccl {
-HcclResult SendRecvWrite(const SendRecvInfo& info, const ThreadHandle&)
+HcclResult SendRecvWrite(const SendRecvInfo& info, const ThreadHandle& thread)
 {
     auto& calls = barrier_rhd_sync_ut::calls;
+    barrier_rhd_sync_ut::sendThreads.push_back(thread);
     calls.push_back("send:" + std::to_string(info.sendRecvChannels_.txChannel_.remoteRank));
     const int sendCall = static_cast<int>(std::count_if(calls.begin(), calls.end(), [](const std::string& call) {
         return call.rfind("send:", 0) == 0;

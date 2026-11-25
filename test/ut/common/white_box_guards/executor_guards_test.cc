@@ -16,14 +16,27 @@
 
 #include <gtest/gtest.h>
 
+#include "alg_env_config.h"
+#include "coll_alg_v2_exec_registry.h"
 #include "ins_recv_executor.h"
 #include "ins_send_executor.h"
 #include "ins_temp_recv_dpu.h"
 #include "ins_temp_send_dpu.h"
 #include "ins_v2_recv_sole_executor.h"
 #include "ins_v2_send_sole_executor.h"
+#include "op_common.h"
 
 namespace ops_hccl {
+
+// RHD 的 cost 接口依赖选路配置，本测试直接通过注册名创建执行器。
+std::string GetEnv(std::string) { return {}; }
+
+HcclResult HcclGetHcclAlgo(HcclComm, std::string& config)
+{
+    config.clear();
+    return HCCL_SUCCESS;
+}
+
 namespace {
 
     // InsSendExecutor/InsRecvExecutor 的 OrchestrateOpbase 为 protected，测试子类仅做可见性提升。
@@ -156,6 +169,149 @@ namespace {
 
         EXPECT_EQ(executor.Orchestrate(param, resCtx), HCCL_E_INTERNAL);
     }
+
+    class BarrierNhrExecutorGuardTest : public testing::Test {
+    protected:
+        void SetUp() override
+        {
+            executor_ = CollAlgExecRegistryV2::Instance().GetAlgExec(
+                HcclCMDType::HCCL_CMD_BARRIER, "DpuBarrierSequenceMeshNHR");
+            ASSERT_NE(executor_, nullptr);
+            resCtx_.topoInfo.userRank = 0;
+            resCtx_.topoInfo.userRankSize = 1;
+            resCtx_.algHierarchyInfo.infos = {{{0}}, {{0}}};
+            resCtx_.channels.resize(2);
+            resCtx_.threads.push_back(1);
+        }
+
+        std::unique_ptr<InsCollAlgBase> executor_;
+        OpParam param_{};
+        AlgResourceCtxSerializable resCtx_{};
+    };
+
+    TEST_F(BarrierNhrExecutorGuardTest, CalcResRejectsNullTopology)
+    {
+        AlgResourceRequest request{};
+        EXPECT_EQ(executor_->CalcRes(nullptr, param_, nullptr, resCtx_.algHierarchyInfo, request), HCCL_E_PTR);
+    }
+
+    TEST_F(BarrierNhrExecutorGuardTest, CalcResRejectsInvalidHierarchy)
+    {
+        AlgResourceRequest request{};
+        resCtx_.algHierarchyInfo.infos.pop_back();
+        EXPECT_EQ(
+            executor_->CalcRes(nullptr, param_, &resCtx_.topoInfo, resCtx_.algHierarchyInfo, request), HCCL_E_INTERNAL);
+
+        resCtx_.algHierarchyInfo.infos.push_back({{1}});
+        EXPECT_EQ(
+            executor_->CalcRes(nullptr, param_, &resCtx_.topoInfo, resCtx_.algHierarchyInfo, request), HCCL_E_PARA);
+    }
+
+    TEST_F(BarrierNhrExecutorGuardTest, OrchestrateRejectsMissingLevel)
+    {
+        resCtx_.algHierarchyInfo.infos.pop_back();
+        EXPECT_EQ(executor_->Orchestrate(param_, resCtx_), HCCL_E_INTERNAL);
+    }
+
+    TEST_F(BarrierNhrExecutorGuardTest, OrchestrateRejectsMissingChannelGroup)
+    {
+        resCtx_.channels.pop_back();
+        EXPECT_EQ(executor_->Orchestrate(param_, resCtx_), HCCL_E_INTERNAL);
+    }
+
+    TEST_F(BarrierNhrExecutorGuardTest, OrchestrateRejectsMissingMainThread)
+    {
+        resCtx_.threads.clear();
+        EXPECT_EQ(executor_->Orchestrate(param_, resCtx_), HCCL_E_INTERNAL);
+    }
+
+    TEST_F(BarrierNhrExecutorGuardTest, OrchestrateAcceptsSingletonLevelsWithEmptyChannelGroups)
+    {
+        EXPECT_EQ(executor_->Orchestrate(param_, resCtx_), HCCL_SUCCESS);
+    }
+
+    struct BarrierRhdExecutorCase {
+        const char* algName;
+        u32 levelCount;
+        CommEngine engine;
+    };
+
+    class BarrierRhdExecutorGuardTest : public testing::TestWithParam<BarrierRhdExecutorCase> {
+    protected:
+        void SetUp() override
+        {
+            const auto& testCase = GetParam();
+            executor_ = CollAlgExecRegistryV2::Instance().GetAlgExec(HcclCMDType::HCCL_CMD_BARRIER, testCase.algName);
+            ASSERT_NE(executor_, nullptr);
+            param_.engine = testCase.engine;
+            resCtx_.topoInfo.userRank = 0;
+            resCtx_.topoInfo.userRankSize = 1;
+            resCtx_.algHierarchyInfo.infos.resize(testCase.levelCount, {{0}});
+            resCtx_.channels.resize(testCase.levelCount);
+            resCtx_.threads.push_back(1);
+        }
+
+        std::unique_ptr<InsCollAlgBase> executor_;
+        OpParam param_{};
+        AlgResourceCtxSerializable resCtx_{};
+    };
+
+    TEST_P(BarrierRhdExecutorGuardTest, RejectsMissingLevel)
+    {
+        AlgResourceRequest request{};
+        resCtx_.algHierarchyInfo.infos.pop_back();
+        EXPECT_EQ(
+            executor_->CalcRes(nullptr, param_, &resCtx_.topoInfo, resCtx_.algHierarchyInfo, request), HCCL_E_INTERNAL);
+        EXPECT_EQ(executor_->Orchestrate(param_, resCtx_), HCCL_E_INTERNAL);
+    }
+
+    TEST_P(BarrierRhdExecutorGuardTest, RejectsSubcommWithoutLocalRank)
+    {
+        AlgResourceRequest request{};
+        resCtx_.algHierarchyInfo.infos.back() = {{1}};
+        EXPECT_EQ(
+            executor_->CalcRes(nullptr, param_, &resCtx_.topoInfo, resCtx_.algHierarchyInfo, request), HCCL_E_PARA);
+        EXPECT_EQ(executor_->Orchestrate(param_, resCtx_), HCCL_E_PARA);
+    }
+
+    TEST_P(BarrierRhdExecutorGuardTest, OrchestrateRejectsMissingChannelGroup)
+    {
+        resCtx_.channels.pop_back();
+        EXPECT_EQ(executor_->Orchestrate(param_, resCtx_), HCCL_E_INTERNAL);
+    }
+
+    TEST_P(BarrierRhdExecutorGuardTest, OrchestrateRejectsMissingMainThread)
+    {
+        resCtx_.threads.clear();
+        EXPECT_EQ(executor_->Orchestrate(param_, resCtx_), HCCL_E_INTERNAL);
+    }
+
+    TEST_P(BarrierRhdExecutorGuardTest, AcceptsSingletonLevelsWithEmptyChannelGroups)
+    {
+        AlgResourceRequest request{};
+        ASSERT_EQ(
+            executor_->CalcRes(nullptr, param_, &resCtx_.topoInfo, resCtx_.algHierarchyInfo, request), HCCL_SUCCESS);
+        ASSERT_EQ(request.channels.size(), GetParam().levelCount);
+        for (const auto& channelGroup : request.channels) {
+            EXPECT_TRUE(channelGroup.empty());
+        }
+        EXPECT_EQ(request.slaveThreadNum, 0U);
+        EXPECT_EQ(request.notifyNumOnMainThread, 0U);
+        EXPECT_TRUE(request.notifyNumPerThread.empty());
+
+        EXPECT_EQ(executor_->Orchestrate(param_, resCtx_), HCCL_SUCCESS);
+    }
+
+    INSTANTIATE_TEST_SUITE_P(
+        RegisteredAlgorithms, BarrierRhdExecutorGuardTest,
+        testing::Values(
+            BarrierRhdExecutorCase{"AicpuBarrierSequenceMeshRHD", 2, COMM_ENGINE_AICPU_TS},
+            BarrierRhdExecutorCase{"AicpuBarrierSequenceMeshRHDRHD", 3, COMM_ENGINE_AICPU_TS},
+            BarrierRhdExecutorCase{"DpuBarrierSequenceMeshRHD", 2, COMM_ENGINE_CPU},
+            BarrierRhdExecutorCase{"DpuBarrierSequenceMeshRHDRHD", 3, COMM_ENGINE_CPU}),
+        [](const testing::TestParamInfo<BarrierRhdExecutorCase>& info) {
+            return std::string(info.param.algName);
+        });
 
 } // namespace
 } // namespace ops_hccl

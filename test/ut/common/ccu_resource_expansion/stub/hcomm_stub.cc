@@ -299,7 +299,7 @@ bool HcommIsSupportHcclSymWinGetPeerDevicePointer(void) { return false; }
 bool HcommIsSupportHcommEndpointCheckFeature(void) { return false; }
 bool HcommIsSupportHcclThreadAcquireWithConfig(void) { return false; }
 bool HcommIsSupportHcclDedicatedThreadAcquire(void) { return false; }
-int GetHcommVersion(void) { return CANN_VERSION_NUM; }
+int GetHcommVersion(void) { return g_resources.hcommVersion; }
 bool HcommIsSupportHcclCommRegCommStateCallback(void) { return g_resources.callbackSupported; }
 bool IsHcommDefaultTimeoutSupported(void) { return false; }
 // stuck-detect helper 依赖（本 UT 不链接 hccl_res_dl.cc / hcomm_dlsym.cc），按“不支持”降级
