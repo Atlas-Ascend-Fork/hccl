@@ -14,7 +14,24 @@
 #include "alg_param.h"
 
 namespace ops_hccl {
-enum class KernelArgsType { ARGS_TYPE_SERVER, ARGS_TYPE_TWO_SHOT, ARGS_TYPE_URMA };
+constexpr u32 MAX_RANK_SIZE_V = 256;
+constexpr u32 MAX_RANK_SIZE_V_LARGE = 768;
+constexpr u32 AIV_URMA_ALLTOALLV_GROUP_SIZE = 16U;
+
+enum class KernelArgsType { ARGS_TYPE_SERVER, ARGS_TYPE_TWO_SHOT, ARGS_TYPE_URMA, ARGS_TYPE_LARGE_RANK };
+
+struct ExtraArgs {
+    u64 sendCounts[MAX_RANK_SIZE_V] = {};
+    u64 sendDispls[MAX_RANK_SIZE_V] = {};
+    u64 recvCounts[MAX_RANK_SIZE_V] = {};
+    u64 recvDispls[MAX_RANK_SIZE_V] = {};
+};
+struct ExtraArgsLarge {
+    u64 sendCounts[MAX_RANK_SIZE_V_LARGE] = {};
+    u64 sendDispls[MAX_RANK_SIZE_V_LARGE] = {};
+    u64 recvCounts[MAX_RANK_SIZE_V_LARGE] = {};
+    u64 recvDispls[MAX_RANK_SIZE_V_LARGE] = {};
+};
 
 struct AivOpArgs {
     HcclCMDType cmdType = HcclCMDType::HCCL_CMD_ALLTOALL;
@@ -25,6 +42,7 @@ struct AivOpArgs {
     u32 rank = 0;
     u32 rankSize = 0;
     u64 count = 0;
+    u64 totalDataCount = 0;
     HcclDataType dataType = HCCL_DATA_TYPE_FP32;
     u32 op = 0;
     u32 root = 0;
@@ -41,6 +59,8 @@ struct AivOpArgs {
     u64 outputRepeatStride = 0;
     u32 subCommRankLevel = 0;
     u32 level0ChannelNumPerRank = 0;
+    ExtraArgs extraArgs = {};
+    ExtraArgsLarge extraArgsLarge;
 };
 
 namespace aiv_selector_test {

@@ -12,6 +12,7 @@ file(GLOB UT_FILES CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/*_test.cc")
 add_executable(aiv_template_selector_test ${UT_FILES}
     ${PROJECT_SOURCE_DIR}/src/ops/all_reduce/algorithm/template/aiv/aiv_temp_all_reduce_mesh_1D_twoshot.cc
     ${PROJECT_SOURCE_DIR}/src/ops/all_to_all_v/algorithm/template/aiv/aiv_temp_all_to_all_mesh_1D.cc
+    ${PROJECT_SOURCE_DIR}/src/ops/all_to_all_v/algorithm/template/aiv/aiv_temp_all_to_all_v_mesh_1D.cc
     ${PROJECT_SOURCE_DIR}/src/ops/reduce_scatter/algorithm/template/aiv/aiv_temp_reduce_scatter_mesh_1D.cc
     ${PROJECT_SOURCE_DIR}/src/ops/all_gather/algorithm/template/aiv/aiv_temp_all_gather_mesh_1D.cc
 )

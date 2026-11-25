@@ -24,6 +24,7 @@
 namespace ops_hccl {
 constexpr u32 MAX_RANK_SIZE_V = 256;               // 注意要和device侧的一致
 constexpr u32 MAX_RANK_SIZE = 1024;                // 对端对称 VA 数组容量，注意要和device侧的一致
+constexpr u32 MAX_RANK_SIZE_V_LARGE = 768;         // 注意要和device侧的一致
 constexpr u32 AIV_URMA_ALLTOALLV_GROUP_SIZE = 16U; // 注意要和device侧的一致
 
 constexpr u32 AIV_TAG_ADDR_OFFSET = 16 * 1024;
@@ -66,6 +67,7 @@ enum class KernelArgsType {
     ARGS_TYPE_SERVER = 0, // kernel参数为单机内
     ARGS_TYPE_TWO_SHOT = 1,
     ARGS_TYPE_URMA = 2,
+    ARGS_TYPE_LARGE_RANK = 3, // kernel参数为大规格(768 rank)ExtraArgs
     ARGS_TYPE_DEFAULT
 };
 
@@ -142,6 +144,23 @@ static_assert(
 static_assert(
     sizeof(ExtraArgsBsr) == 12304, "ExtraArgsBsr ABI size must match device side AivBatchSendRecv::ExtraArgsBsr");
 
+struct ExtraArgsLarge {
+    u64 sendCounts[MAX_RANK_SIZE_V_LARGE];
+    u64 sendDispls[MAX_RANK_SIZE_V_LARGE];
+    u64 recvCounts[MAX_RANK_SIZE_V_LARGE];
+    u64 recvDispls[MAX_RANK_SIZE_V_LARGE];
+};
+// ExtraArgsLarge 与 device 侧(aiv_defines.h)同名结构布局需一致
+static_assert(
+    sizeof(ExtraArgsLarge) == 4 * MAX_RANK_SIZE_V_LARGE * sizeof(u64),
+    "ExtraArgsLarge ABI size must match device side ExtraArgsLarge");
+static_assert(
+    offsetof(ExtraArgsLarge, sendCounts) == 0
+        && offsetof(ExtraArgsLarge, sendDispls) == MAX_RANK_SIZE_V_LARGE * sizeof(u64)
+        && offsetof(ExtraArgsLarge, recvCounts) == 2 * MAX_RANK_SIZE_V_LARGE * sizeof(u64)
+        && offsetof(ExtraArgsLarge, recvDispls) == 3 * MAX_RANK_SIZE_V_LARGE * sizeof(u64),
+    "ExtraArgsLarge field order must match device side ExtraArgsLarge");
+
 // 算子计数信息；三地址跨层同义：OpParam counter*Addr（AICPU）、CCU stuck*Addr
 struct OpCounterInfo {
     u64 headCountMem = 0;
@@ -178,6 +197,9 @@ struct AivOpArgs {
     u64 outputRepeatStride = 0;
     bool isOpBase = false;
     ExtraArgs extraArgs = {};
+    // 仅alltoallv大规格分支(rankSize>256)使用且该分支写入前先整体赋值ExtraArgsLarge{};
+    // 不带默认初始化, 避免所有算子的AivOpArgs构造与指令录制/回放额外清零24KB
+    ExtraArgsLarge extraArgsLarge;
     bool isWrite = false;            // 写语义(write)标记，核函数内部据此走不同分支
     u32 subCommRankLevel = 0;        // 0=框内, 1=跨框
     u32 level0ChannelNumPerRank = 0; // Z轴绕路: 框内level0链路数(0或1)
@@ -328,7 +350,7 @@ HcclResult RegisterKernel();
 
 HcclResult UnRegisterAivKernel();
 
-HcclResult ExecuteKernelLaunchInner(const AivOpArgs& opArgs, void* args, u32 argsSize);
+HcclResult ExecuteKernelLaunchInner(const AivOpArgs& opArgs, void* args, u32 argsSize, KernelArgsType argsType);
 
 HcclResult ExecuteKernelLaunch(const AivOpArgs& opArgs);
 
