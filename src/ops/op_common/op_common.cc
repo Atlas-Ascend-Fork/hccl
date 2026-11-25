@@ -1266,6 +1266,85 @@ namespace {
         return HCCL_SUCCESS;
     }
 } // namespace
+
+namespace {
+    // aclgraph memTag计数上下文：号永不归零（通信域销毁重建不回退，避免与注册表残留旧条目重名）。
+    // 按commName键控进程级存储。计数粒度按匹配流原则：集合类按(comm, opType)分桶，
+    // send/recv按(comm, 发送方, 接收方)分桶，各rank相同调用序列即可生成相同memTag。
+    struct AclgraphTagCtx {
+        u32 collSeq[static_cast<u32>(HcclCMDType::HCCL_CMD_MAX)] = {0};
+        std::map<std::string, u32> pairSeq;
+    };
+
+    std::mutex g_aclgraphTagMutex;
+    std::map<std::string, AclgraphTagCtx> g_aclgraphTagCtxMap;
+
+    u32 AllocAclgraphSeqLocked(AclgraphTagCtx& ctx, const OpParam& param, u32 userRank)
+    {
+        if (param.opType == HcclCMDType::HCCL_CMD_SEND || param.opType == HcclCMDType::HCCL_CMD_RECEIVE) {
+            // pair以(发送方, 接收方)为准：send侧(src=本rank,dst=对端)与recv侧(src=对端,dst=本rank)得到同一键
+            u32 srcRank = (param.opType == HcclCMDType::HCCL_CMD_SEND) ? userRank : param.sendRecvRemoteRank;
+            u32 dstRank = (param.opType == HcclCMDType::HCCL_CMD_SEND) ? param.sendRecvRemoteRank : userRank;
+            std::string pairKey = "P2P_" + std::to_string(srcRank) + "_" + std::to_string(dstRank);
+            return ++ctx.pairSeq[pairKey];
+        }
+        return ++ctx.collSeq[static_cast<u32>(param.opType)];
+    }
+} // namespace
+
+// aclgraph零拷贝gate放行的算子白名单（导出供UT覆盖）
+bool IsAclgraphZeroCopySupportedOp(HcclCMDType opType)
+{
+    return opType == HcclCMDType::HCCL_CMD_ALLGATHER || opType == HcclCMDType::HCCL_CMD_ALLGATHER_V
+           || opType == HcclCMDType::HCCL_CMD_BROADCAST || opType == HcclCMDType::HCCL_CMD_SEND
+           || opType == HcclCMDType::HCCL_CMD_RECEIVE || opType == HcclCMDType::HCCL_CMD_ALLTOALL;
+}
+
+// aclgraph零拷贝gate命中判定（导出供UT覆盖）：捕获态 + OPBASE + AICPU_TS引擎 + 白名单算子
+// + 非协商域 + 非对称内存（对称内存优先级更高，走对称零拷贝通道）
+bool IsAclgraphZeroCopyGateHit(const OpParam& param)
+{
+    return IsStreamInCaptureMode(param.stream) && param.opMode == OpMode::OPBASE
+           && param.engine == CommEngine::COMM_ENGINE_AICPU_TS && IsAclgraphZeroCopySupportedOp(param.opType)
+           && !IsNegotiationCommName(param.commName) && !param.supportSymmetricMemory;
+}
+
+// aclgraph零拷贝激活，tag剩余空间不足时整体回退普通路径，不修改任何字段。
+HcclResult
+TryEnableAclgraphZeroCopy(OpParam& param, const TopoInfoWithNetLayerDetails* topoInfo, const std::string& algName)
+{
+    CHK_PTR_NULL(topoInfo);
+    u32 seq = 0;
+    {
+        std::lock_guard<std::mutex> lock(g_aclgraphTagMutex);
+        AclgraphTagCtx& ctx = g_aclgraphTagCtxMap[std::string(param.commName)];
+        seq = AllocAclgraphSeqLocked(ctx, param, topoInfo->userRank);
+    }
+
+    char suffix[32] = {0};
+    int len = snprintf_s(suffix, sizeof(suffix), sizeof(suffix) - 1, "_aclgraph_%u", seq);
+    CHK_PRT_RET(
+        len <= 0, HCCL_ERROR("[%s] failed to format aclgraph suffix, seq[%u].", __func__, seq), HCCL_E_INTERNAL);
+    size_t baseLen = strnlen(param.tag, TAG_LENGTH);
+    if (baseLen + static_cast<size_t>(len) >= TAG_LENGTH) {
+        // tag无剩余空间（如超长通信域名场景），放弃零拷贝，回退普通路径
+        HCCL_INFO(
+            "[%s] no room to append aclgraph suffix, tag[%s] len[%zu] suffixLen[%d], fallback to normal path.",
+            __func__, param.tag, baseLen, len);
+        return HCCL_SUCCESS;
+    }
+    CHK_PRT_RET(
+        memcpy_s(param.tag + baseLen, TAG_LENGTH - baseLen, suffix, static_cast<size_t>(len) + 1) != EOK,
+        HCCL_ERROR("[%s] memcpy_s failed to append aclgraph suffix, tag[%s].", __func__, param.tag), HCCL_E_MEMORY);
+
+    param.opMode = OpMode::OFFLOAD;
+    CHK_RET(SetOpParamAlgTag(param, algName));
+    HCCL_INFO(
+        "[%s] current op support zero copy in aicpu aclgraph, tag[%s] opType[%u] seq[%u] algTag[%s]", __func__,
+        param.tag, static_cast<u32>(param.opType), seq, param.algTag);
+    return HCCL_SUCCESS;
+}
+
 HcclResult HcclExecOp(
     HcclComm comm, OpParam& param, std::unique_ptr<TopoInfoWithNetLayerDetails>& topoInfo, std::string& algName,
     const ResPackGraphMode& resPack)
@@ -1307,14 +1386,30 @@ HcclResult HcclExecOp(
         CHK_RET(HcclExecOp(comm, param, topoInfo, newAlgName, resPack));
         return HCCL_SUCCESS;
     }
-    // 将算法名字放在param参数中
+
     int result = sprintf_s(param.algName, sizeof(param.algName), "%s", algName.c_str());
     if (result <= 0) {
         HCCL_ERROR("failed to fill param.algName");
         return HCCL_E_INTERNAL;
     }
-    // 在原先的commName中添加执行模式，得到commModeTag
     param.hcclComm = comm;
+
+    // 正常路径的初始选择、资源不足触发的FallbackOp回退、回退缓存命中的递归调用
+    // 都会携带最终algName与engine走到这里。算子入口仅按初始选中的算法评估对称内存，
+    // 回退到AICPU_TS引擎时由此处统一补齐对称内存探测与检查
+    CHK_RET(RefreshSymmetricMemory(param, topoInfo.get()));
+
+    // aclgraph零拷贝gate：捕获流上的白名单算子改写memTag并置OFFLOAD，复用全部现有OFFLOAD路径；
+    // 放在RefreshSymmetricMemory之后且对称内存优先：对称buffer直接走对称零拷贝，
+    // gate仅对非对称buffer生效。条件不满足或空间不足时自动回退普通路径
+    bool aclgraphZcEnabled = false;
+    if (IsAclgraphZeroCopyGateHit(param)) {
+        CHK_RET(TryEnableAclgraphZeroCopy(param, topoInfo.get(), algName));
+        // 空间不足时TryEnable返回SUCCESS但仅优雅回退（opMode保持OPBASE、algTag未改写），
+        // 未真正启用零拷贝不得置标志，否则会误删共享algTag下正常路径的主流信息host ctx
+        aclgraphZcEnabled = (param.opMode == OpMode::OFFLOAD);
+    }
+
     bool isOpBase = param.opMode == OpMode::OPBASE;
     const char* opModeStr = isOpBase ? "_opbase" : "_offload";
     auto ret = sprintf_s(param.commModeTag, sizeof(param.commModeTag), "%s_%s", param.commName, opModeStr);
@@ -1322,11 +1417,6 @@ HcclResult HcclExecOp(
         HCCL_ERROR("[%s] failed to fill param.commModeTag", __func__);
         return HCCL_E_INTERNAL;
     }
-
-    // 正常路径的初始选择、资源不足触发的FallbackOp回退、回退缓存命中的递归调用
-    // 都会携带最终algName与engine走到这里。算子入口仅按初始选中的算法评估对称内存，
-    // 回退到AICPU_TS引擎时由此处统一补齐对称内存探测与检查
-    CHK_RET(RefreshSymmetricMemory(param, topoInfo.get()));
 
     std::unique_ptr<InsCollAlgBase> executor = CollAlgExecRegistryV2::Instance().GetAlgExec(param.opType, algName);
     CHK_PRT_RET(
@@ -1398,6 +1488,17 @@ HcclResult HcclExecOp(
         CHK_RET(HcclAicpuKernelEntranceLaunch(
             comm, param, cpuTsThread, exportedCpuTsThread, notifyNumOnMainThread, resCtxSequence, algName,
             unfoldThread));
+        // aclgraph图本轮dispatch已完成：主线程信息ctx是host侧一次性簿记（algTag本轮唯一，
+        // launch后不再被读取，重放只消费device侧resCtx），dispatch后即时销毁防止反复重录时
+        // host侧条目堆积；device侧resCtx必须保留（kernel参数固化的param.resCtx每次重放都消费）
+        if (aclgraphZcEnabled) {
+            HcclResult destroyRet = HcclEngineCtxDestroy(comm, param.algTag, CommEngine::COMM_ENGINE_CPU_TS);
+            if (destroyRet != HCCL_SUCCESS) {
+                HCCL_WARNING(
+                    "[%s] destroy host ctx after aclgraph dispatch failed, algTag[%s], ret[%d]", __func__, param.algTag,
+                    destroyRet);
+            }
+        }
     } else if (param.engine == COMM_ENGINE_AIV) {
         uint64_t aivBeginTime = HcommGetProfilingSysCycleTime();
         param.resCtx = resCtxSequence;
