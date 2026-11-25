@@ -259,13 +259,13 @@ HcclResult ReduceOutPlaceCommon(
     std::unique_ptr<TopoInfoWithNetLayerDetails> topoInfo = std::make_unique<TopoInfoWithNetLayerDetails>();
     CHK_RET(Selector(comm, param, topoInfo, algName));
 
-    // 与RefreshSymmetricMemory的REDUCE白名单同条件：root侧零拷贝仅覆盖白名单算法且禁in-place；
+    // 与RefreshSymmetricMemory的REDUCE白名单同条件：root侧零拷贝仅覆盖白名单算法，同址inplace放行；
     // 显式校验64bit/PROD（IsReduceOpSymMemAllowed）与AllReduce入口及Refresh的Reduce分支同口径，
     // 避免依赖attrs隐式挡——强制选路/回退换算法时入口置true而Refresh判false不清标志的静默风险。
     // Reduce仅探测output侧。
     if (GetHcommVersion() >= CANN_VERSION(9, 1, 0) && param.opMode == OpMode::OPBASE
         && param.engine == CommEngine::COMM_ENGINE_AICPU_TS && topoInfo->level0Topo == Level0Shape::MESH_1D
-        && !topoInfo->level0PcieMix && IsReduceOpSymMemAllowed(param) && param.inputPtr != param.outputPtr
+        && !topoInfo->level0PcieMix && IsReduceOpSymMemAllowed(param)
         && IsReduceOpSymMemDeterministic(algName, topoInfo.get(), param.opType)) {
         CheckAndSetSymmetricMemory(param);
     }

@@ -1061,7 +1061,7 @@ REGISTER_EXECUTOR_BY_FOUR_TEMPS(
 REGISTER_ALG_ATTRS(
     AicpuReduceParallelMeshNHR, topo.minTopoLevelNum = TOPO_LEVEL_NUM_1; topo.maxTopoLevelNum = TOPO_LEVEL_NUM_2;
     topo.supportLevel0Topos = LEVEL0_TOPO_MESH_1D | LEVEL0_TOPO_MESH_1D_CLOS; topo.isSupportLevel0PcieMix = true;
-    op.unsupportedDataTypes = UNSUPPORTED_64BIT; op.isSupportInplace = false; op.isSupportProd = false;
+    op.unsupportedDataTypes = UNSUPPORTED_64BIT; op.isSupportInplace = true; op.isSupportProd = false;
     topo.topoCustomCheck = [](const TopoInfoWithNetLayerDetails* topo) -> bool {
         if (topo->level0Topo == Level0Shape::MESH_1D_CLOS) {
             return topo->level0PcieMix
@@ -1084,7 +1084,7 @@ REGISTER_EXECUTOR_BY_FOUR_TEMPS(
 REGISTER_ALG_ATTRS(
     AicpuReduceParallelNHRNHR, topo.minTopoLevelNum = TOPO_LEVEL_NUM_3; topo.maxTopoLevelNum = TOPO_LEVEL_NUM_3;
     topo.supportLevel0Topos = LEVEL0_TOPO_MESH_1D | LEVEL0_TOPO_MESH_1D_CLOS; op.isSupportProd = false;
-    op.unsupportedDataTypes = UNSUPPORTED_64BIT;
+    op.unsupportedDataTypes = UNSUPPORTED_64BIT; op.isSupportInplace = true;
     topo.topoCustomCheck = [](const TopoInfoWithNetLayerDetails* topo) -> bool {
         return topo->topLevelUboe && (topo->level0Symmetric && topo->level1Symmetric)
                && topo->netLayerDetails.localNetInsSizeOfLayer[1] != 1;

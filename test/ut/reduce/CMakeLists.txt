@@ -119,7 +119,12 @@ target_include_directories(reduce_sequence_mesh_nhr_aicpu_reduce_test PRIVATE
     ${PROJECT_SOURCE_DIR}/src/ops/reduce/algorithm/template/ccu/kernel
     ${PROJECT_SOURCE_DIR}/src/ops/reduce_scatter/algorithm/template
     ${PROJECT_SOURCE_DIR}/src/ops/reduce_scatter/algorithm/template/aicpu
+    ${PROJECT_SOURCE_DIR}/src/ops/reduce_scatter/algorithm/template/ccu
+    ${PROJECT_SOURCE_DIR}/src/ops/reduce_scatter/algorithm/template/ccu/kernel
     ${PROJECT_SOURCE_DIR}/src/ops/all_gather/algorithm/template/aicpu
+    ${PROJECT_SOURCE_DIR}/src/ops/all_gather/algorithm/template/ccu
+    ${PROJECT_SOURCE_DIR}/src/ops/all_gather/algorithm/template/ccu/kernel
+    ${PROJECT_SOURCE_DIR}/src/ops/all_reduce/algorithm/template/aicpu
     ${ASCEND_HOME_PATH}/pkg_inc
     ${ASCEND_HOME_PATH}/pkg_inc/base
     ${ASCEND_HOME_PATH}/pkg_inc/hccl

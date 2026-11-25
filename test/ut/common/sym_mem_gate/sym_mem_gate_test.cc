@@ -208,6 +208,28 @@ TEST_F(SymMemGateTest, AicpuTsAllGatherInplaceAllowed)
     EXPECT_TRUE(param_.supportSymmetricMemory);
 }
 
+TEST_F(SymMemGateTest, AicpuTsReduceInplaceAllowed)
+{
+    // Reduce 分支已删除 inputPtr != outputPtr 同址拦截：白名单算法同址不再回退非对称
+    topo_.topoLevelNums = TOPO_LEVEL_NUM_2;
+    SetOp(HcclCMDType::HCCL_CMD_REDUCE);
+    ASSERT_EQ(strcpy_s(param_.algName, sizeof(param_.algName), "AicpuReduceSoleNHR"), EOK);
+    param_.outputPtr = param_.inputPtr;
+    EXPECT_EQ(RefreshSymmetricMemory(param_, &topo_), HCCL_SUCCESS);
+    EXPECT_TRUE(param_.supportSymmetricMemory);
+}
+
+TEST_F(SymMemGateTest, ReduceInplaceNonWhitelistRejected)
+{
+    // 同址放行不改变算法白名单：非白名单算法仍回退非对称
+    topo_.topoLevelNums = TOPO_LEVEL_NUM_2;
+    SetOp(HcclCMDType::HCCL_CMD_REDUCE);
+    ASSERT_EQ(strcpy_s(param_.algName, sizeof(param_.algName), "AicpuReduceSoleMesh"), EOK);
+    param_.outputPtr = param_.inputPtr;
+    EXPECT_EQ(RefreshSymmetricMemory(param_, &topo_), HCCL_SUCCESS);
+    EXPECT_FALSE(param_.supportSymmetricMemory);
+}
+
 TEST_F(SymMemGateTest, AivInplaceRejectedForAgRsA2a)
 {
     // AIV + AG/RS/A2A 的对称 kernel 直接读写对端窗口，inplace 会覆盖待发送数据

@@ -5468,7 +5468,7 @@ HcclResult RefreshSymmetricMemory(OpParam& param, const TopoInfoWithNetLayerDeta
                                 && IsReduceOpSymMemDeterministic(param.algName, topoInfo, param.opType);
                 break;
             case HcclCMDType::HCCL_CMD_REDUCE:
-                symMemAllowed = IsReduceOpSymMemAllowed(param) && param.inputPtr != param.outputPtr
+                symMemAllowed = IsReduceOpSymMemAllowed(param)
                                 && IsReduceOpSymMemDeterministic(param.algName, topoInfo, param.opType);
                 break;
             default:
