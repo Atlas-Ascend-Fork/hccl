@@ -250,7 +250,9 @@ bool IsHostDpu(HcclComm comm);
 
 bool IsBarrierHostDpu(HcclComm comm);
 
-bool IsHostDpuThreadNewFlowEnabled();
+// 通信域非空配置优先，空值继承环境变量。
+// 生效配置含RHD或HCOMM版本不满足条件时使用共享内存请求接口，否则使用DPU线程接口。
+bool IsHostDpuThreadNewFlowEnabled(HcclComm comm);
 
 void CheckAndSetSymmetricMemory(OpParam& param);
 

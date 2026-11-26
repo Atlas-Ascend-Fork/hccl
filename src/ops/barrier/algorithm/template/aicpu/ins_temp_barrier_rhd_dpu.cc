@@ -50,7 +50,7 @@ HcclResult InsTempBarrierRhdDpu::KernelRun(
     if (ret == HCCL_SUCCESS) {
         ret = SendPlanRequest(param, tempAlgParams, resource);
     }
-    // 旧路径在即时模式下完成请求和响应，再恢复批量模式。
+    // 共享内存请求接口在即时模式下完成请求和响应，再恢复批量模式。
     const HcclResult restoreRet = static_cast<HcclResult>(HcommBatchModeStart(param.algTag));
     if (restoreRet != HCCL_SUCCESS) {
         HCCL_ERROR("[BarrierRHD] failed to restore batch mode, rank[%u], ret[%d].", myRank_, restoreRet);

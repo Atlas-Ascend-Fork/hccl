@@ -89,16 +89,28 @@ constexpr u32 HOST_NOTIFY_TIMEOUT_OFFSET = 27; // host等待Device通知的超�
 constexpr u32 KERNEL_TIMEOUT_OFFSET = 25;      // kernel启动超时时间偏移量
 constexpr u32 CPU_TS_NOTIFY_NUM = 3;           // CPU TS thread notify数量
 
-bool IsHostDpuThreadNewFlowEnabled()
+bool IsHostDpuThreadNewFlowEnabled(HcclComm comm)
 {
     if (GetHcommVersion() <= CANN_VERSION(9, 3, 0, 1)) {
         return false;
     }
-    std::string algoConfig = GetEnv("HCCL_ALGO");
+    std::string algoConfig;
+    if (HcclGetHcclAlgo(comm, algoConfig) != HCCL_SUCCESS) {
+        algoConfig.clear();
+    }
+    // 与算法选路保持相同优先级：通信域非空配置覆盖环境变量，空值才继承环境变量。
+    const bool useCommConfig = !algoConfig.empty();
+    if (!useCommConfig) {
+        algoConfig = GetEnv("HCCL_ALGO");
+    }
     std::transform(algoConfig.begin(), algoConfig.end(), algoConfig.begin(), [](unsigned char c) {
         return static_cast<char>(std::tolower(c));
     });
-    return algoConfig.find("rhd") == std::string::npos;
+    const bool newFlow = algoConfig.find("rhd") == std::string::npos;
+    HCCL_INFO(
+        "[HostDPUFlow] comm[%p] HCCL_ALGO source[%s] config[%s] newFlow[%u].", comm,
+        useCommConfig ? "communicator" : "environment", algoConfig.c_str(), static_cast<u32>(newFlow));
+    return newFlow;
 }
 
 void UpdateAicpuTimeoutCtx(const OpParam& param, AlgResourceCtxSerializable& resCtx)
@@ -1623,9 +1635,8 @@ HcclResult HcclAicpuKernelEntranceLaunch(
     param.counterAddOneAddr = stuckCounter.addOneMem;
     param.isEnableCounter = stuckCounter.isEnableCounter ? 1U : 0U;
 
-    if (param.engine == COMM_ENGINE_CPU && !IsHostDpuThreadNewFlowEnabled()) {
-        // 旧路径通过共享内存请求DPU执行，需要注册DPU回调；
-        // DPU thread路径直接下发任务，无需注册
+    if (param.engine == COMM_ENGINE_CPU && !IsHostDpuThreadNewFlowEnabled(comm)) {
+        // 共享内存请求接口需要注册DPU回调；DPU线程接口直接提交任务，无需注册回调。
         CHK_RET(static_cast<HcclResult>(HcclTaskRegister(comm, param.algTag, HcclLaunchDPUKernel)));
     }
 
@@ -2386,7 +2397,7 @@ static HcclResult HcclGetThreadWithConfig(
 {
     std::vector<ThreadConfig> threadConfigs(threadNum);
     CHK_RET(static_cast<HcclResult>(ThreadConfigInit(threadConfigs.data(), threadNum)));
-    // 主流上多一个用于host-device同步，hostdpu新路径下DPU线程完工notify再多一个
+    // 主流预留host-device同步notify，使用DPU线程接口时还需预留DPU线程完工notify。
     threadConfigs[0].notifyNumPerThread
         = resRequest.notifyNumOnMainThread + 1 + (resCtxHost->isDpuThreadEnabled ? HOST_DPU_THREAD_NOTIFY_NUM : 0);
     HCCL_DEBUG("[HcclGetThread] AICPU thread[0] notify num[%u].", threadConfigs[0].notifyNumPerThread);
@@ -4395,7 +4406,7 @@ HcclResult GetAlgResDPU(
 {
     resCtxHost->isDpuThreadEnabled = false;
     resCtxHost->dpuThread = 0;
-    if (IsHostDpuThreadNewFlowEnabled()) {
+    if (IsHostDpuThreadNewFlowEnabled(comm)) {
         ThreadConfig dpuThreadConfig;
         CHK_RET(static_cast<HcclResult>(ThreadConfigInit(&dpuThreadConfig, 1)));
         // DPU线程只收主流的开工notify，完工notify由其在主流上指定的索引发起

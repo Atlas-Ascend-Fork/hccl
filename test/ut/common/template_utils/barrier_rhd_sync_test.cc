@@ -15,11 +15,16 @@
 using namespace ops_hccl;
 
 namespace {
-TemplateResource MakeResource()
+constexpr ThreadHandle MAIN_THREAD = 10;
+
+TemplateResource MakeResource(u32 rank, const std::vector<u32>& ranks)
 {
     TemplateResource resource;
-    resource.threads.push_back(0);
-    for (u32 peer : {1U, 2U}) {
+    resource.threads.push_back(MAIN_THREAD);
+    for (u32 peer : ranks) {
+        if (peer == rank) {
+            continue;
+        }
         ChannelInfo channel;
         channel.remoteRank = peer;
         channel.locationType = ENDPOINT_LOC_TYPE_DEVICE;
@@ -28,54 +33,69 @@ TemplateResource MakeResource()
     return resource;
 }
 
-HcclResult RunFourRankBarrier()
+HcclResult RunBarrier(u32 rank, const std::vector<u32>& ranks)
 {
     OpParam param{};
-    InsTempBarrierRhdAicpu barrier(param, 0, {{0, 1, 2, 3}});
-    TemplateResource resource = MakeResource();
+    InsTempBarrierRhdAicpu barrier(param, rank, {ranks});
+    TemplateResource resource = MakeResource(rank, ranks);
     return barrier.KernelRun(param, TemplateDataParams{}, resource);
 }
 } // namespace
 
-TEST(BarrierRhdSync, FlushesPriorWorkAndSynchronizesEachStep)
+TEST(BarrierRhdSync, EnqueuesAllStepsOnMainThread)
 {
     barrier_rhd_sync_ut::Reset();
-    EXPECT_EQ(RunFourRankBarrier(), HCCL_SUCCESS);
-    EXPECT_EQ(
-        barrier_rhd_sync_ut::calls,
-        (std::vector<std::string>{"end", "sync", "send:1", "sync", "send:2", "sync", "start"}));
+    EXPECT_EQ(RunBarrier(0, {0, 1, 2, 3}), HCCL_SUCCESS);
+    EXPECT_EQ(barrier_rhd_sync_ut::calls, (std::vector<std::string>{"send:1", "send:2"}));
+    EXPECT_EQ(barrier_rhd_sync_ut::sendThreads, (std::vector<uint64_t>{MAIN_THREAD, MAIN_THREAD}));
 }
 
-TEST(BarrierRhdSync, RestoresBatchModeAfterTransferFailure)
+TEST(BarrierRhdSync, EnqueuesNonPowerOfTwoRolesOnMainThread)
 {
-    barrier_rhd_sync_ut::Reset();
-    barrier_rhd_sync_ut::failSendCall = 1;
-    EXPECT_EQ(RunFourRankBarrier(), HCCL_E_INTERNAL);
-    EXPECT_EQ(barrier_rhd_sync_ut::calls, (std::vector<std::string>{"end", "sync", "send:1", "start"}));
+    // 6 成员中 0/1 为代表，2/3 被折叠，4/5 仅参与主体。
+    const std::vector<std::vector<std::string>> expected{
+        {"send:2", "send:1", "send:4", "send:2"},
+        {"send:3", "send:0", "send:5", "send:3"},
+        {"send:0", "send:0"},
+        {"send:1", "send:1"},
+        {"send:5", "send:0"},
+        {"send:4", "send:1"},
+    };
+    for (u32 rank = 0; rank < expected.size(); ++rank) {
+        SCOPED_TRACE(rank);
+        barrier_rhd_sync_ut::Reset();
+        EXPECT_EQ(RunBarrier(rank, {0, 1, 2, 3, 4, 5}), HCCL_SUCCESS);
+        EXPECT_EQ(barrier_rhd_sync_ut::calls, expected[rank]);
+        EXPECT_EQ(barrier_rhd_sync_ut::sendThreads, std::vector<uint64_t>(expected[rank].size(), MAIN_THREAD));
+    }
 }
 
-TEST(BarrierRhdSync, StopsBeforeNextStepAfterSyncFailure)
+TEST(BarrierRhdSync, EmptyPlanDoesNotTouchCommunicationResources)
 {
     barrier_rhd_sync_ut::Reset();
-    barrier_rhd_sync_ut::failSyncCall = 2;
-    EXPECT_EQ(RunFourRankBarrier(), HCCL_E_INTERNAL);
-    EXPECT_EQ(barrier_rhd_sync_ut::calls, (std::vector<std::string>{"end", "sync", "send:1", "sync", "start"}));
+    OpParam param{};
+    InsTempBarrierRhdAicpu barrier(param, 0, {{0}});
+    TemplateResource resource;
+    EXPECT_EQ(barrier.KernelRun(param, TemplateDataParams{}, resource), HCCL_SUCCESS);
+    EXPECT_TRUE(barrier_rhd_sync_ut::calls.empty());
 }
 
-TEST(BarrierRhdSync, DoesNotRestartBatchModeWhenFlushFails)
+TEST(BarrierRhdSync, RejectsMissingChannelsBeforeSubmittingAnyStep)
 {
     barrier_rhd_sync_ut::Reset();
-    barrier_rhd_sync_ut::failBatchEnd = true;
-    EXPECT_EQ(RunFourRankBarrier(), HCCL_E_INTERNAL);
-    EXPECT_EQ(barrier_rhd_sync_ut::calls, (std::vector<std::string>{"end"}));
+    OpParam param{};
+    InsTempBarrierRhdAicpu barrier(param, 0, {{0, 1, 2, 3}});
+    TemplateResource resource = MakeResource(0, {0, 1, 2, 3});
+    resource.channels.erase(2);
+    EXPECT_EQ(barrier.KernelRun(param, TemplateDataParams{}, resource), HCCL_E_INTERNAL);
+    EXPECT_TRUE(barrier_rhd_sync_ut::calls.empty());
 }
 
-TEST(BarrierRhdSync, ReportsBatchModeRestoreFailure)
+TEST(BarrierRhdSync, StopsBeforeFollowingStepAfterSubmitFailure)
 {
     barrier_rhd_sync_ut::Reset();
-    barrier_rhd_sync_ut::failBatchStart = true;
-    EXPECT_EQ(RunFourRankBarrier(), HCCL_E_INTERNAL);
-    EXPECT_EQ(
-        barrier_rhd_sync_ut::calls,
-        (std::vector<std::string>{"end", "sync", "send:1", "sync", "send:2", "sync", "start"}));
+    barrier_rhd_sync_ut::failSendCall = 2;
+    EXPECT_EQ(RunBarrier(0, {0, 1, 2, 3, 4, 5}), HCCL_E_INTERNAL);
+    EXPECT_EQ(barrier_rhd_sync_ut::calls, (std::vector<std::string>{"send:2", "send:1"}));
+    EXPECT_EQ(barrier_rhd_sync_ut::sendThreads, (std::vector<uint64_t>{MAIN_THREAD, MAIN_THREAD}));
 }

@@ -17,6 +17,7 @@
 namespace barrier_rhd_sync_ut {
 inline constexpr uint32_t REQUEST_MSG_ID = 7;
 extern std::vector<std::string> calls;
+extern std::vector<uint64_t> sendThreads;
 extern int failSyncCall;
 extern int failSendCall;
 extern int failDpuSendCall;

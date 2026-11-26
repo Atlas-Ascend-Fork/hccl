@@ -14,6 +14,7 @@
 #include "alg_env_config.h"
 #include "hccl_aiv_utils.h"
 #include "hccl_sym_win_dl.h"
+#include "hcomm_stub.h"
 
 // op_common.cc 的对端对称 VA 取址引用，真实实现定义在 hccl_sym_win_dl.cc（本 UT 不链接）；
 // CCU 资源申请用例不走 AIV 对称路径，此处恒视为已登记并按 identity 填充，避免影响用例。
@@ -63,5 +64,5 @@ HcclResult hcalrtGetDeviceInfo(u32 deviceId, aclrtDevAttr devAttr, s64& val, boo
     return HCCL_E_NOT_SUPPORT;
 }
 
-std::string GetEnv(std::string) { return "EmptyString"; }
+std::string GetEnv(std::string name) { return name == "HCCL_ALGO" ? ut_stub::g_resources.algoEnv : "EmptyString"; }
 } // namespace ops_hccl

@@ -102,7 +102,7 @@ target_link_libraries(graph_mode_calc_test PRIVATE
     -lpthread)
 run_llt_test(TARGET graph_mode_calc_test TASK_NUM 1)
 
-# Send/Recv 执行器零搬运与非法 dataType 守卫。
+# 执行器入参和资源校验。
 # ascend_hal 探测前置：未命中时跳过本用例，不阻断其余 UT。
 find_library(ASCEND_HAL_LIBRARY ascend_hal HINTS
     "${ASCEND_CANN_PACKAGE_PATH}/devlib/linux/${CMAKE_SYSTEM_PROCESSOR}"
@@ -136,6 +136,16 @@ set(_wb_executor_src
     ${PROJECT_SOURCE_DIR}/src/ops/op_common/algorithm/executor/channel/channel.cc
     ${PROJECT_SOURCE_DIR}/src/ops/op_common/algorithm/executor/channel/channel_request.cc
     ${PROJECT_SOURCE_DIR}/src/ops/op_common/algorithm/template/template_utils.cc
+    ${PROJECT_SOURCE_DIR}/src/ops/op_common/algorithm/topo_match/topo_match_base_v2.cc
+    ${PROJECT_SOURCE_DIR}/src/ops/op_common/algorithm/topo_match/topo_match_two_level.cc
+    ${PROJECT_SOURCE_DIR}/src/ops/op_common/algorithm/topo_match/topo_match_three_level.cc
+    ${PROJECT_SOURCE_DIR}/src/ops/barrier/algorithm/executor/ins_v2_barrier_sequence_executor.cc
+    ${PROJECT_SOURCE_DIR}/src/ops/barrier/algorithm/executor/ins_v2_barrier_sequence_rhd_executor.cc
+    ${PROJECT_SOURCE_DIR}/src/ops/barrier/algorithm/template/aicpu/barrier_rhd_utils.cc
+    ${PROJECT_SOURCE_DIR}/src/ops/barrier/algorithm/template/aicpu/ins_temp_barrier_mesh_1D.cc
+    ${PROJECT_SOURCE_DIR}/src/ops/barrier/algorithm/template/aicpu/ins_temp_barrier_nhr_dpu.cc
+    ${PROJECT_SOURCE_DIR}/src/ops/barrier/algorithm/template/aicpu/ins_temp_barrier_rhd_aicpu.cc
+    ${PROJECT_SOURCE_DIR}/src/ops/barrier/algorithm/template/aicpu/ins_temp_barrier_rhd_dpu.cc
     ${PROJECT_SOURCE_DIR}/src/ops/send/algorithm/executor/ins_send_executor.cc
     ${PROJECT_SOURCE_DIR}/src/ops/recv/algorithm/executor/ins_recv_executor.cc
     ${PROJECT_SOURCE_DIR}/src/ops/send/algorithm/executor/ins_v2_send_sole_executor.cc

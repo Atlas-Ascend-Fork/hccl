@@ -219,6 +219,7 @@ if(NOT HCCL_CANN_COMPAT_850)
         ${CMAKE_CURRENT_SOURCE_DIR}/ops/all_gather/algorithm/template/aicpu/ins_temp_all_gather_rhd_dpu.cc
         ${CMAKE_CURRENT_SOURCE_DIR}/ops/all_gather/algorithm/template/aicpu/ins_temp_all_gather_nhr_nda.cc
         ${CMAKE_CURRENT_SOURCE_DIR}/ops/all_gather/algorithm/template/aicpu/ins_temp_all_gather_omnipipe_nhr_nda.cc
+        ${CMAKE_CURRENT_SOURCE_DIR}/ops/barrier/algorithm/executor/ins_v2_barrier_sequence_rhd_executor.cc
         ${CMAKE_CURRENT_SOURCE_DIR}/ops/barrier/algorithm/executor/ins_v2_barrier_sequence_executor.cc
         ${CMAKE_CURRENT_SOURCE_DIR}/ops/barrier/algorithm/executor/ins_v2_barrier_sole_executor.cc
         ${CMAKE_CURRENT_SOURCE_DIR}/ops/barrier/algorithm/template/aicpu/ins_temp_barrier_nhr_dpu.cc

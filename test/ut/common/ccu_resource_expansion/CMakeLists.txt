@@ -54,6 +54,7 @@ add_cann_third_party(mockcpp)
 
 add_executable(ccu_resource_expansion_test
     ccu_resource_expansion_test.cc
+    host_dpu_thread_flow_test.cc
     stub/hcomm_stub.cc
     stub/op_common_stub.cc
     ${PROJECT_SOURCE_DIR}/src/ops/op_common/op_common.cc
