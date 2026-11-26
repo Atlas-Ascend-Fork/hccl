@@ -998,7 +998,7 @@ REGISTER_EXEC_V2_MULTI(
     InsTempAllGatherNHR, InsTempAllGatherNHR, InsTempAllGatherMesh1D1DZAxisDetour);
 REGISTER_ALG_ATTRS(AicpuReduceSequenceMeshConcurNHRNHR, topo.minTopoLevelNum = TOPO_LEVEL_NUM_3;
                    topo.maxTopoLevelNum = TOPO_LEVEL_NUM_3; op.unsupportedDataTypes = UNSUPPORTED_64BIT;
-                   op.isSupportInplace = false; op.isSupportProd = false);
+                   op.isSupportInplace = true; op.isSupportProd = false);
 
 REGISTER_EXEC_V2_MULTI(
     HcclCMDType::HCCL_CMD_REDUCE, AicpuReduceSequenceMeshConcurNHR, ReduceSequenceExecutorAicpu3Level,
@@ -1006,7 +1006,7 @@ REGISTER_EXEC_V2_MULTI(
     InsTempAllGatherNHR, InsTempAllGatherNHR, InsTempAllGatherMesh1D1DZAxisDetour);
 REGISTER_ALG_ATTRS(
     AicpuReduceSequenceMeshConcurNHR, topo.minTopoLevelNum = TOPO_LEVEL_NUM_2; topo.maxTopoLevelNum = TOPO_LEVEL_NUM_2;
-    op.unsupportedDataTypes = UNSUPPORTED_64BIT; op.isSupportInplace = false; op.isSupportProd = false;
+    op.unsupportedDataTypes = UNSUPPORTED_64BIT; op.isSupportInplace = true; op.isSupportProd = false;
     op.opCustomCheck = [](const OpParam& opParam, const TopoInfoWithNetLayerDetails* topo) -> bool {
         u64 perRankSize = opParam.DataDes.count * DATATYPE_SIZE_TABLE[opParam.DataDes.dataType];
         return perRankSize > 4ULL * 1024 * 1024 * 1024;
@@ -1019,7 +1019,7 @@ REGISTER_ALG_ATTRS(
     AicpuReduceSequenceNHRAicpuReduceNHR, topo.minTopoLevelNum = TOPO_LEVEL_NUM_2;
     topo.maxTopoLevelNum = TOPO_LEVEL_NUM_2;
     topo.supportLevel0Topos = LEVEL0_TOPO_MESH_1D | LEVEL0_TOPO_CLOS | LEVEL0_TOPO_MESH_1D_CLOS;
-    topo.isSupportLevel1Nhr = true; topo.isSupportLevel0PcieMix = false; op.isSupportInplace = false;
+    topo.isSupportLevel1Nhr = true; topo.isSupportLevel0PcieMix = false; op.isSupportInplace = true;
     op.opCustomCheck = [](const OpParam& opParam, const TopoInfoWithNetLayerDetails* topo) -> bool {
         return Is64BitDataType(opParam.DataDes.dataType) || opParam.reduceType == HcclReduceOp::HCCL_REDUCE_PROD;
     });

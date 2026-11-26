@@ -350,3 +350,92 @@ TEST(ReduceMeshNhrAicpuReduceOrchestrate, StagedSequenceAndInplaceSafety)
         }
     }
 }
+
+// Reduce AICPU 组合类算法 isSupportInplace 注册契约（只看注册 flag 与准入门槛，不覆盖数据面）
+#if CANN_VERSION_NUM >= CANN_VERSION(9, 0, 0)
+TEST(ReduceInplaceAttrsContract, ParallelMeshNHRDeclaresInplaceWithExistingGuards)
+{
+    const AlgAttrs* attrs = AlgAttrsRegistry::Instance().Get("AicpuReduceParallelMeshNHR");
+    ASSERT_NE(attrs, nullptr);
+    EXPECT_EQ(attrs->engine, OpExecuteConfig::AICPU_TS);
+    EXPECT_TRUE(attrs->op.isSupportInplace);
+    EXPECT_FALSE(attrs->op.isSupportProd);
+    EXPECT_EQ(attrs->op.unsupportedDataTypes, ops_hccl::UNSUPPORTED_64BIT);
+    EXPECT_EQ(attrs->topo.minTopoLevelNum, TOPO_LEVEL_NUM_1);
+    EXPECT_EQ(attrs->topo.maxTopoLevelNum, ops_hccl::TOPO_LEVEL_NUM_2);
+    ASSERT_NE(attrs->topo.topoCustomCheck, nullptr);
+    // topoCustomCheck：MESH_1D 常规两级放行；MESH_1D_CLOS 仅 pcieMix 且非全互连放行
+    TopoInfoWithNetLayerDetails topo;
+    topo.level0Topo = Level0Shape::MESH_1D;
+    EXPECT_TRUE(attrs->topo.topoCustomCheck(&topo));
+    topo.level0Topo = Level0Shape::MESH_1D_CLOS;
+    ops_hccl::g_utStubLayerAllConnected = false;
+    topo.level0PcieMix = true;
+    EXPECT_TRUE(attrs->topo.topoCustomCheck(&topo));
+    ops_hccl::g_utStubLayerAllConnected = true; // 全互连走 SoleMesh 域，不放行
+    EXPECT_FALSE(attrs->topo.topoCustomCheck(&topo));
+    ops_hccl::g_utStubLayerAllConnected = false;
+    topo.level0PcieMix = false;
+    EXPECT_FALSE(attrs->topo.topoCustomCheck(&topo));
+
+    // 同执行器同数据面的 AicpuReduceParallelNHRNHR 显式声明 inplace（默认值显式化防误翻）
+    const AlgAttrs* nhrNhr = AlgAttrsRegistry::Instance().Get("AicpuReduceParallelNHRNHR");
+    ASSERT_NE(nhrNhr, nullptr);
+    EXPECT_TRUE(nhrNhr->op.isSupportInplace);
+}
+#endif // CANN_VERSION_NUM >= CANN_VERSION(9, 0, 0)
+
+TEST(ReduceInplaceAttrsContract, SequenceMeshConcurNHRNHRDeclaresInplace)
+{
+    const AlgAttrs* attrs = AlgAttrsRegistry::Instance().Get("AicpuReduceSequenceMeshConcurNHRNHR");
+    ASSERT_NE(attrs, nullptr);
+    EXPECT_EQ(attrs->engine, OpExecuteConfig::AICPU_TS);
+    EXPECT_TRUE(attrs->op.isSupportInplace);
+    EXPECT_FALSE(attrs->op.isSupportProd);
+    EXPECT_EQ(attrs->op.unsupportedDataTypes, ops_hccl::UNSUPPORTED_64BIT);
+    EXPECT_EQ(attrs->topo.minTopoLevelNum, ops_hccl::TOPO_LEVEL_NUM_3);
+    EXPECT_EQ(attrs->topo.maxTopoLevelNum, ops_hccl::TOPO_LEVEL_NUM_3);
+    EXPECT_EQ(attrs->op.opCustomCheck, nullptr);
+}
+
+TEST(ReduceInplaceAttrsContract, SequenceMeshConcurNHRKeeps4GBGateWithInplace)
+{
+    const AlgAttrs* attrs = AlgAttrsRegistry::Instance().Get("AicpuReduceSequenceMeshConcurNHR");
+    ASSERT_NE(attrs, nullptr);
+    EXPECT_TRUE(attrs->op.isSupportInplace);
+    EXPECT_FALSE(attrs->op.isSupportProd);
+    EXPECT_EQ(attrs->op.unsupportedDataTypes, ops_hccl::UNSUPPORTED_64BIT);
+    ASSERT_NE(attrs->op.opCustomCheck, nullptr);
+    // opCustomCheck：perRankSize > 4GB 才放行（保持既有大数据门槛）
+    auto admit = [&attrs](u64 count) {
+        ops_hccl::OpParam param{};
+        param.DataDes.dataType = HcclDataType::HCCL_DATA_TYPE_FP32;
+        param.DataDes.count = count;
+        param.reduceType = HcclReduceOp::HCCL_REDUCE_SUM;
+        TopoInfoWithNetLayerDetails topo;
+        return attrs->op.opCustomCheck(param, &topo);
+    };
+    EXPECT_TRUE(admit(1073741825ULL));  // 4GB + 4B(FP32) 放行
+    EXPECT_FALSE(admit(1073741824ULL)); // 恰 4GB 拒绝
+}
+
+TEST(ReduceInplaceAttrsContract, SequenceNhrAicpuReduceNHRKeepsFallbackGateWithInplace)
+{
+    const AlgAttrs* attrs = AlgAttrsRegistry::Instance().Get("AicpuReduceSequenceNHRAicpuReduceNHR");
+    ASSERT_NE(attrs, nullptr);
+    EXPECT_TRUE(attrs->op.isSupportInplace);
+    ASSERT_NE(attrs->op.opCustomCheck, nullptr);
+    // opCustomCheck：仅 64bit / PROD 兜底域放行（保持既有门槛）
+    auto admit = [&attrs](HcclDataType dtype, HcclReduceOp reduceOp) {
+        ops_hccl::OpParam param{};
+        param.DataDes.dataType = dtype;
+        param.reduceType = reduceOp;
+        TopoInfoWithNetLayerDetails topo;
+        return attrs->op.opCustomCheck(param, &topo);
+    };
+    EXPECT_TRUE(admit(HcclDataType::HCCL_DATA_TYPE_INT64, HcclReduceOp::HCCL_REDUCE_SUM));
+    EXPECT_TRUE(admit(HcclDataType::HCCL_DATA_TYPE_UINT64, HcclReduceOp::HCCL_REDUCE_SUM));
+    EXPECT_TRUE(admit(HcclDataType::HCCL_DATA_TYPE_FP64, HcclReduceOp::HCCL_REDUCE_SUM));
+    EXPECT_TRUE(admit(HcclDataType::HCCL_DATA_TYPE_FP32, HcclReduceOp::HCCL_REDUCE_PROD));
+    EXPECT_FALSE(admit(HcclDataType::HCCL_DATA_TYPE_FP32, HcclReduceOp::HCCL_REDUCE_SUM)); // 域外
+}

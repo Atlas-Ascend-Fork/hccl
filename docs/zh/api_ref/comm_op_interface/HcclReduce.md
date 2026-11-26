@@ -96,13 +96,13 @@ HcclResult HcclReduce(void *sendBuf, void *recvBuf, uint64_t count, HcclDataType
 ## 约束说明
 
 - 所有rank的count、dataType、op均应相同。
-- 对称内存零拷贝模式：当所有rank的recvBuf均已注册对称内存窗口，且算法、拓扑、数据类型满足条件时，root侧工作区/终局汇集直接使用recvBuf，省去一次全量本地拷贝；非root的recvBuf仅作为窗口锚点，内容不参与计算，输出语义无效。要求全rank全部注册或全不注册，禁止部分rank注册。探测失败时自动回退CCL路径；该模式不修改sendBuf。
+- 对称内存零拷贝模式：当所有rank的recvBuf均已注册对称内存窗口，且算法、拓扑、数据类型满足条件时，root侧工作区/终局汇集直接使用recvBuf，省去一次全量本地拷贝；非root的recvBuf仅作为窗口锚点，内容不参与计算，输出语义无效。要求全rank全部注册或全不注册，禁止部分rank注册。探测失败时自动回退CCL路径。
 - 算子的输入输出地址（sendBuf与recvBuf）根据不同的数据类型，应满足如下对齐要求：
   - int8按照1Byte地址对齐。
   - int16、float16、bfp16按照2Byte地址对齐。
   - int32、float32按照4Byte地址对齐。
   - int64、uint64、float64按照8Byte地址对齐。
-- 支持inplace操作，即sendBuf与recvBuf指向同一地址，reduce结果直接写回输入buffer。当前CCU/AIV引擎算法支持inplace。
+- 支持inplace操作，即sendBuf与recvBuf指向同一地址，reduce结果直接写回输入buffer。
 - 多个通信域下的所有通信算子在每个Device上需要保证串行下发，不允许乱序、多线程并发下发，也不支持线程重入。
 - 在同一Device上，同一通信域内的所有通信算子的下发线程需要使用相同的Context。
 
