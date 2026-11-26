@@ -38,6 +38,13 @@ HcclResult ClearWarmupMapByCom(HcclComm comm);
 // 判断通信域名称是否为协商子通信域（后缀_negotiation，由公共协商机制 comm_negotiation 创建）
 bool IsNegotiationCommName(const char* commName);
 
+bool IsAclgraphZeroCopySupportedOp(HcclCMDType opType);
+
+bool IsAclgraphZeroCopyGateHit(const OpParam& param);
+
+HcclResult
+TryEnableAclgraphZeroCopy(OpParam& param, const TopoInfoWithNetLayerDetails* topoInfo, const std::string& algName);
+
 // 回退结果ctx缓存的数据布局：HcclExecOp回退缓存与CCU参数协商缓存共用
 struct FallbackCtxData {
     char algName[ALG_MAX_LENGTH];

@@ -214,6 +214,10 @@ HcclResult InsV2AlltoAllVSoleExecutor<AlgTopoMatch, InsAlgTemplate>::Orchestrate
     tempAlgParams.buffInfo.outputSize = param.outputSize;
     // 写语义通过执行期参数下传；host模板类型只负责选择对应的控核策略。
     tempAlgParams.isWrite = IsAivWriteEnabled(param, &resCtx.topoInfo);
+    // 图模式（aclgraph OFFLOAD）零拷贝：直写对端 remote buffer，但保留按 UB/scratch 分片 loop，
+    // 与对称内存（loopTimes=1 一次传完）区分；仅等量 ALLTOALL，V/VC 变长模板未适配零拷贝。
+    tempAlgParams.enableRemoteMemAccess
+        = param.opMode == OpMode::OFFLOAD && param.opType == HcclCMDType::HCCL_CMD_ALLTOALL;
 
     // RestoreVarDataAlltoAllV 已经将数据放到对应的指针
     std::vector<u64> sendCounts(rankSize_, 0);

@@ -28,6 +28,9 @@ add_subdirectory(common/ccu_resource_expansion)
 add_subdirectory(common/white_box_guards)
 # sym_mem_gate: 对称内存公共层门禁矩阵（opType/算法白名单/类型门禁/input侧探测策略/探测失败回退）
 add_subdirectory(common/sym_mem_gate)
+# aclgraph_zero_copy_gate: aclgraph零拷贝gate UT（白名单矩阵/gate条件组合/tag追加与无空间回退/
+# seq分桶含send-recv同pair同号），直编op_common.cc/stream_capture.cc + 捕获态可控桩
+add_subdirectory(common/aclgraph_zero_copy_gate)
 add_subdirectory(common/template_utils)
 add_subdirectory(common/alg_rank)
 add_subdirectory(selector_engine)
