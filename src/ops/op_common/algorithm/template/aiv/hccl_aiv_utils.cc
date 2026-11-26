@@ -587,7 +587,8 @@ static_assert(
     std::is_same<decltype(AivKernelArgs::isEnableCounter), bool>::value,
     "host AivKernelArgs::isEnableCounter must be bool to match device layout");
 
-using AivExtraKernelArgs = struct AivExtraKernelArgsDef {
+template <typename ExtraArgsT>
+struct AivExtraKernelArgsDef {
     const void* buffersIn; // 注册的CCLIN地址，所有卡可访问
     u64 input;
     u64 output;
@@ -615,7 +616,7 @@ using AivExtraKernelArgs = struct AivExtraKernelArgsDef {
     alignas(sizeof(u32)) bool isWrite;
     u32 subCommRankLevel = 0;
     u32 level0ChannelNumPerRank = 0;
-    ExtraArgs extraArgs;
+    ExtraArgsT extraArgs;
 
     AivExtraKernelArgsDef(
         const void* buffIn, u64 input, u64 output, u32 rank, u32 sendRecvRemoteRank, u32 rankSize, u64 len,
@@ -623,7 +624,7 @@ using AivExtraKernelArgs = struct AivExtraKernelArgsDef {
         u64 inputRepeatStride, u64 outputRepeatStride, u32 numBlocks, bool isOpBase = true,
         const void* headCountMem = nullptr, const void* tailCountMem = nullptr, const void* addOneMem = nullptr,
         u32 counterMemSize = 0, bool isEnableCounter = false, bool isWrite = false, u32 subCommRankLevel = 0,
-        u32 level0ChannelNumPerRank = 0, const ExtraArgs* extraArgsPtr = nullptr)
+        u32 level0ChannelNumPerRank = 0, const ExtraArgsT* extraArgsPtr = nullptr)
         : buffersIn(buffIn),
           input(input),
           output(output),
@@ -656,6 +657,9 @@ using AivExtraKernelArgs = struct AivExtraKernelArgsDef {
         }
     }
 };
+
+using AivExtraKernelArgs = AivExtraKernelArgsDef<ExtraArgs>;
+using AivExtraKernelArgsLarge = AivExtraKernelArgsDef<ExtraArgsLarge>;
 
 // BatchSendRecv 专用 kernel 入参：在公共入参尾部追加一次性下发的任务描述
 using AivBsrKernelArgs = struct AivBsrKernelArgsDef {
@@ -1198,6 +1202,11 @@ HcclResult ReplayAivInstructionsV(const AivInstruction* instructions, u32 insCou
     const u64* recvCounts = static_cast<const u64*>(param.all2AllVDataDes.recvCounts);
     const u64* rdispls = static_cast<const u64*>(param.all2AllVDataDes.rdispls);
     u32 rankSize = instructions[0].opArgs.rankSize;
+    CHK_PRT_RET(
+        rankSize > MAX_RANK_SIZE_V_LARGE,
+        HCCL_ERROR(
+            "[ReplayAivInstructionsV] rankSize[%u] exceeds large rank limit[%u]", rankSize, MAX_RANK_SIZE_V_LARGE),
+        HcclResult::HCCL_E_NOT_SUPPORT);
 
     for (uint32_t i = 0; i < insCount; ++i) {
         AivOpArgs newArgs = instructions[i].opArgs;
@@ -1206,10 +1215,22 @@ HcclResult ReplayAivInstructionsV(const AivInstruction* instructions, u32 insCou
         newArgs.output = reinterpret_cast<u64>(param.outputPtr) + instructions[i].outputOffset;
 
         u64 copySize = static_cast<u64>(rankSize) * sizeof(u64);
-        CHK_SAFETY_FUNC_RET(memcpy_s(newArgs.extraArgs.sendCounts, copySize, sendCounts, copySize));
-        CHK_SAFETY_FUNC_RET(memcpy_s(newArgs.extraArgs.sendDispls, copySize, sdispls, copySize));
-        CHK_SAFETY_FUNC_RET(memcpy_s(newArgs.extraArgs.recvCounts, copySize, recvCounts, copySize));
-        CHK_SAFETY_FUNC_RET(memcpy_s(newArgs.extraArgs.recvDispls, copySize, rdispls, copySize));
+        if (rankSize > MAX_RANK_SIZE_V) {
+            newArgs.extraArgsLarge = ExtraArgsLarge{};
+            CHK_SAFETY_FUNC_RET(memcpy_s(
+                newArgs.extraArgsLarge.sendCounts, sizeof(newArgs.extraArgsLarge.sendCounts), sendCounts, copySize));
+            CHK_SAFETY_FUNC_RET(memcpy_s(
+                newArgs.extraArgsLarge.sendDispls, sizeof(newArgs.extraArgsLarge.sendDispls), sdispls, copySize));
+            CHK_SAFETY_FUNC_RET(memcpy_s(
+                newArgs.extraArgsLarge.recvCounts, sizeof(newArgs.extraArgsLarge.recvCounts), recvCounts, copySize));
+            CHK_SAFETY_FUNC_RET(memcpy_s(
+                newArgs.extraArgsLarge.recvDispls, sizeof(newArgs.extraArgsLarge.recvDispls), rdispls, copySize));
+        } else {
+            CHK_SAFETY_FUNC_RET(memcpy_s(newArgs.extraArgs.sendCounts, copySize, sendCounts, copySize));
+            CHK_SAFETY_FUNC_RET(memcpy_s(newArgs.extraArgs.sendDispls, copySize, sdispls, copySize));
+            CHK_SAFETY_FUNC_RET(memcpy_s(newArgs.extraArgs.recvCounts, copySize, recvCounts, copySize));
+            CHK_SAFETY_FUNC_RET(memcpy_s(newArgs.extraArgs.recvDispls, copySize, rdispls, copySize));
+        }
         newArgs.totalDataCount = param.dataCount;
         CHK_RET(ExecuteKernelLaunch(newArgs));
     }
@@ -1285,7 +1306,7 @@ HcclResult ClearAivTagCb(HcclComm comm, HcclCommStatePhase state, void* userPtr)
 }
 
 // KernelLaunch内部接口
-HcclResult ExecuteKernelLaunchInner(const AivOpArgs& opArgs, void* args, u32 argsSize)
+HcclResult ExecuteKernelLaunchInner(const AivOpArgs& opArgs, void* args, u32 argsSize, KernelArgsType argsType)
 {
     AivLaunchGuard launchGuard;
     HcclResult guardRet = launchGuard.Acquire();
@@ -1322,7 +1343,7 @@ HcclResult ExecuteKernelLaunchInner(const AivOpArgs& opArgs, void* args, u32 arg
         attr[0].id, attr[0].value.schemMode, attr[1].id, attr[1].value.timeoutUs.timeoutLow,
         attr[1].value.timeoutUs.timeoutHigh, attr[2].id, attr[2].value.engineType, cfg.numAttrs);
 
-    s8* funcKey = GetFuncKey(opArgs.cmdType, opArgs.dataType, opArgs.argsType);
+    s8* funcKey = GetFuncKey(opArgs.cmdType, opArgs.dataType, argsType);
     AivKernelLookupResult kernelLookupResult;
     HcclResult ret = GetKernelEntry(kernelLookupResult, funcKey);
     CHK_PRT_RET(
@@ -1396,36 +1417,78 @@ HcclResult ExecuteKernelLaunch(const AivOpArgs& opArgs)
     (void)GetStuckDetectCounterInfo(opArgs.hcclComm, stuckCounter);
 
     if (opArgs.cmdType == HcclCMDType::HCCL_CMD_ALLTOALLV) {
-        AivExtraKernelArgs aivExtraKernelArgs{
-            opArgs.buffersIn,
-            opArgs.input,
-            opArgs.output,
-            opArgs.rank,
-            opArgs.sendRecvRemoteRank,
-            opArgs.rankSize,
-            opArgs.count,
-            opArgs.dataType,
-            opArgs.op,
-            opArgs.root,
-            opArgs.sliceId,
-            opArgs.inputSliceStride,
-            opArgs.outputSliceStride,
-            opArgs.repeatNum,
-            opArgs.inputRepeatStride,
-            opArgs.outputRepeatStride,
-            opArgs.numBlocks,
-            opArgs.isOpBase,
-            nullptr,
-            nullptr,
-            nullptr,
-            0U,
-            false,
-            opArgs.isWrite,
-            opArgs.subCommRankLevel,
-            opArgs.level0ChannelNumPerRank,
-            &opArgs.extraArgs};
-        FillAivStuckCounter(aivExtraKernelArgs, stuckCounter);
-        CHK_RET(ExecuteKernelLaunchInner(opArgs, &aivExtraKernelArgs, sizeof(aivExtraKernelArgs)));
+        if (opArgs.rankSize <= MAX_RANK_SIZE_V) {
+            AivExtraKernelArgs aivExtraKernelArgs{
+                opArgs.buffersIn,
+                opArgs.input,
+                opArgs.output,
+                opArgs.rank,
+                opArgs.sendRecvRemoteRank,
+                opArgs.rankSize,
+                opArgs.count,
+                opArgs.dataType,
+                opArgs.op,
+                opArgs.root,
+                opArgs.sliceId,
+                opArgs.inputSliceStride,
+                opArgs.outputSliceStride,
+                opArgs.repeatNum,
+                opArgs.inputRepeatStride,
+                opArgs.outputRepeatStride,
+                opArgs.numBlocks,
+                opArgs.isOpBase,
+                nullptr,
+                nullptr,
+                nullptr,
+                0U,
+                false,
+                opArgs.isWrite,
+                opArgs.subCommRankLevel,
+                opArgs.level0ChannelNumPerRank,
+                &opArgs.extraArgs};
+            FillAivStuckCounter(aivExtraKernelArgs, stuckCounter);
+            CHK_RET(ExecuteKernelLaunchInner(opArgs, &aivExtraKernelArgs, sizeof(aivExtraKernelArgs), opArgs.argsType));
+        } else {
+            AivExtraKernelArgsLarge aivExtraKernelArgsLarge{
+                opArgs.buffersIn,
+                opArgs.input,
+                opArgs.output,
+                opArgs.rank,
+                opArgs.sendRecvRemoteRank,
+                opArgs.rankSize,
+                opArgs.count,
+                opArgs.dataType,
+                opArgs.op,
+                opArgs.root,
+                opArgs.sliceId,
+                opArgs.inputSliceStride,
+                opArgs.outputSliceStride,
+                opArgs.repeatNum,
+                opArgs.inputRepeatStride,
+                opArgs.outputRepeatStride,
+                opArgs.numBlocks,
+                opArgs.isOpBase,
+                nullptr,
+                nullptr,
+                nullptr,
+                0U,
+                false,
+                opArgs.isWrite,
+                opArgs.subCommRankLevel,
+                opArgs.level0ChannelNumPerRank,
+                &opArgs.extraArgsLarge};
+            FillAivStuckCounter(aivExtraKernelArgsLarge, stuckCounter);
+            // URMA算法仅支持到256 rank(注册上限MAX_RANK_SIZE_V), 大规格路径只有非URMA kernel
+            CHK_PRT_RET(
+                opArgs.argsType == KernelArgsType::ARGS_TYPE_URMA,
+                HCCL_ERROR(
+                    "[ExecuteKernelLaunch] URMA alltoallv not support rankSize[%u] > %u.", opArgs.rankSize,
+                    MAX_RANK_SIZE_V),
+                HCCL_E_INTERNAL);
+            CHK_RET(ExecuteKernelLaunchInner(
+                opArgs, &aivExtraKernelArgsLarge, sizeof(aivExtraKernelArgsLarge),
+                KernelArgsType::ARGS_TYPE_LARGE_RANK));
+        }
     } else if (opArgs.cmdType == HcclCMDType::HCCL_CMD_BATCH_SEND_RECV) {
         // batch_send_recv 应使用独立的入口 ExecuteKernelLaunchBsr
         HCCL_ERROR(
@@ -1460,7 +1523,7 @@ HcclResult ExecuteKernelLaunch(const AivOpArgs& opArgs)
             opArgs.subCommRankLevel,
             opArgs.level0ChannelNumPerRank};
         FillAivStuckCounter(aivKernelArgs, stuckCounter);
-        CHK_RET(ExecuteKernelLaunchInner(opArgs, &aivKernelArgs, sizeof(aivKernelArgs)));
+        CHK_RET(ExecuteKernelLaunchInner(opArgs, &aivKernelArgs, sizeof(aivKernelArgs), opArgs.argsType));
     }
     return HCCL_SUCCESS;
 }
@@ -1504,7 +1567,7 @@ HcclResult ExecuteKernelLaunchBsr(const AivOpArgs& opArgs, const ExtraArgsBsr& e
         opArgs.isWrite,
         opArgs.subCommRankLevel,
         opArgs.level0ChannelNumPerRank};
-    CHK_RET(ExecuteKernelLaunchInner(opArgs, &aivBsrKernelArgs, sizeof(aivBsrKernelArgs)));
+    CHK_RET(ExecuteKernelLaunchInner(opArgs, &aivBsrKernelArgs, sizeof(aivBsrKernelArgs), opArgs.argsType));
     return HCCL_SUCCESS;
 }
 

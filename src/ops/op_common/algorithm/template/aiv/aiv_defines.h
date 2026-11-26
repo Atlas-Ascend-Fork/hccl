@@ -22,6 +22,7 @@ using namespace AscendC;
 // ---------------------------------------------------------------------------
 constexpr uint32_t MAX_RANK_SIZE = 1024; // server内最大卡数
 constexpr uint32_t MAX_RANK_SIZE_V = 256;
+constexpr uint32_t MAX_RANK_SIZE_V_LARGE = 768;
 constexpr uint32_t AIV_URMA_ALLTOALLV_GROUP_SIZE = 16U; // 每轮并发对端上限(host侧同名常量须同步)
 constexpr uint32_t BR_CTRL_CORE_LIMIT_RANK_SIZE = 64;
 constexpr uint64_t BUFFER_OUT_ADDR_OFFSET = 16 * 1024;
@@ -110,6 +111,13 @@ struct ExtraArgs {
     uint64_t recvDispls[MAX_RANK_SIZE_V] = {};
 };
 
+struct ExtraArgsLarge {
+    uint64_t sendCounts[MAX_RANK_SIZE_V_LARGE] = {};
+    uint64_t sendDispls[MAX_RANK_SIZE_V_LARGE] = {};
+    uint64_t recvCounts[MAX_RANK_SIZE_V_LARGE] = {};
+    uint64_t recvDispls[MAX_RANK_SIZE_V_LARGE] = {};
+};
+
 using AivSuperKernelArgs = struct AivSuperKernelArgsDef {
     GM_ADDR buffersIn = nullptr; // 注册的CCLIN地址，所有卡可访问
     uint64_t rank;
@@ -170,6 +178,8 @@ enum class CommPattern {
         uint32_t level0ChannelNumPerRank
 
 #define EXTERN_KERNEL_ARGS_DEF_V2 KERNEL_ARGS_DEF, ExtraArgs extraArgs
+
+#define EXTERN_KERNEL_ARGS_DEF_V2_LARGE KERNEL_ARGS_DEF, ExtraArgsLarge extraArgs
 
 #define KERNEL_ARGS_CALL                                                                                            \
     buffIn, input, output, rank, sendRecvRemoteRank, rankSize, len, dataType, reduceOp, root, sliceId,              \

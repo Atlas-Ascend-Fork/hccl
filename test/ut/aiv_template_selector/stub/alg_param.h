@@ -74,6 +74,7 @@ struct OpParam {
     } all2AllVDataDes;
     u32 numBlocksLimit = 48;
     u32 reduceType = 0;
+    u64 dataCount = 0;
     void* stream = nullptr;
 };
 
@@ -102,6 +103,9 @@ struct TemplateDataParams {
     u64 inputSliceStride = 0;
     u64 outputSliceStride = 0;
     std::vector<u64> sendCounts;
+    std::vector<u64> recvCounts;
+    std::vector<u64> sdispls;
+    std::vector<u64> rdispls;
     bool isWrite = false;
     HcclReduceOp reduceOp = HcclReduceOp::HCCL_REDUCE_SUM;
     u64 repeatNum = 1;

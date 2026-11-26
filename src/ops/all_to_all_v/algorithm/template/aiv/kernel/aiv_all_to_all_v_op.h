@@ -27,12 +27,21 @@ using namespace AscendC;
     extern "C" __global__ __aicore__ void aiv_alltoallv_##type(EXTERN_KERNEL_ARGS_DEF_V2) \
     {                                                                                     \
         AIV_INFO_HINT;                                                                    \
-        AivAlltoAllVV2Mesh1D<type>(EXTERN_KERNEL_ARGS_CALL);                              \
+        AivAlltoAllVV2Mesh1D<type, ExtraArgs>(EXTERN_KERNEL_ARGS_CALL);                   \
     }                                                                                     \
     EXPORT_AIV_META_INFO(aiv_alltoallv_##type)
 
+#define AIV_ALL_TO_ALL_V_LARGE_KERNEL_BATCH_DEF(type)                                                 \
+    extern "C" __global__ __aicore__ void aiv_alltoallv_large_##type(EXTERN_KERNEL_ARGS_DEF_V2_LARGE) \
+    {                                                                                                 \
+        AIV_INFO_HINT;                                                                                \
+        AivAlltoAllVV2Mesh1D<type, ExtraArgsLarge>(EXTERN_KERNEL_ARGS_CALL);                          \
+    }                                                                                                 \
+    EXPORT_AIV_META_INFO(aiv_alltoallv_large_##type)
+
 // 定义各算子各数据类型Kernel入口
 AIV_COPY_DATA_TYPE_DEF(AIV_ALL_TO_ALL_V_KERNEL_BATCH_DEF);
+AIV_COPY_DATA_TYPE_DEF(AIV_ALL_TO_ALL_V_LARGE_KERNEL_BATCH_DEF);
 
 // URMA AllToAllV kernel入口（编入同一个.o文件）
 // 960(A6/dav-920r1)只保留空kernel入口，不包含URMA实现（其编译环境无version/和hcomm相关头文件）
