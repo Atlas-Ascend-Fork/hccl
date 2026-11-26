@@ -8,73 +8,63 @@
 # See LICENSE in the root of the software repository for the full text of the License.
 # -----------------------------------------------------------------------------------------------------------
 
-# 该 UT 依赖 GE 对外接口 TaskDefBuilder（业务方法弱符号）/ OpImplRegisterV2 / kHcclSuperKernel，
-# 接口不存在时跳过。注意：以下编译探测代码与 src/hccl.cmake 保持逐字一致，修改时请同步另一处。
-include(CheckCXXSourceCompiles)
-set(_hccl_sk_probe_saved_includes "${CMAKE_REQUIRED_INCLUDES}")
-set(_hccl_sk_probe_saved_flags "${CMAKE_REQUIRED_FLAGS}")
-set(_hccl_sk_probe_saved_try_type "${CMAKE_TRY_COMPILE_TARGET_TYPE}")
-set(CMAKE_REQUIRED_INCLUDES
+# 仅验证 HCCL 自身逻辑，GE 外部符号由 ge_dependencies_stub.cc 提供，不链接真实 GE 库。
+# 配置阶段直接编译实际桩源，并检查 UT/生产头使用的 GE 声明，避免探针与真实编译面漂移。
+set(_repo_root ${CMAKE_CURRENT_SOURCE_DIR}/../../..)
+set(_hccl_sk_probe_includes
+    ${_repo_root}/src/common
+    ${_repo_root}/src/common/op_graph
     ${ASCEND_CANN_PACKAGE_PATH}/include
     ${ASCEND_CANN_PACKAGE_PATH}/include/exe_graph
+    ${ASCEND_CANN_PACKAGE_PATH}/include/external
+    ${ASCEND_CANN_PACKAGE_PATH}/include/hccl
+    ${ASCEND_CANN_PACKAGE_PATH}/pkg_inc
+    ${ASCEND_CANN_PACKAGE_PATH}/pkg_inc/base
 )
+
+include(CMakePushCheckState)
+include(CheckCXXSourceCompiles)
+cmake_push_check_state(RESET)
+set(_hccl_sk_probe_saved_try_type "${CMAKE_TRY_COMPILE_TARGET_TYPE}")
+set(CMAKE_REQUIRED_INCLUDES ${_hccl_sk_probe_includes})
 set(CMAKE_REQUIRED_FLAGS "-std=c++17")
-# 仅做编译探测，不参与链接，避免被 GE 库的传递依赖（protobuf/platform 等）干扰
 set(CMAKE_TRY_COMPILE_TARGET_TYPE STATIC_LIBRARY)
-unset(HCCL_HAS_GE_SUPERKERNEL_GENTASK CACHE)
+
+unset(HCCL_SUPERKERNEL_UT_DECLARATIONS_OK CACHE)
 check_cxx_source_compiles([=[
-#include <cstddef>
-#include <cstdint>
-#include <optional>
-#include <vector>
-#include "exe_graph/runtime/exe_res_generation_context.h"
+#include "hccl_gen_task_superkernel.h"
+#include "op_util.h"
 #include "exe_graph/runtime/task_def_builder.h"
 #include "graph/arg_desc_info.h"
 #include "register/op_impl_registry.h"
-
-// 等价于 hccl_gen_task_superkernel.cc 的 MakeSuperKernelReg：构造后按值返回，
-// 同时覆盖 OpImplRegisterV2 的拷贝/移动性（生产代码 return reg 依赖）
-static std::optional<gert::OpImplRegisterV2> MakeRegProbe(const char* opType)
-{
-    gert::OpImplRegisterV2 reg(opType);
-    reg.GenerateTask(nullptr);
-    return reg;
-}
-
 int main()
 {
-    // 弱符号业务方法存在性探测（老 toolkit 上解析为空指针，调用前判空）
-    const bool taskDefBuilderAvailable = &gert::TaskDefBuilder::SetStreamId != nullptr;
-    (void)taskDefBuilderAvailable;
-    // 运行期条件注册等价于 IMPL_OP(...).GenerateTask(...) 的静态注册
-    const auto reg = MakeRegProbe("HcomAllReduce");
-    (void)reg;
-    // TaskDefBuilder 调用链：即 hccl_gen_task_superkernel.cc 的 TaskDef 构建/序列化形状
-    gert::TaskDefBuilder task;
-    task.SetStreamId(1U).SetType(0U);
-    task.GetKernelBuilder().SetBlockDim(1U).GetContextBuilder().SetArgsFormat(ge::AscendString("{i0*}"));
-    const size_t size = task.ByteSizeLong();
-    std::vector<uint8_t> buffer(size, 0U);
-    (void)task.SerializeToArray(buffer.data(), size);
-    // args format 的构建/序列化（superkernel 语义标记所在）
-    std::vector<ge::ArgDescInfo> args;
-    args.emplace_back(ge::ArgDescInfo(ge::ArgDescType::kIrInput, 0));
-    args.insert(args.begin(), ge::ArgDescInfo::CreateHiddenInput(ge::HiddenInputSubType::kHcclSuperKernel));
-    const ge::AscendString fmt = ge::ArgsFormatSerializer::Serialize(args);
-    (void)fmt;
+    (void)&ge::ArgsFormatSerializer::Serialize;
+    (void)&gert::ExeResGenerationContext::GetStreamId;
+    (void)&gert::ExeResGenerationContext::GetStrAttrVal;
+    (void)&gert::ExeResGenerationContext::GetIntAttrVal;
+    (void)&gert::ExeResGenerationContext::SetStrAttrVal;
     return 0;
 }
-]=] HCCL_HAS_GE_SUPERKERNEL_GENTASK)
-set(CMAKE_REQUIRED_INCLUDES "${_hccl_sk_probe_saved_includes}")
-set(CMAKE_REQUIRED_FLAGS "${_hccl_sk_probe_saved_flags}")
-set(CMAKE_TRY_COMPILE_TARGET_TYPE "${_hccl_sk_probe_saved_try_type}")
+]=] HCCL_SUPERKERNEL_UT_DECLARATIONS_OK)
 
-if(NOT HCCL_HAS_GE_SUPERKERNEL_GENTASK)
-    message(STATUS "[UT] hccl_gen_task_superkernel skipped: GE superkernel GenTask interface not available.")
+unset(HCCL_SUPERKERNEL_UT_STUB_COMPILES CACHE)
+try_compile(HCCL_SUPERKERNEL_UT_STUB_COMPILES
+    ${CMAKE_BINARY_DIR}/hccl_superkernel_ut_probe
+    SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/ge_dependencies_stub.cc
+    CMAKE_FLAGS "-DINCLUDE_DIRECTORIES=${_hccl_sk_probe_includes}"
+    COMPILE_DEFINITIONS "-std=c++17"
+    OUTPUT_VARIABLE _hccl_sk_probe_output
+)
+set(CMAKE_TRY_COMPILE_TARGET_TYPE "${_hccl_sk_probe_saved_try_type}")
+cmake_pop_check_state()
+
+if(NOT HCCL_SUPERKERNEL_UT_DECLARATIONS_OK OR NOT HCCL_SUPERKERNEL_UT_STUB_COMPILES)
+    message(STATUS "[UT] hccl_gen_task_superkernel skipped: GE declarations incompatible with actual UT sources.")
+    message(STATUS "${_hccl_sk_probe_output}")
     return()
 endif()
 
-# 与 src/hccl.cmake 保持一致：cann-cmake 未提供 add_cann_third_party 或未创建 json 目标时跳过本 UT
 if(COMMAND add_cann_third_party)
     add_cann_third_party(json)
 endif()
@@ -83,12 +73,11 @@ if(NOT TARGET json)
     return()
 endif()
 
-set(_repo_root ${CMAKE_CURRENT_SOURCE_DIR}/../../..)
-
 add_executable(hccl_gen_task_superkernel_test
-    ${CMAKE_CURRENT_SOURCE_DIR}/test_hccl_gen_task_superkernel.cc
+    test_hccl_gen_task_superkernel.cc
+    ge_dependencies_stub.cc
+    ../op_graph_utils/stub/log_stub.cc
     ${_repo_root}/src/common/op_graph/hccl_gen_task_superkernel.cc
-    ${_repo_root}/src/common/log.cc
 )
 
 target_include_directories(hccl_gen_task_superkernel_test PRIVATE
@@ -102,33 +91,12 @@ target_include_directories(hccl_gen_task_superkernel_test PRIVATE
     ${ASCEND_CANN_PACKAGE_PATH}/pkg_inc/base
 )
 
-target_compile_options(hccl_gen_task_superkernel_test PRIVATE
-    -U_FORTIFY_SOURCE
-)
-
-target_link_directories(hccl_gen_task_superkernel_test PRIVATE
-    ${ASCEND_CANN_PACKAGE_PATH}/lib64
-)
-
+target_compile_options(hccl_gen_task_superkernel_test PRIVATE -U_FORTIFY_SOURCE)
 target_link_libraries(hccl_gen_task_superkernel_test PRIVATE
     intf_llt_pub
     GTest::gtest_main
     -lpthread
-    ${CMAKE_DL_LIBS}
     json
-    graph
-    graph_base
-    register
-    opp_registry
-    exe_graph
-    platform
-    ge_common
-    unified_dlog
-)
-
-target_link_options(hccl_gen_task_superkernel_test PRIVATE
-    "-Wl,-rpath-link,${ASCEND_CANN_PACKAGE_PATH}/lib64"
-    "-Wl,-rpath,${ASCEND_CANN_PACKAGE_PATH}/lib64"
 )
 
 run_llt_test(TARGET hccl_gen_task_superkernel_test)
