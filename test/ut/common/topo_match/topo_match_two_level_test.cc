@@ -141,6 +141,27 @@ TEST_F(TopoMatchTwoLevelTest, RedundantLayerCompression)
     ASSERT_EQ(info.physicalIdxForAlgoLevels[1][0], PhysicalLevelIndex::PHYSICAL_LEVEL_IDX_1);
 }
 
+// T2b: Mesh算法档 3 物理层折叠为 2 算法层(AicpuAllToAllSequenceMeshMesh 三级拓扑场景):
+// L0(server mesh 1DMESH)锚定算法L0, 算法L1由尾段匹配到全域物理层L2, 中间层被压缩
+TEST_F(TopoMatchTwoLevelTest, MeshAlgoThreePhysicalLevelsFoldToTwo)
+{
+    auto topo = MakeTopoInfo(
+        3, 32,
+        {
+            MakeLevel(Range(8), PhysicalLevelView::GLOBAL, {8, 8, 8, 8}, true, COMM_TOPO_1DMESH),
+            MakeLevel(Range(16), PhysicalLevelView::GLOBAL, {16, 16}),
+            MakeLevel(Range(32), PhysicalLevelView::GLOBAL, {32}),
+        });
+    AlgAttrs profile = MakeProfile({AlgoType::MESH, AlgoType::MESH});
+    AlgHierarchyInfoForAllLevel info;
+    ASSERT_EQ(matcher_.MatchTopo(&topo, info, profile), HcclResult::HCCL_SUCCESS);
+    ASSERT_EQ(info.infos.size(), 2u);
+    ASSERT_EQ(info.infos[0][0], Range(8));
+    ASSERT_EQ(info.infos[1][0], (std::vector<u32>{3, 11, 19, 27}));
+    ASSERT_EQ(info.physicalIdxForAlgoLevels[0][0], PhysicalLevelIndex::PHYSICAL_LEVEL_IDX_0);
+    ASSERT_EQ(info.physicalIdxForAlgoLevels[1][0], PhysicalLevelIndex::PHYSICAL_LEVEL_IDX_2);
+}
+
 // T3: MeshConcur CLOS 双层（physicalIdx[0] = {Mesh层, CLOS层}）
 TEST_F(TopoMatchTwoLevelTest, MeshConcurDualLayerClos)
 {

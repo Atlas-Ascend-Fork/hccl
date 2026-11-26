@@ -645,8 +645,8 @@ AlgNetMeta InsV2AlltoAllSequenceExecutor<AlgTopoMatch>::GetAlgNetMeta(
 REGISTER_EXECUTOR_BY_TOPO(
     HcclCMDType::HCCL_CMD_ALLTOALL, AicpuAllToAllSequenceMeshMesh, InsV2AlltoAllSequenceExecutor, TopoMatchTwoLevel);
 
-REGISTER_ALG_ATTRS(AicpuAllToAllSequenceMeshMesh, topo.minTopoLevelNum = 2; topo.maxTopoLevelNum = 2;
-                   topo.supportLevel0Topos = LEVEL0_TOPO_MESH_1D;);
+REGISTER_ALG_ATTRS(AicpuAllToAllSequenceMeshMesh, topo.minTopoLevelNum = TOPO_LEVEL_NUM_2;
+                   topo.maxTopoLevelNum = TOPO_LEVEL_NUM_3; topo.supportLevel0Topos = LEVEL0_TOPO_MESH_1D;);
 
 #ifndef AICPU_COMPILE
 #if CANN_VERSION_NUM >= CANN_VERSION(9, 0, 0)
