@@ -871,13 +871,26 @@ HcclResult ParseEntryLogEnable()
 
 HcclResult ParseAicpuTaskCacheEnable()
 {
+    // 本解析在InitEnvConfig的initialized检查之前（每次算子调用均重新解析以支持运行中改配），
+    // RUN通道不随日志级别关闭，按值去重打印防止训练循环按算子刷屏；值变化时打印一次。
+    // -2 表示未设置，-1 为初值，二者不等以触发首次打印；切换到已设置值时亦会再次打印。
+    static std::atomic<int32_t> lastLoggedValue{-1};
+
+    auto logNotSet = []() {
+        if (lastLoggedValue.exchange(-2) != -2) {
+            HCCL_RUN_INFO("[HCCL_ENV][ParseAicpuTaskCacheEnable] HCOMM_AICPU_TASK_CACHE_ENABLE is not set");
+        }
+    };
+
     std::string value = GetEnv("HCOMM_AICPU_TASK_CACHE_ENABLE");
     if (value == "EmptyString") {
+        logNotSet();
         return HCCL_SUCCESS; // 未设置或为空时沿用旧开关的解析结果。
     }
 
     const auto first = value.find_first_not_of(" \t\n\r\f\v");
     if (first == std::string::npos) {
+        logNotSet();
         return HCCL_SUCCESS;
     }
     const auto last = value.find_last_not_of(" \t\n\r\f\v");
@@ -897,9 +910,6 @@ HcclResult ParseAicpuTaskCacheEnable()
         return HCCL_E_PARA;
     }
 
-    // 本解析在InitEnvConfig的initialized检查之前（每次算子调用均重新解析以支持运行中改配），
-    // RUN通道不随日志级别关闭，按值去重打印防止训练循环按算子刷屏；值变化时打印一次
-    static std::atomic<int32_t> lastLoggedValue{-1};
     int32_t curValue = static_cast<int32_t>(g_algEnvConfig.aicpuCacheEnable);
     if (lastLoggedValue.exchange(curValue) != curValue) {
         HCCL_RUN_INFO(
