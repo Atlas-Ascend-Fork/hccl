@@ -115,7 +115,7 @@ void* HcclDlsym(void*, const char* name)
                reinterpret_cast<void*>(&WriteReduceStub) :
                nullptr;
 }
-int GetHcommVersion() { return CANN_VERSION(9, 2, 0, 2); }
+int GetHcommVersion() { return CANN_VERSION(9, 3, 0); }
 HcclResult HcclGetHcclBuffer(HcclComm, void**, uint64_t*)
 {
     ADD_FAILURE() << "HostDPU selector UT unexpectedly entered AIV resource preparation";

@@ -13,7 +13,7 @@
 #include "order_preserved_common.h"
 
 namespace {
-int g_hcommVersion = CANN_VERSION(9, 2, 0, 2);
+int g_hcommVersion = CANN_VERSION(9, 3, 0);
 }
 
 extern "C" int GetHcommVersion(void) { return g_hcommVersion; }
@@ -39,7 +39,7 @@ namespace {
 
     void SetCommDeterministicLevel(uint32_t deterministicLevel)
     {
-        g_hcommVersion = CANN_VERSION(9, 2, 0, 2);
+        g_hcommVersion = CANN_VERSION(9, 3, 0);
         g_deterministicLevel = deterministicLevel;
         DlHcommFunction::GetInstance().dlHcclConfigGetInfo
             = [](HcclComm comm, HcclConfigType, uint32_t, void* info) -> HcclResult {
@@ -58,6 +58,23 @@ namespace {
         return param;
     }
 
+    TEST(OrderPreservedCommonTest, UsesEnvironmentLevelThroughHcomm930Beta1)
+    {
+        int commToken = 0;
+        const int savedHcommVersion = g_hcommVersion;
+        SetCommDeterministicLevel(static_cast<uint32_t>(DeterministicEnableLevel::DETERMINISTIC_STRICT));
+        const u8 savedEnvironmentLevel = g_environmentLevel;
+        g_environmentLevel = static_cast<u8>(DeterministicEnableLevel::DETERMINISTIC_ENABLE);
+        for (int version : {CANN_VERSION(9, 2, 2), CANN_VERSION(9, 3, 0, 1)}) {
+            g_hcommVersion = version;
+            g_queriedComm = nullptr;
+            EXPECT_EQ(GetDeterministicLevel(&commToken), g_environmentLevel);
+            EXPECT_EQ(g_queriedComm, nullptr);
+        }
+        g_environmentLevel = savedEnvironmentLevel;
+        g_hcommVersion = savedHcommVersion;
+    }
+
     TEST(OrderPreservedCommonTest, UsesDeterministicLevelFromComm)
     {
         OpParam param = MakeStrictSupportedParam();
@@ -65,6 +82,7 @@ namespace {
         param.hcclComm = &commToken;
 
         SetCommDeterministicLevel(static_cast<uint32_t>(DeterministicEnableLevel::DETERMINISTIC_STRICT));
+        g_hcommVersion = CANN_VERSION(9, 3, 0, 2);
         EXPECT_TRUE(IsNeedStrictModeForOrderPreserved(param, 4));
         EXPECT_EQ(g_queriedComm, param.hcclComm);
 
