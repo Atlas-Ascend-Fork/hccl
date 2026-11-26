@@ -235,7 +235,7 @@ TEST_F(CcuA2ASequenceExecutorTest, BuildStageTemplatesDegenerateLevelRejected)
     EXPECT_EQ(executor.BuildStageTemplates(aicpuParam), HcclResult::HCCL_E_INTERNAL);
 }
 
-// CcuSched 界内返回两段实算；CCU 两段 C 合计 = 2μs×(1+2) = 6e-6，B/D 恒 0
+// CcuSched 界内返回两段实算；夹具两级均 CLOS → 标定 kernelNum=8，C = 2µs×8+2µs = 18µs/段，合计 36e-6；B/D 恒 0
 TEST_F(CcuA2ASequenceExecutorTest, CalcCostCoeffCcuSchedInBoundsReturnsTwoSegParams)
 {
     TestSeqExecutor executor;
@@ -247,9 +247,71 @@ TEST_F(CcuA2ASequenceExecutorTest, CalcCostCoeffCcuSchedInBoundsReturnsTwoSegPar
     ASSERT_EQ(coeffs.size(), 2u);
     EXPECT_GT(coeffs[0].A, 0.0f);
     EXPECT_GT(coeffs[1].A, 0.0f);
-    EXPECT_FLOAT_EQ(coeffs[0].C + coeffs[1].C, 6.0e-6f);
+    EXPECT_FLOAT_EQ(coeffs[0].C + coeffs[1].C, 36.0e-6f);
     EXPECT_FLOAT_EQ(coeffs[0].B + coeffs[1].B, 0.0f);
     EXPECT_FLOAT_EQ(coeffs[0].D + coeffs[1].D, 0.0f);
+}
+
+// 两级均 1DMESH：mesh 段标定 kernelNum=5，C = 2µs×5+2µs = 12µs/段
+TEST_F(CcuA2ASequenceExecutorTest, CalcCostCoeffCcuSchedMeshStagesUseMeshKernelCali)
+{
+    TestSeqExecutor executor;
+    AlgAttrs attrs = MakeTwoLevelAttrs();
+    attrs.name = "CcuSchedAllToAllSequenceMeshMesh";
+    ut_stub::InjectProbeAlgAttrs(attrs.name, attrs);
+
+    TopoInfoWithNetLayerDetails topo = MakeTwoLevelTopo(3, 16);
+    topo.physicalLevels[0].topoType = CommTopo::COMM_TOPO_1DMESH;
+    topo.physicalLevels[1].topoType = CommTopo::COMM_TOPO_1DMESH;
+
+    std::vector<CostModelParam> coeffs = executor.CalcCostCoeff(nullptr, &topo, attrs.name.c_str(), param_);
+    ASSERT_EQ(coeffs.size(), 2u);
+    EXPECT_FLOAT_EQ(coeffs[0].C, 12.0e-6f);
+    EXPECT_FLOAT_EQ(coeffs[1].C, 12.0e-6f);
+}
+
+// CLOS 线性标定分支（非钳位）：{2,126} → GCD=2 → d0=2、d1=64，L1 段 pods=8 → kernelNum=2.5×8=20
+TEST_F(CcuA2ASequenceExecutorTest, CalcCostCoeffCcuSchedClosLinearCaliUnclamped)
+{
+    TestSeqExecutor executor;
+    AlgAttrs attrs = MakeTwoLevelAttrs();
+    attrs.name = "CcuSchedAllToAllSequenceMeshMesh";
+    ut_stub::InjectProbeAlgAttrs(attrs.name, attrs);
+
+    TopoInfoWithNetLayerDetails topo;
+    topo.userRank = 3;
+    topo.userRankSize = 128;
+
+    PhysicalLevelInfo level0;
+    for (u32 i = 0; i < 128; i++) {
+        level0.localRanks.push_back(i);
+    }
+    level0.view = PhysicalLevelView::GLOBAL;
+    level0.instSizeListByLayer = {2, 126}; // 非对称 → d0=2、d1=64
+    level0.hasTopoInst = true;
+    level0.topoType = CommTopo::COMM_TOPO_CLOS;
+    level0.locType = ENDPOINT_LOC_TYPE_DEVICE;
+    level0.portNums = {1};
+
+    PhysicalLevelInfo level1;
+    for (u32 i = 0; i < 128; i++) {
+        level1.localRanks.push_back(i);
+    }
+    level1.view = PhysicalLevelView::GLOBAL;
+    level1.instSizeListByLayer = {128};
+    level1.hasTopoInst = true;
+    level1.topoType = CommTopo::COMM_TOPO_CLOS;
+    level1.locType = ENDPOINT_LOC_TYPE_DEVICE;
+    level1.portNums = {8};
+
+    topo.physicalLevels = {std::move(level0), std::move(level1)};
+    topo.physicalLevelNum = 2;
+    topo.topoLevelNums = 2;
+
+    std::vector<CostModelParam> coeffs = executor.CalcCostCoeff(nullptr, &topo, attrs.name.c_str(), param_);
+    ASSERT_EQ(coeffs.size(), 2u);
+    EXPECT_FLOAT_EQ(coeffs[0].C, 18.0e-6f); // pods=0 钳位 kernelNum=8：2µs×8+2µs
+    EXPECT_FLOAT_EQ(coeffs[1].C, 42.0e-6f); // pods=8 线性 kernelNum=20：2µs×20+2µs
 }
 
 // d0=1（HOSTCPU 豁免后 MatchTopo 成功）→ 下界剔除
@@ -397,6 +459,50 @@ TEST_F(CcuA2ASequenceExecutorTest, CalcCostCoeffNonCcuSchedNameReturnsTwoSegPara
 
     std::vector<CostModelParam> coeffs = executor.CalcCostCoeff(nullptr, &topo_, attrs.name.c_str(), param_);
     EXPECT_EQ(coeffs.size(), 2u);
+}
+
+// AICPU N<=64 置让位惩罚：两段 C 固定 A2A_SEQ_AICPU_YIELD_FIXED(1000.0f)，ΣC=2000.0f，D 保持段实算 0.5µs×(64+10)
+TEST_F(CcuA2ASequenceExecutorTest, CalcCostCoeffAicpuYieldPenaltyUnderRankLimit)
+{
+    TestSeqExecutor executor;
+    AlgAttrs attrs = MakeTwoLevelAttrs();
+    attrs.name = "AicpuAllToAllSequenceMeshMesh";
+    ut_stub::InjectProbeAlgAttrs(attrs.name, attrs);
+
+    std::vector<CostModelParam> coeffs = executor.CalcCostCoeff(nullptr, &topo_, attrs.name.c_str(), param_);
+    ASSERT_EQ(coeffs.size(), 2u);
+    EXPECT_FLOAT_EQ(coeffs[0].C + coeffs[1].C, 2000.0f);  // 2×A2A_SEQ_AICPU_YIELD_FIXED
+    EXPECT_FLOAT_EQ(coeffs[0].D + coeffs[1].D, 37.0e-6f); // D 不动：0.5µs×(64+10)
+}
+
+// AICPU N=64 边界同样置惩罚：ΣC=2000.0f，D 保持段实算 0.5µs×(280+10)=145µs
+TEST_F(CcuA2ASequenceExecutorTest, CalcCostCoeffAicpuYieldPenaltyAtRankLimit)
+{
+    TestSeqExecutor executor;
+    AlgAttrs attrs = MakeTwoLevelAttrs();
+    attrs.name = "AicpuAllToAllSequenceMeshMesh";
+    ut_stub::InjectProbeAlgAttrs(attrs.name, attrs);
+
+    TopoInfoWithNetLayerDetails topo = MakeTwoLevelTopo(3, 64);
+    std::vector<CostModelParam> coeffs = executor.CalcCostCoeff(nullptr, &topo, attrs.name.c_str(), param_);
+    ASSERT_EQ(coeffs.size(), 2u);
+    EXPECT_FLOAT_EQ(coeffs[0].C + coeffs[1].C, 2000.0f);   // 2×A2A_SEQ_AICPU_YIELD_FIXED
+    EXPECT_FLOAT_EQ(coeffs[0].D + coeffs[1].D, 145.0e-6f); // D 不动：0.5µs×(280+10)
+}
+
+// AICPU N>64 不置惩罚：ΣC/ΣD 保持段实算原值（若误触发会抬至 2000.0f）
+TEST_F(CcuA2ASequenceExecutorTest, CalcCostCoeffAicpuYieldPenaltySkippedAboveRankLimit)
+{
+    TestSeqExecutor executor;
+    AlgAttrs attrs = MakeTwoLevelAttrs();
+    attrs.name = "AicpuAllToAllSequenceMeshMesh";
+    ut_stub::InjectProbeAlgAttrs(attrs.name, attrs);
+
+    TopoInfoWithNetLayerDetails topo = MakeTwoLevelTopo(3, 128); // d0=64/d1=2
+    std::vector<CostModelParam> coeffs = executor.CalcCostCoeff(nullptr, &topo, attrs.name.c_str(), param_);
+    ASSERT_EQ(coeffs.size(), 2u);
+    EXPECT_FLOAT_EQ(coeffs[0].C + coeffs[1].C, 52.0e-6f);
+    EXPECT_FLOAT_EQ(coeffs[0].D + coeffs[1].D, 289.0e-6f); // 0.5µs×(568+10)
 }
 
 // 未注册名 → 探测剔除
