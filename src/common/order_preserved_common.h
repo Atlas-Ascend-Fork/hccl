@@ -51,7 +51,7 @@ inline u8 GetDeterministicLevel(HcclComm comm)
 {
     u8 environmentLevel = GetExternalInputHcclDeterministic();
     int hcommVersion = GetHcommVersion();
-    if (hcommVersion <= CANN_VERSION(9, 2, 0, 1)) {
+    if (hcommVersion <= CANN_VERSION(9, 3, 0, 1)) {
         HCCL_INFO(
             "[GetDeterministicLevel] HCOMM version[%d] does not support deterministic config query, use environment "
             "level[%u].",
