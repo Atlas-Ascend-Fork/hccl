@@ -47,7 +47,8 @@ bool IsReduceOpSymMemDeterministic(
                    || algName == "AicpuAllReduceSoleMeshChunkTwoShot" || algName == "AicpuReduceScatterSoleMeshChunk"
                    || algName == "AicpuReduceScatterConcurMeshNHR" || algName == "AicpuAllReduceConcurMeshTwoShotNHR"
                    || algName == "AicpuReduceScatterVSoleMeshChunk" || algName == "AivAllReduceSoleMeshTwoShot"
-                   || algName == "AivReduceScatterSoleMesh";
+                   || algName == "AivReduceScatterSoleMesh" || algName == "AicpuAllReduceSoleNHRMultiLink"
+                   || algName == "AicpuReduceScatterSoleNHRMultiLink";
         case HcclCMDType::HCCL_CMD_REDUCE:
             if (topoInfo->topoLevelNums == TOPO_LEVEL_NUM_1) {
                 // 单级 MESH_1D 选到 SoleMesh/TwoShot，不在白名单，无零拷贝收益

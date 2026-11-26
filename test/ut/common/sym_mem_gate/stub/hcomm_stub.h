@@ -23,7 +23,13 @@ extern bool g_utSymWinReturnNull;     // 成功时是否仍返回空句柄（模
 extern unsigned g_utSymWinGetCalls;   // 探测调用计数（区分 input/output 侧）
 extern unsigned g_utSymWinFailFirstN; // 前 N 次探测强制失败（区分 input 侧/output 侧失败）
 
+// 大禹机型判定桩：aclrtGetDevice 与 hcalrtGetDeviceInfo 的结果控制
+extern bool g_utDeviceQueryOk;    // false 模拟取当前 device 失败
+extern bool g_utMainboardInfoOk;  // false 模拟取不到主板 ID（默认，等价非大禹机型）
+extern long long g_utMainboardId; // 主板 ID：大禹为 0x48
+
 void UtSymWinStubReset(); // 恢复默认桩行为
+void UtDeviceStubReset(); // 恢复默认：取 device 成功、取不到主板 ID
 } // namespace ut_stub
 
 #endif // SYM_MEM_GATE_HCOMM_STUB_H

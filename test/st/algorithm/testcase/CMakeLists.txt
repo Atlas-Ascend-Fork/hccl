@@ -92,6 +92,42 @@ endif()
 if("all" IN_LIST ST_TASKS OR "all_reduce" IN_LIST ST_TASKS)
     add_st_test(all_reduce all_reduce_testcase.cc)
 endif()
+if(BUILD_OPEN_PROJECT AND ("all" IN_LIST ST_TASKS OR "all_reduce_symmetric_memory" IN_LIST ST_TASKS))
+    if(_ST_CANN_VERSION_NUM GREATER_EQUAL 90100000)
+        add_st_test(all_reduce_symmetric_memory all_reduce_symmetric_memory_testcase.cc)
+        set_target_properties(st_all_reduce_symmetric_memory_test PROPERTIES ENABLE_EXPORTS ON)
+        target_include_directories(st_all_reduce_symmetric_memory_test PRIVATE
+            $<TARGET_PROPERTY:hccl_aicpu_kernel,INCLUDE_DIRECTORIES>)
+        set_tests_properties(st_all_reduce_symmetric_memory_test PROPERTIES TIMEOUT 180)
+    elseif("all_reduce_symmetric_memory" IN_LIST ST_TASKS)
+        message(FATAL_ERROR "AllReduce symmetric-memory ST requires CANN 9.1.0 or newer")
+    endif()
+endif()
+if(BUILD_OPEN_PROJECT AND ("all" IN_LIST ST_TASKS OR "all_reduce_multilink_refresh" IN_LIST ST_TASKS))
+    if(_ST_CANN_VERSION_NUM GREATER_EQUAL 90100000)
+        # Compile the host Refresh entry to exercise combinations the public selector cannot produce on demand.
+        add_executable(st_all_reduce_multilink_refresh_test main.cc all_reduce_multilink_refresh_testcase.cc
+            ${HCCL_DEV_BASE}/src/ops/op_common/op_common.cc
+            ${HCCL_DEV_BASE}/src/ops/op_common/sym_mem_gate.cc
+            ${HCCL_DEV_BASE}/src/common/adapter_acl.cc
+            ${HCCL_DEV_BASE}/src/ops/op_common/selector/auto_selector_base.cc)
+        target_compile_definitions(st_all_reduce_multilink_refresh_test PRIVATE HOST_COMPILE ORION_MODE OPEN_BUILD_PROJECT)
+        target_compile_options(st_all_reduce_multilink_refresh_test PRIVATE
+            -ffunction-sections -fdata-sections -D_GLIBCXX_USE_CXX11_ABI=0)
+        target_link_options(st_all_reduce_multilink_refresh_test PRIVATE -Wl,--gc-sections)
+        target_include_directories(st_all_reduce_multilink_refresh_test PRIVATE
+            $<TARGET_PROPERTY:hccl_aicpu_kernel,INCLUDE_DIRECTORIES>
+            ${ASCEND_HOME_PATH}/include/mmpa ${ASCEND_HOME_PATH}/include/mmpa/sub_inc
+            ${ASCEND_HOME_PATH}/pkg_inc/runtime/runtime)
+        target_link_libraries(st_all_reduce_multilink_refresh_test PRIVATE
+            GTest::gtest pthread hccl-model-proxy $<BUILD_INTERFACE:intf_llt_pub>)
+        add_test(NAME st_all_reduce_multilink_refresh_test COMMAND st_all_reduce_multilink_refresh_test
+            WORKING_DIRECTORY ${CMAKE_BINARY_DIR})
+        set_tests_properties(st_all_reduce_multilink_refresh_test PROPERTIES TIMEOUT 180)
+    elseif("all_reduce_multilink_refresh" IN_LIST ST_TASKS)
+        message(FATAL_ERROR "AllReduce multilink refresh ST requires CANN 9.1.0 or newer")
+    endif()
+endif()
 if("all" IN_LIST ST_TASKS OR "all_reduce_parallel" IN_LIST ST_TASKS)
     add_st_test(all_reduce_parallel all_reduce_parallel_testcase.cc)
 endif()

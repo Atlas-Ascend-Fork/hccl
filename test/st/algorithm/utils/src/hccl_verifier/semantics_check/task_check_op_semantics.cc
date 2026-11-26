@@ -513,7 +513,12 @@ void TaskCheckOpSemantics::GetSliceOpPair(TaskNode* simNode, std::vector<SliceOp
         pair.srcSlice = task->GetSrcSlice();
         pair.dstSlice = task->GetDstSlice();
         pair.sliceOp = SliceOp::OVERRIDE;
-        sliceOpPairs.push_back(pair);
+        // src 与 dst 完全相同的拷贝是 no-op（in-place 对称内存 AllReduce 的自拷贝），
+        // 不改变读写语义，跳过，避免 OVERRIDE 先删后写把语义挖出空洞
+        if (pair.srcSlice.GetType() != pair.dstSlice.GetType() || pair.srcSlice.GetOffset() != pair.dstSlice.GetOffset()
+            || pair.srcSlice.GetSize() != pair.dstSlice.GetSize()) {
+            sliceOpPairs.push_back(pair);
+        }
     } else if (taskType == TaskTypeStub::LOCAL_REDUCE) {
         const TaskStubLocalReduce* task = dynamic_cast<const TaskStubLocalReduce*>(simNode->task);
         SliceOpPair pair;
