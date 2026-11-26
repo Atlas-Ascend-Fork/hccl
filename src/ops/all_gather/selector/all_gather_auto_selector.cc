@@ -29,6 +29,8 @@ constexpr u64 AG_AICPU_SEQUENCE_DATA_SIZE = 4ULL * 1024 * 1024 * 1024;
 constexpr u64 AG_2P_DETOUR_DATA_SIZE = 4 * 1024 * 1024;
 constexpr u32 OMNI_PCIE_AG_DATA_SIZE = 16 * 1024 * 1024;
 constexpr u32 OMNI_UBX_AG_DATA_SIZE = 16 * 1024 * 1024;
+constexpr u64 AG_CCU_UBX_SOLE_BASE_DATA_SIZE = 64ULL * 1024 * 1024 * 1024;
+constexpr u64 AG_AICPU_UBX_PIPELINE_BASE_DATA_SIZE = 64ULL * 1024;
 constexpr u64 AG_NDA_PIPELINE_MIN_DATA_SIZE = 4 * 1024 * 1024;
 constexpr u32 DEVICE_NUM_PER_MODULE_8 = 8;
 constexpr u32 AG_CCU_MAX_RANK_SIZE = 64;
@@ -127,20 +129,25 @@ SelectorStatus AllGatherAutoSelector::SelectCcuScheduleUBXAlgo(
     CHK_PRT_RET(
         CheckClosNumMultipleOfMeshNum(topoInfo, isClosNumMultipleOfMeshNum) != HCCL_SUCCESS,
         HCCL_DEBUG("[AllGatherAutoSelector] CheckClosNumMultipleOfMeshNum failed."), SelectorStatus::NOT_MATCH);
-    if (dataSize > SMALL_COUNT_512KB) {
-        if (isMeshNumEqualToClosNum && (topoInfo->userRankSize <= MAX_RANK_NUM_FOR_CONCURRENT_ALGO)) {
-            selectAlgName = "CcuSchedAllGatherConcurMeshNHRMultiLink";
-        } else if (isClosNumMultipleOfMeshNum) {
-            if (dataSize < OMNI_UBX_AG_DATA_SIZE) {
-                selectAlgName = "CcuSchedAllGatherParallelMeshNHRMultiLink";
-            } else {
-                selectAlgName = "CcuSchedAllGatherPipeLineMeshNHR";
-            }
+    if (isMeshNumEqualToClosNum && (topoInfo->userRankSize <= MAX_RANK_NUM_FOR_CONCURRENT_ALGO)) {
+        selectAlgName
+            = (dataSize > SMALL_COUNT_512KB) ? "CcuSchedAllGatherConcurMeshNHRMultiLink" : "CcuSchedAllGatherSoleMesh";
+    } else if (isClosNumMultipleOfMeshNum) {
+        const u64 rankSize = topoInfo->userRankSize;
+        CHK_PRT_RET(
+            rankSize == 0, HCCL_WARNING("[AllGatherAutoSelector][%s] userRankSize is 0.", __func__),
+            SelectorStatus::NOT_MATCH);
+        const u64 soleDataSizeThreshold = AG_CCU_UBX_SOLE_BASE_DATA_SIZE / rankSize / rankSize / rankSize / rankSize;
+        if (dataSize <= soleDataSizeThreshold) {
+            selectAlgName = "CcuSchedAllGatherSoleMesh";
+        } else if (dataSize < OMNI_UBX_AG_DATA_SIZE) {
+            selectAlgName = "CcuSchedAllGatherParallelMeshNHRMultiLink";
         } else {
-            selectAlgName = "CcuSchedAllGatherSoleNHRMultiLink";
+            selectAlgName = "CcuSchedAllGatherPipeLineMeshNHR";
         }
     } else {
-        selectAlgName = "CcuSchedAllGatherSoleMesh";
+        selectAlgName
+            = (dataSize > SMALL_COUNT_512KB) ? "CcuSchedAllGatherSoleNHRMultiLink" : "CcuSchedAllGatherSoleMesh";
     }
     HCCL_DEBUG("[AllGatherAutoSelector][%s] Algo match [%s]", __func__, selectAlgName.c_str());
     return SelectorStatus::MATCH;
@@ -399,8 +406,14 @@ SelectorStatus AllGatherAutoSelector::SelectAicpuAlgo(
                     selectAlgName = "AicpuAllGatherSoleMesh";
                 }
             } else if (isClosNumMultipleOfMeshNum && dataSize > SMALL_COUNT_512KB) {
-                selectAlgName = (dataSize < OMNI_PCIE_AG_DATA_SIZE) ? "AicpuAllGatherParallelMeshNHRMultiJetty" :
-                                                                      "AicpuAllGatherPipeLineMeshNHR";
+                bool useParallelAlgo = dataSize < OMNI_PCIE_AG_DATA_SIZE;
+                if (!opParam.supportSymmetricMemory) {
+                    const u64 pipelineDataSizeThreshold = AG_AICPU_UBX_PIPELINE_BASE_DATA_SIZE * topoInfo->userRankSize
+                                                          * topoInfo->userRankSize * topoInfo->userRankSize;
+                    useParallelAlgo = dataSize <= pipelineDataSizeThreshold;
+                }
+                selectAlgName
+                    = useParallelAlgo ? "AicpuAllGatherParallelMeshNHRMultiJetty" : "AicpuAllGatherPipeLineMeshNHR";
             } else {
                 // 4P外非对称场景，大小数据量都用NHR算法
                 selectAlgName = "AicpuAllGatherSoleNHR";

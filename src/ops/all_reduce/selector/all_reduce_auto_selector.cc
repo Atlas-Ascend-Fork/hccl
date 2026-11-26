@@ -669,12 +669,21 @@ SelectorStatus AllReduceAutoSelector::SelectAivAlgo(
         SelectorStatus::NOT_MATCH);
     u64 perDataSize = DATATYPE_SIZE_TABLE[opParam.DataDes.dataType];
     u64 dataSize = opParam.DataDes.count * perDataSize;
-    if (opParam.opExecuteConfig != OpExecuteConfig::AIV_ONLY
-        && dataSize >= AIV_MAX_PER_RANK_DATA_SIZE * topoInfo->userRankSize) {
-        HCCL_DEBUG(
-            "[AllReduceAutoSelector][%s] dataSize[%llu] larger than AIV_MAX_PER_RANK_DATA_SIZE[%llu] * rankSize[%u]",
-            __func__, dataSize, AIV_MAX_PER_RANK_DATA_SIZE, topoInfo->userRankSize);
-        return SelectorStatus::NOT_MATCH;
+    // 8p 及以下的 UBX（MESH_1D_CLOS 且非 PCIeMix）场景，AIV 数据量上限放宽到 64 MiB。
+    // 其余场景沿用 AIV_MAX_PER_RANK_DATA_SIZE * rankSize 上限。
+    const bool isAivMesh1DClosTopo = topoInfo->userRankSize <= AR_AIV_BOARD_SIZE
+                                     && topoInfo->level0Topo == Level0Shape::MESH_1D_CLOS && !topoInfo->level0PcieMix;
+    if (opParam.opExecuteConfig != OpExecuteConfig::AIV_ONLY) {
+        const u64 aivMaxDataSize
+            = isAivMesh1DClosTopo ? AR_CCU_SEQ_MAX_DATA_SIZE : AIV_MAX_PER_RANK_DATA_SIZE * topoInfo->userRankSize;
+        const bool isAivDataSizeNotMatch = isAivMesh1DClosTopo ? dataSize > aivMaxDataSize : dataSize >= aivMaxDataSize;
+        if (isAivDataSizeNotMatch) {
+            HCCL_DEBUG(
+                "[AllReduceAutoSelector][%s] dataSize[%llu] larger than aivMaxDataSize[%llu], rankSize[%u], "
+                "mesh1DClos[%d]",
+                __func__, dataSize, aivMaxDataSize, topoInfo->userRankSize, static_cast<int>(isAivMesh1DClosTopo));
+            return SelectorStatus::NOT_MATCH;
+        }
     }
     if (dataSize > cclBufferSize * AIV_MAX_CCL_LOOP_NUM) {
         HCCL_AIV_NOT_MATCH_LOG(
