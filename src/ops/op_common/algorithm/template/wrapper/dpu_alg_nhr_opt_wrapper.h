@@ -31,15 +31,13 @@ constexpr u32 NOTIFY_IDX_STEP_SYNC = 0;
  * @param stepInfo     当前 step 的收发信息（txSliceIdxs / rxSliceIdxs / toRank / fromRank）
  * @param channels     所有 rank 的 channel 映射
  * @param tempAlgParam 算法参数
- * @param repeat       当前 repeat 索引
- * @param myRank       当前 rank 的 user rank
  * @param templateRankSize 模板 rank 总数
  * @param thread       执行搬运的DPU线程句柄，共享内存请求老路径不传（默认0）
  * @param isDrainSupported hcomm是否支持Host Channel Drain，仅AICPU侧需要（host/DPU侧直接查版本）
  */
 HcclResult BatchTransferNHR(
     const AicpuNHRStepInfo& stepInfo, const std::map<u32, std::vector<ChannelInfo>>& channels,
-    const TemplateDataParams& tempAlgParam, u32 repeat, u32 myRank, u32 templateRankSize, ThreadHandle thread = 0,
+    const TemplateDataParams& tempAlgParam, u32 templateRankSize, ThreadHandle thread = 0,
     bool isDrainSupported = false);
 
 // 校验NHR write-reduce所需的数据类型、规约操作及slice与buffer范围。

@@ -78,6 +78,7 @@ u64 InsTempGatherMesh1dIntra::CalcScratchMultiple(BufferType inBuffType, BufferT
 HcclResult InsTempGatherMesh1dIntra::KernelRun(
     const OpParam& param, const TemplateDataParams& tempAlgParams, TemplateResource& templateResource)
 {
+    CHK_RET(CheckScratchRepeatNum(tempAlgParams, "InsTempGatherMesh1dIntra"));
     HCCL_INFO("[InsTempGatherMesh1dIntra] Run start");
     threadNum_ = templateResource.threads.size();
     HCCL_INFO("[InsTempGatherMesh1dIntra][KernelRun] threadNum:%u", threadNum_);
@@ -122,41 +123,52 @@ HcclResult InsTempGatherMesh1dIntra::RunGatherMesh(
     u64 myAlgOffset = tempAlgParams_.allRankDispls.at(myAlgRank);
     u64 myAlgSize = tempAlgParams_.allRankSliceSize.at(myAlgRank);
 
-    for (u32 rpt = 0; rpt < tempAlgParams_.repeatNum; ++rpt) {
-        const u64 outBaseOff = tempAlgParams_.buffInfo.outBuffBaseOff + rpt * tempAlgParams_.outputRepeatStride;
-        const u64 scratchRepeatStride = tempAlgParams_.sliceSize * templateRankSize_;
-        const u64 scratchBase = tempAlgParams_.buffInfo.hcclBuffBaseOff + rpt * scratchRepeatStride;
+    for (u32 threadIdx = 0; threadIdx < subCommRanks_[0].size() - 1; threadIdx++) {
+        u32 connectedRank = subCommRanks_[0][(myAlgRank + 1 + threadIdx) % subCommRanks_[0].size()];
+        u32 connectedAlgRank = 0;
+        CHK_RET(GetAlgRank(connectedRank, subCommRanks_[0], connectedAlgRank));
+        HCCL_INFO(
+            "[InsTempGatherMesh1dIntra] RunGatherMesh RankIDs[%d], connectedRank[%d], connectedAlgRank[%d].", myRank_,
+            connectedRank, connectedAlgRank);
 
-        for (u32 threadIdx = 0; threadIdx < subCommRanks_[0].size() - 1; threadIdx++) {
-            u32 connectedRank = subCommRanks_[0][(myAlgRank + 1 + threadIdx) % subCommRanks_[0].size()];
-            u32 connectedAlgRank = 0;
-            CHK_RET(GetAlgRank(connectedRank, subCommRanks_[0], connectedAlgRank));
-            HCCL_INFO(
-                "[InsTempGatherMesh1dIntra] RunGatherMesh RankIDs[%d], connectedRank[%d], connectedAlgRank[%d].",
-                myRank_, connectedRank, connectedAlgRank);
+        // 异常检查
+        CHK_PRT_RET(
+            threadIdx >= threads.size() || !channels.count(connectedRank),
+            HCCL_ERROR(
+                "[InsTempGatherMesh1dIntra][RankID]=%u threadIdx=%u, threads.size=%zu, "
+                "connectedRank=%d, channels.size=%zu",
+                myRank_, threadIdx, threads.size(), connectedRank, channels.size()),
+            HcclResult::HCCL_E_INTERNAL);
 
-            // 异常检查
-            CHK_PRT_RET(
-                threadIdx >= threads.size() || !channels.count(connectedRank),
-                HCCL_ERROR(
-                    "[InsTempGatherMesh1dIntra][RankID]=%u threadIdx=%u, threads.size=%zu, "
-                    "connectedRank=%d, channels.size=%zu",
-                    myRank_, threadIdx, threads.size(), connectedRank, channels.size()),
-                HcclResult::HCCL_E_INTERNAL);
+        u64 connectedAlgOffset = tempAlgParams_.allRankDispls.at(connectedAlgRank);
+        u64 connectedAlgSize = tempAlgParams_.allRankSliceSize.at(connectedAlgRank);
+        u64 connectedAlgCount = tempAlgParams_.allRankProcessedDataCount.at(connectedAlgRank);
 
-            u64 connectedAlgOffset = tempAlgParams_.allRankDispls.at(connectedAlgRank);
-            u64 connectedAlgSize = tempAlgParams_.allRankSliceSize.at(connectedAlgRank);
-            u64 connectedAlgCount = tempAlgParams_.allRankProcessedDataCount.at(connectedAlgRank);
+        // 既不发送也不接受
+        if (myAlgSize == 0 && connectedAlgSize == 0) {
+            continue;
+        }
 
-            // 既不发送也不接收
-            if (myAlgSize == 0 && connectedAlgSize == 0) {
-                continue;
-            }
+        // gather 预留兼容offload模式
+        const ChannelInfo& linkRemote = channels.at(connectedRank)[0];
+        void* remoteCclBuffAddr = linkRemote.remoteCclMem.addr;
 
-            ThreadHandle currQue = threads[threadIdx];
-            // gather 预留兼容offload模式
-            const ChannelInfo& linkRemote = channels.at(connectedRank)[0];
-            void* remoteCclBuffAddr = linkRemote.remoteCclMem.addr;
+        void* txSrcPtr = tempAlgParams_.buffInfo.outputPtr;
+        void* txDstPtr = remoteCclBuffAddr;
+        void* rxSrcPtr = tempAlgParams_.buffInfo.outputPtr;
+        void* rxDstPtr = remoteCclBuffAddr;
+        // gather write模式使用tx, rx地址不生效，仅使用对端link做Post/Wait
+        // gather read 模式使用rx, tx地址不生效，仅使用对端link做Post/Wait
+
+        std::vector<DataSlice> txSrcSlicesAll;
+        std::vector<DataSlice> txDstSlicesAll;
+        std::vector<DataSlice> rxSrcSlicesAll;
+        std::vector<DataSlice> rxDstSlicesAll;
+
+        for (u32 rpt = 0; rpt < tempAlgParams_.repeatNum; ++rpt) {
+            const u64 outBaseOff = tempAlgParams_.buffInfo.outBuffBaseOff + rpt * tempAlgParams_.outputRepeatStride;
+            const u64 scratchRepeatStride = tempAlgParams_.sliceSize * templateRankSize_;
+            const u64 scratchBase = tempAlgParams_.buffInfo.hcclBuffBaseOff + rpt * scratchRepeatStride;
 
             u64 txOutOffset = outBaseOff + myAlgOffset;
             u64 txScratchOffset = scratchBase + myAlgOffset;
@@ -166,39 +178,34 @@ HcclResult InsTempGatherMesh1dIntra::RunGatherMesh(
             u64 rxScratchOffset = scratchBase + connectedAlgOffset;
             u64 rxDstOffset = rxScratchOffset;
 
-            void* txSrcPtr = tempAlgParams_.buffInfo.outputPtr;
-            void* txDstPtr = remoteCclBuffAddr;
-            void* rxSrcPtr = tempAlgParams_.buffInfo.outputPtr;
-            void* rxDstPtr = remoteCclBuffAddr;
-            // gather write模式使用tx, rx地址不生效，仅使用对端link做Post/Wait
-            // gather read 模式使用rx, tx地址不生效，仅使用对端link做Post/Wait
-            std::vector<DataSlice> txSrcSlices{DataSlice(txSrcPtr, txOutOffset, myAlgSize, myAlgCount)}; // 本地(send)
-            std::vector<DataSlice> txDstSlices{DataSlice(txDstPtr, txDstOffset, myAlgSize, myAlgCount)}; // 远程(send)
-            // gather read模式使用rx
-            std::vector<DataSlice> rxDstSlices{
-                DataSlice(rxDstPtr, rxDstOffset, connectedAlgSize, connectedAlgCount)}; // 本地(recv)
-            std::vector<DataSlice> rxSrcSlices{
-                DataSlice(rxSrcPtr, rxOutOffset, connectedAlgSize, connectedAlgCount)}; // 远程(recv)
+            // 本地(send)
+            txSrcSlicesAll.emplace_back(txSrcPtr, txOutOffset, myAlgSize, myAlgCount);
+            // 远程(send)
+            txDstSlicesAll.emplace_back(txDstPtr, txDstOffset, myAlgSize, myAlgCount);
+            // gather read模式使用rx, 本地(recv)
+            rxDstSlicesAll.emplace_back(rxDstPtr, rxDstOffset, connectedAlgSize, connectedAlgCount);
+            // 远程(recv)
+            rxSrcSlicesAll.emplace_back(rxSrcPtr, rxOutOffset, connectedAlgSize, connectedAlgCount);
+        }
 
-            if (myAlgSize == 0) { // 发送数据片为0时，只接收数据
-                SlicesList recvSliceList(rxSrcSlices, rxDstSlices);
-                DataInfo recvInfo(linkRemote, recvSliceList);
-                CHK_PRT_RET(
-                    RecvWrite(recvInfo, threads[threadIdx]),
-                    HCCL_ERROR("[InsTempGatherMesh1dIntra] [RunGatherMesh] Recv failed."), HcclResult::HCCL_E_INTERNAL);
-            } else if (connectedAlgSize == 0) { // 接收数据片为0时，只发送数据
-                SlicesList sendSliceList(txSrcSlices, txDstSlices);
-                DataInfo sendInfo(linkRemote, sendSliceList);
-                CHK_PRT_RET(
-                    SendWrite(sendInfo, threads[threadIdx]),
-                    HCCL_ERROR("[InsTempGatherMesh1dIntra][RunGatherMesh] Send failed."), HcclResult::HCCL_E_INTERNAL);
-            } else {
-                SendRecvInfo sendRecvInfo{
-                    {linkRemote, linkRemote}, {{txSrcSlices, txDstSlices}, {rxSrcSlices, rxDstSlices}}};
-                CHK_PRT_RET(
-                    SendRecvWrite(sendRecvInfo, threads[threadIdx]),
-                    HCCL_ERROR("[InsTempGatherMesh1dIntra][RunGatherMesh] Send failed"), HcclResult::HCCL_E_INTERNAL);
-            }
+        if (myAlgSize == 0) { // 发送数据片为0时，只接收数据
+            SlicesList recvSliceList(rxSrcSlicesAll, rxDstSlicesAll);
+            DataInfo recvInfo(linkRemote, recvSliceList);
+            CHK_PRT_RET(
+                RecvWrite(recvInfo, threads[threadIdx]),
+                HCCL_ERROR("[InsTempGatherMesh1dIntra] [RunGatherMesh] Recv failed."), HcclResult::HCCL_E_INTERNAL);
+        } else if (connectedAlgSize == 0) { // 接收数据片为0时，只发送数据
+            SlicesList sendSliceList(txSrcSlicesAll, txDstSlicesAll);
+            DataInfo sendInfo(linkRemote, sendSliceList);
+            CHK_PRT_RET(
+                SendBatchWrite(sendInfo, threads[threadIdx]),
+                HCCL_ERROR("[InsTempGatherMesh1dIntra][RunGatherMesh] Send failed."), HcclResult::HCCL_E_INTERNAL);
+        } else {
+            SendRecvInfo sendRecvInfo{
+                {linkRemote, linkRemote}, {{txSrcSlicesAll, txDstSlicesAll}, {rxSrcSlicesAll, rxDstSlicesAll}}};
+            CHK_PRT_RET(
+                SendRecvBatchWrite(sendRecvInfo, threads[threadIdx]),
+                HCCL_ERROR("[InsTempGatherMesh1dIntra][RunGatherMesh] Send failed"), HcclResult::HCCL_E_INTERNAL);
         }
     }
     return HcclResult::HCCL_SUCCESS;

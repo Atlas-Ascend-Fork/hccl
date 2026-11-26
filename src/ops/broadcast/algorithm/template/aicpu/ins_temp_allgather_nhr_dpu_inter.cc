@@ -226,19 +226,16 @@ HcclResult InsTempAllGatherNHRDPUInter::RunNHR(
 {
     const uint32_t nSteps = GetNHRStepNum(tempRankSize_);
 
-    for (uint32_t rpt = 0; rpt < tempAlgParams.repeatNum; ++rpt) {
-        for (uint32_t step = 0; step < nSteps; ++step) {
-            AicpuNHRStepInfo stepInfo;
-            CHK_RET(GetStepInfo(step, nSteps, stepInfo));
+    for (uint32_t step = 0; step < nSteps; ++step) {
+        AicpuNHRStepInfo stepInfo;
+        CHK_RET(GetStepInfo(step, nSteps, stepInfo));
 
-            HCCL_DEBUG(
-                "[InsTempAllGatherNHRDPUInter] rank[%d] rankSize[%u] recvFrom[%u] sendTo[%u] step[%u] nSteps[%u] "
-                "nSlices[%u]",
-                myRank_, tempRankSize_, stepInfo.fromRank, stepInfo.toRank, step, nSteps, stepInfo.nSlices);
+        HCCL_DEBUG(
+            "[InsTempAllGatherNHRDPUInter] rank[%d] rankSize[%u] recvFrom[%u] sendTo[%u] step[%u] nSteps[%u] "
+            "nSlices[%u]",
+            myRank_, tempRankSize_, stepInfo.fromRank, stepInfo.toRank, step, nSteps, stepInfo.nSlices);
 
-            CHK_RET(BatchTransferNHR(
-                stepInfo, channels, tempAlgParams, rpt, myRank_, tempRankSize_, thread, isDrainSupported));
-        }
+        CHK_RET(BatchTransferNHR(stepInfo, channels, tempAlgParams, tempRankSize_, thread, isDrainSupported));
     }
     return HcclResult::HCCL_SUCCESS;
 }

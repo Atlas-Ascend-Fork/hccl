@@ -95,6 +95,10 @@ HcclResult InsTempAllGatherVMesh1D::KernelRun(
         HCCL_INFO("[InsTempAllGatherVMesh1D] Rank [%d], get slicesize zero.", myRank_);
         return HCCL_SUCCESS;
     }
+    // CalcScratchMultiple仅在OPBASE下按单repeat申报scratch容量，此处复用统一校验。
+    if (opMode_ == OpMode::OPBASE) {
+        CHK_RET(CheckScratchRepeatNum(tempAlgParams, "InsTempAllGatherVMesh1D"));
+    }
     threadNum_ = templateResource.threads.size();
     tempAlgParams_ = tempAlgParams;
     dataType_ = param.vDataDes.dataType;
@@ -147,79 +151,84 @@ HcclResult InsTempAllGatherVMesh1D::RunAllGatherVMesh(
     CHK_RET(GetAlgRank(myRank_, subCommRanks_[0], myAlgRank));
     // 多通道: peer 数 = rankSize-1
     u32 peers = templateRankSize_ > 1 ? templateRankSize_ - 1 : 1;
-    for (u32 rpt = 0; rpt < tempAlgParams_.repeatNum; ++rpt) {
-        const u64 outBaseOff = tempAlgParams_.buffInfo.outBuffBaseOff + rpt * tempAlgParams_.outputRepeatStride;
-        const u64 scratchRepeatStride = tempAlgParams_.sliceSize * dataTypeSize_;
-        const u64 scratchBase = tempAlgParams_.buffInfo.hcclBuffBaseOff + rpt * scratchRepeatStride;
+    for (u32 peerIdx = 0; peerIdx < peers; peerIdx++) {
+        u32 connectedRank = subCommRanks_[0][(myAlgRank + 1 + peerIdx) % subCommRanks_[0].size()];
 
-        for (u32 peerIdx = 0; peerIdx < peers; peerIdx++) {
-            u32 connectedRank = subCommRanks_[0][(myAlgRank + 1 + peerIdx) % subCommRanks_[0].size()];
+        u32 connectedAlgRank = 0;
+        CHK_RET(GetAlgRank(connectedRank, subCommRanks_[0], connectedAlgRank));
+        HCCL_INFO(
+            "[InsTempAllGatherVMesh1D] RunAllGatherVMesh RankIDs[%d], connectedRank[%d], connectedAlgRank[%d].",
+            myRank_, connectedRank, connectedAlgRank);
 
-            u32 connectedAlgRank = 0;
-            CHK_RET(GetAlgRank(connectedRank, subCommRanks_[0], connectedAlgRank));
-            HCCL_INFO(
-                "[InsTempAllGatherVMesh1D] RunAllGatherVMesh RankIDs[%d], connectedRank[%d], connectedAlgRank[%d].",
-                myRank_, connectedRank, connectedAlgRank);
+        // 异常检查
+        CHK_PRT_RET(
+            channels.count(connectedRank) == 0 || channels.at(connectedRank).empty(),
+            HCCL_ERROR(
+                "[InsTempAllGatherVMesh1D][RankID]=%u peerIdx=%u, connectedRank=%d, channels.size=%zu", myRank_,
+                peerIdx, connectedRank, channels.size()),
+            HcclResult::HCCL_E_INTERNAL);
+        const std::vector<ChannelInfo>& curChannels = channels.at(connectedRank);
 
-            // 异常检查
-            CHK_PRT_RET(
-                channels.count(connectedRank) == 0 || channels.at(connectedRank).empty(),
+        const u64 mySliceSize = tempAlgParams_.allRankSliceSize[myAlgRank];
+        const u64 peerSliceSize = tempAlgParams_.allRankSliceSize[connectedAlgRank];
+        const u64 mySliceCount = mySliceSize / dataTypeSize_;
+        const u64 peerSliceCount = peerSliceSize / dataTypeSize_;
+
+        // 多通道: 把数据块按该 peer 链路的 portGroupSize 权重切到各通道;
+        // 接收方向用同一批链路的权重切对端块, 保证逐通道收发配对。
+        // 空 count 的 rank 两方向均为 0 尺寸切片, 不跳过调用以保握手对称。
+        CHK_RET(
+            CalcDataSplitByPortGroup(mySliceCount, dataTypeSize_, curChannels, elemCountOut_, sizeOut_, elemOffset_));
+        CHK_RET(CalcDataSplitByPortGroup(
+            peerSliceCount, dataTypeSize_, curChannels, rxElemCountOut_, rxSizeOut_, rxElemOffset_));
+        u32 validChannels = std::min(channelsPerRank_, static_cast<u32>(curChannels.size()));
+        for (u32 channelIdx = 0; channelIdx < validChannels; channelIdx++) {
+            const ChannelInfo& linkRemote = curChannels[channelIdx];
+            void* remoteCclBuffAddr = linkRemote.remoteCclMem.addr;
+            void* remoteOutBuffAddr = linkRemote.remoteOutputGraphMode.addr;
+            if (enableRemoteMemAccess_ && remoteOutBuffAddr == nullptr) {
                 HCCL_ERROR(
-                    "[InsTempAllGatherVMesh1D][RankID]=%u peerIdx=%u, connectedRank=%d, channels.size=%zu", myRank_,
-                    peerIdx, connectedRank, channels.size()),
-                HcclResult::HCCL_E_INTERNAL);
-            const std::vector<ChannelInfo>& curChannels = channels.at(connectedRank);
-
-            const u64 mySliceSize = tempAlgParams_.allRankSliceSize[myAlgRank];
-            const u64 peerSliceSize = tempAlgParams_.allRankSliceSize[connectedAlgRank];
-            const u64 mySliceCount = mySliceSize / dataTypeSize_;
-            const u64 peerSliceCount = peerSliceSize / dataTypeSize_;
-
-            u64 txOutOffset = tempAlgParams_.allRankDispls[myAlgRank] * dataTypeSize_ + outBaseOff;
-            u64 txScratchOffset = scratchBase + tempAlgParams_.sliceSize * myAlgRank;
-
-            u64 rxOutOffset = tempAlgParams_.allRankDispls[connectedAlgRank] * dataTypeSize_ + outBaseOff;
-            u64 rxScratchOffset = scratchBase + tempAlgParams_.sliceSize * connectedAlgRank;
-
-            if (enableRemoteMemAccess_) {
-                // 空槽（本端/对端本轮无数据）不做落点校验：多轮 loop 且各 rank counts 不等时，
-                // 已传完一侧的槽位无实际写行为，按 displs+本轮进度校验会误报越界。
-                const u64 outputSize = tempAlgParams_.buffInfo.outputSize;
-                if ((mySliceSize > 0 && txOutOffset + mySliceSize > outputSize)
-                    || (peerSliceSize > 0 && rxOutOffset + peerSliceSize > outputSize)) {
-                    HCCL_ERROR(
-                        "[InsTempAllGatherVMesh1D] output offset out of range, localRank[%u], remoteRank[%u], "
-                        "txOffset[%llu], txSize[%llu], rxOffset[%llu], rxSize[%llu], outputSize[%llu]",
-                        myRank_, connectedRank, txOutOffset, mySliceSize, rxOutOffset, peerSliceSize, outputSize);
-                    return HcclResult::HCCL_E_INTERNAL;
-                }
+                    "[InsTempAllGatherVMesh1D] remote output addr is null, localRank[%u], remoteRank[%u]", myRank_,
+                    connectedRank);
+                return HcclResult::HCCL_E_INTERNAL;
             }
 
-            // 多通道: 把数据块按该 peer 链路的 portGroupSize 权重切到各通道;
-            // 接收方向用同一批链路的权重切对端块, 保证逐通道收发配对。
-            // 空 count 的 rank 两方向均为 0 尺寸切片, 不跳过调用以保握手对称。
-            CHK_RET(CalcDataSplitByPortGroup(
-                mySliceCount, dataTypeSize_, curChannels, elemCountOut_, sizeOut_, elemOffset_));
-            CHK_RET(CalcDataSplitByPortGroup(
-                peerSliceCount, dataTypeSize_, curChannels, rxElemCountOut_, rxSizeOut_, rxElemOffset_));
-            u32 validChannels = std::min(channelsPerRank_, static_cast<u32>(curChannels.size()));
-            for (u32 channelIdx = 0; channelIdx < validChannels; channelIdx++) {
-                // 预留兼容offload模式
-                const ChannelInfo& linkRemote = curChannels[channelIdx];
-                void* remoteCclBuffAddr = linkRemote.remoteCclMem.addr;
-                void* remoteOutBuffAddr = linkRemote.remoteOutputGraphMode.addr;
-                if (enableRemoteMemAccess_ && remoteOutBuffAddr == nullptr) {
-                    HCCL_ERROR(
-                        "[InsTempAllGatherVMesh1D] remote output addr is null, localRank[%u], remoteRank[%u]", myRank_,
-                        connectedRank);
-                    return HcclResult::HCCL_E_INTERNAL;
+            void* txSrcPtr = tempAlgParams_.buffInfo.outputPtr;
+            void* txDstPtr = (!enableRemoteMemAccess_) ? remoteCclBuffAddr : remoteOutBuffAddr;
+            void* rxSrcPtr = (!enableRemoteMemAccess_) ? remoteCclBuffAddr : remoteOutBuffAddr;
+            void* rxDstPtr
+                = (!enableRemoteMemAccess_) ? tempAlgParams_.buffInfo.hcclBuff.addr : tempAlgParams_.buffInfo.outputPtr;
+
+            std::vector<DataSlice> txSrcSlicesAll;
+            std::vector<DataSlice> txDstSlicesAll;
+            std::vector<DataSlice> rxSrcSlicesAll;
+            std::vector<DataSlice> rxDstSlicesAll;
+
+            for (u32 rpt = 0; rpt < tempAlgParams_.repeatNum; ++rpt) {
+                const u64 outBaseOff = tempAlgParams_.buffInfo.outBuffBaseOff + rpt * tempAlgParams_.outputRepeatStride;
+                const u64 scratchRepeatStride = tempAlgParams_.sliceSize * templateRankSize_;
+                const u64 scratchBase = tempAlgParams_.buffInfo.hcclBuffBaseOff + rpt * scratchRepeatStride;
+
+                u64 txOutOffset = tempAlgParams_.allRankDispls[myAlgRank] * dataTypeSize_ + outBaseOff;
+                u64 txScratchOffset = scratchBase + tempAlgParams_.sliceSize * myAlgRank;
+
+                u64 rxOutOffset = tempAlgParams_.allRankDispls[connectedAlgRank] * dataTypeSize_ + outBaseOff;
+                u64 rxScratchOffset = scratchBase + tempAlgParams_.sliceSize * connectedAlgRank;
+
+                if (enableRemoteMemAccess_) {
+                    // 空槽（本端/对端本轮无数据）不做落点校验：多轮 loop 且各 rank counts 不等时，
+                    // 已传完一侧的槽位无实际写行为，按 displs+本轮进度校验会误报越界。
+                    const u64 outputSize = tempAlgParams_.buffInfo.outputSize;
+                    if ((mySliceSize > 0 && txOutOffset + mySliceSize > outputSize)
+                        || (peerSliceSize > 0 && rxOutOffset + peerSliceSize > outputSize)) {
+                        HCCL_ERROR(
+                            "[InsTempAllGatherVMesh1D] output offset out of range, localRank[%u], remoteRank[%u], "
+                            "txOffset[%llu], txSize[%llu], rxOffset[%llu], rxSize[%llu], outputSize[%llu]",
+                            myRank_, connectedRank, txOutOffset, mySliceSize, rxOutOffset, peerSliceSize, outputSize);
+                        return HcclResult::HCCL_E_INTERNAL;
+                    }
                 }
 
-                void* txSrcPtr = tempAlgParams_.buffInfo.outputPtr;
-                void* txDstPtr = (!enableRemoteMemAccess_) ? remoteCclBuffAddr : remoteOutBuffAddr;
-                void* rxSrcPtr = (!enableRemoteMemAccess_) ? remoteCclBuffAddr : remoteOutBuffAddr;
-                void* rxDstPtr = (!enableRemoteMemAccess_) ? tempAlgParams_.buffInfo.hcclBuff.addr :
-                                                             tempAlgParams_.buffInfo.outputPtr;
                 // 多通道: 本通道子区偏移叠加到收发两侧(切分纯发送端本地, 接收侧不感知)
                 u64 txSrcOffset = txOutOffset + elemOffset_[channelIdx];
                 u64 txDstOffset = (!enableRemoteMemAccess_) ? txScratchOffset + elemOffset_[channelIdx] : txSrcOffset;
@@ -228,52 +237,44 @@ HcclResult InsTempAllGatherVMesh1D::RunAllGatherVMesh(
                                                            rxOutOffset + rxElemOffset_[channelIdx];
                 // write模式使用tx,rx地址不生效，仅使用对端link做Post/Wait
                 // read 模式使用rx, tx地址不生效，仅使用对端link做Post/Wait
-                std::vector<DataSlice> txSrcSlices{
-                    DataSlice(txSrcPtr, txSrcOffset, sizeOut_[channelIdx], elemCountOut_[channelIdx])}; // 本地(send)
-                std::vector<DataSlice> txDstSlices{
-                    DataSlice(txDstPtr, txDstOffset, sizeOut_[channelIdx], elemCountOut_[channelIdx])}; // 远程(send)
-                // read模式使用rx
-                std::vector<DataSlice> rxDstSlices{
-                    DataSlice(rxDstPtr, rxOffset, rxSizeOut_[channelIdx], rxElemCountOut_[channelIdx])}; // 本地(recv)
-                std::vector<DataSlice> rxSrcSlices{
-                    DataSlice(rxSrcPtr, rxOffset, rxSizeOut_[channelIdx], rxElemCountOut_[channelIdx])}; // 远程(recv)
+                txSrcSlicesAll.emplace_back(txSrcPtr, txSrcOffset, sizeOut_[channelIdx], elemCountOut_[channelIdx]);
+                txDstSlicesAll.emplace_back(txDstPtr, txDstOffset, sizeOut_[channelIdx], elemCountOut_[channelIdx]);
+                rxDstSlicesAll.emplace_back(rxDstPtr, rxOffset, rxSizeOut_[channelIdx], rxElemCountOut_[channelIdx]);
+                rxSrcSlicesAll.emplace_back(rxSrcPtr, rxOffset, rxSizeOut_[channelIdx], rxElemCountOut_[channelIdx]);
 
                 HCCL_DEBUG(
                     "[InsTempAllGatherVMesh1D][RunAllGatherVMesh] rankId [%d] connectedRank [%d] txSrcSlices: "
                     "offset[%d] sliceSize[%d] count[%d].",
                     myRank_, connectedRank, txSrcOffset, sizeOut_[channelIdx], elemCountOut_[channelIdx]);
-
                 HCCL_DEBUG(
                     "[InsTempAllGatherVMesh1D][RunAllGatherVMesh] rankId [%d] connectedRank [%d] txDstSlices: "
                     "offset[%d] sliceSize[%d] count[%d].",
                     myRank_, connectedRank, txDstOffset, sizeOut_[channelIdx], elemCountOut_[channelIdx]);
-
                 HCCL_DEBUG(
                     "[InsTempAllGatherVMesh1D][RunAllGatherVMesh] rankId [%d] connectedRank [%d] rxSrcSlices: "
                     "offset[%d] sliceSize[%d] count[%d].",
                     myRank_, connectedRank, rxOffset, rxSizeOut_[channelIdx], rxElemCountOut_[channelIdx]);
-
                 HCCL_DEBUG(
                     "[InsTempAllGatherVMesh1D][RunAllGatherVMesh] rankId [%d] connectedRank [%d] rxDrcSlices: "
                     "offset[%d] sliceSize[%d] count[%d].",
                     myRank_, connectedRank, rxOffset, rxSizeOut_[channelIdx], rxElemCountOut_[channelIdx]);
-
-                TxRxSlicesList sendRecvSlicesList({txSrcSlices, txDstSlices}, {rxSrcSlices, rxDstSlices});
-                TxRxChannels sendRecvChannels(linkRemote, linkRemote);
-                SendRecvInfo sendRecvInfo(sendRecvChannels, sendRecvSlicesList);
-
-                // 每个 (peer, channel) 工作项独占一条队列: peerIdx * channelsPerRank_ + channelIdx
-                u32 queIdx = peerIdx * channelsPerRank_ + channelIdx;
-                CHK_PRT_RET(
-                    queIdx >= threads.size(),
-                    HCCL_ERROR(
-                        "[InsTempAllGatherVMesh1D][RankID]=%u queIdx=%u out of range, threads.size=%zu", myRank_,
-                        queIdx, threads.size()),
-                    HcclResult::HCCL_E_INTERNAL);
-                CHK_PRT_RET(
-                    SendRecvWrite(sendRecvInfo, threads[queIdx]),
-                    HCCL_ERROR("[InsTempAllGatherVMesh1D] RunAllGatherV Send failed"), HcclResult::HCCL_E_INTERNAL);
             }
+
+            TxRxSlicesList sendRecvSlicesList({txSrcSlicesAll, txDstSlicesAll}, {rxSrcSlicesAll, rxDstSlicesAll});
+            TxRxChannels sendRecvChannels(linkRemote, linkRemote);
+            SendRecvInfo sendRecvInfo(sendRecvChannels, sendRecvSlicesList);
+
+            // 每个 (peer, channel) 工作项独占一条队列: peerIdx * channelsPerRank_ + channelIdx
+            u32 queIdx = peerIdx * channelsPerRank_ + channelIdx;
+            CHK_PRT_RET(
+                queIdx >= threads.size(),
+                HCCL_ERROR(
+                    "[InsTempAllGatherVMesh1D][RankID]=%u queIdx=%u out of range, threads.size=%zu", myRank_, queIdx,
+                    threads.size()),
+                HcclResult::HCCL_E_INTERNAL);
+            CHK_PRT_RET(
+                SendRecvBatchWrite(sendRecvInfo, threads[queIdx]),
+                HCCL_ERROR("[InsTempAllGatherVMesh1D] RunAllGatherV Send failed"), HcclResult::HCCL_E_INTERNAL);
         }
     }
     return HcclResult::HCCL_SUCCESS;

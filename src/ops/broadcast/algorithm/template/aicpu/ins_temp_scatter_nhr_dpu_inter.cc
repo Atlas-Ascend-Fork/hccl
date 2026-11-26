@@ -301,14 +301,11 @@ HcclResult InsTempScatterNHRDPUInter::RunNHR(
     SetRoot(tempAlgParams.root);
     u32 nSteps = GetNHRStepNum(templateRankSize_);
     HCCL_INFO("[InsTempScatterNHRDPUInter][RunNHR] root_ at RunNHR [%u] ", root_);
-    for (u32 r = 0; r < tempAlgParams.repeatNum; r++) {
-        for (u32 step = 0; step < nSteps; step++) {
-            AicpuNHRStepInfo stepInfo;
-            CHK_RET(GetStepInfo(step, nSteps, stepInfo));
-            // 统一 BatchTransferNHR：内部自动处理 只发/只收/同对端/不同对端 四种场景
-            CHK_RET(BatchTransferNHR(
-                stepInfo, channels, tempAlgParams, r, myRank_, templateRankSize_, thread, isDrainSupported));
-        }
+    for (u32 step = 0; step < nSteps; step++) {
+        AicpuNHRStepInfo stepInfo;
+        CHK_RET(GetStepInfo(step, nSteps, stepInfo));
+        // 统一 BatchTransferNHR：内部自动处理 只发/只收/同对端/不同对端 四种场景
+        CHK_RET(BatchTransferNHR(stepInfo, channels, tempAlgParams, templateRankSize_, thread, isDrainSupported));
     }
     return HCCL_SUCCESS;
 }

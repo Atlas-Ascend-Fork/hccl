@@ -82,6 +82,7 @@ u64 InsTempAllGatherNhrDpuInter::CalcScratchMultiple(BufferType inBufferType, Bu
 HcclResult InsTempAllGatherNhrDpuInter::KernelRun(
     const OpParam& param, const TemplateDataParams& tempAlgParams, TemplateResource& templateResource)
 {
+    CHK_RET(CheckScratchRepeatNum(tempAlgParams, "InsTempAllGatherNhrDpuInter"));
     HCCL_INFO("[InsTempAllGatherNhrDpuInter] Run Start");
 
     if (templateResource.threads.size() < 1) {
@@ -255,21 +256,18 @@ HcclResult InsTempAllGatherNhrDpuInter::RunNHR(
     const uint32_t nSteps = GetNHRStepNum(templateRankSize_);
     u32 tempRankSize = templateRankSize_;
 
-    for (uint32_t rpt = 0; rpt < tempAlgParams.repeatNum; ++rpt) {
-        for (uint32_t step = 0; step < nSteps; ++step) {
-            AicpuNHRStepInfo stepInfo;
-            CHK_RET(GetStepInfo(step, nSteps, stepInfo));
+    for (uint32_t step = 0; step < nSteps; ++step) {
+        AicpuNHRStepInfo stepInfo;
+        CHK_RET(GetStepInfo(step, nSteps, stepInfo));
 
-            HCCL_DEBUG(
-                "[InsTempAllGatherNhrDpuInter] rank[%d] rankSize[%u] recvFrom[%u] sendTo[%u] step[%u] nSteps[%u] "
-                "nSlices[%u]",
-                myRank_, templateRankSize_, stepInfo.fromRank, stepInfo.toRank, step, nSteps, stepInfo.nSlices);
+        HCCL_DEBUG(
+            "[InsTempAllGatherNhrDpuInter] rank[%d] rankSize[%u] recvFrom[%u] sendTo[%u] step[%u] nSteps[%u] "
+            "nSlices[%u]",
+            myRank_, templateRankSize_, stepInfo.fromRank, stepInfo.toRank, step, nSteps, stepInfo.nSlices);
 
-            stepInfo.toRank = GetRankFromMap(stepInfo.toRank);
-            stepInfo.fromRank = GetRankFromMap(stepInfo.fromRank);
-            CHK_RET(BatchTransferNHR(
-                stepInfo, channels, tempAlgParams, rpt, myRank_, tempRankSize, thread, isDrainSupported));
-        }
+        stepInfo.toRank = GetRankFromMap(stepInfo.toRank);
+        stepInfo.fromRank = GetRankFromMap(stepInfo.fromRank);
+        CHK_RET(BatchTransferNHR(stepInfo, channels, tempAlgParams, tempRankSize, thread, isDrainSupported));
     }
     return HcclResult::HCCL_SUCCESS;
 }

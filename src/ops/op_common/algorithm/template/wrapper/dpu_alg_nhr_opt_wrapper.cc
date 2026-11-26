@@ -264,9 +264,9 @@ HcclResult ValidateReduceScatterNhrParams(const TemplateDataParams& params, u32 
 
 HcclResult BatchTransferNHR(
     const AicpuNHRStepInfo& stepInfo, const std::map<u32, std::vector<ChannelInfo>>& channels,
-    const TemplateDataParams& tempAlgParam, u32 repeat, u32 myRank, u32 templateRankSize, ThreadHandle thread,
-    bool isDrainSupported)
+    const TemplateDataParams& tempAlgParam, u32 templateRankSize, ThreadHandle thread, bool isDrainSupported)
 {
+    CHK_RET(CheckScratchRepeatNum(tempAlgParam, "BatchTransferNHR"));
     bool hasTx = stepInfo.txSliceIdxs.size() > 0;
     bool hasRx = stepInfo.rxSliceIdxs.size() > 0;
     // 空闲 rank，直接跳过
@@ -297,18 +297,22 @@ HcclResult BatchTransferNHR(
     DpuTransferCtx ctx;
     ctx.txCh = txCh;
     ctx.rxCh = rxCh;
+    for (u32 rpt = 0; rpt < tempAlgParam.repeatNum; ++rpt) {
+        if (hasTx) {
+            BuildTxSlices(
+                stepInfo, tempAlgParam, rpt, templateRankSize, sendCclBuffAddr, ctx.txSrcSlices, ctx.txDstSlices);
+        }
+        if (hasRx) {
+            BuildRxSlices(
+                stepInfo, tempAlgParam, rpt, templateRankSize, recvCclBuffAddr, ctx.rxSrcSlices, ctx.rxDstSlices);
+        }
+    }
     if (hasTx) {
-        BuildTxSlices(
-            stepInfo, tempAlgParam, repeat, templateRankSize, sendCclBuffAddr, ctx.txSrcSlices, ctx.txDstSlices);
         for (u32 i = 0; i < ctx.txSrcSlices.size(); i++) {
             HCCL_INFO(
                 "[BatchTransferNHR][Tx] toRank=%u slice=%u/%zu size=%llu", stepInfo.toRank, i, ctx.txSrcSlices.size(),
                 ctx.txSrcSlices[i].size_);
         }
-    }
-    if (hasRx) {
-        BuildRxSlices(
-            stepInfo, tempAlgParam, repeat, templateRankSize, recvCclBuffAddr, ctx.rxSrcSlices, ctx.rxDstSlices);
     }
     std::vector<DpuTransferCtx> pairs = {ctx};
     CHK_RET(DpuBatchTransfer(pairs, thread, isDrainSupported));

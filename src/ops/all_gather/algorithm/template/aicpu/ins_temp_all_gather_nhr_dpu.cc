@@ -88,6 +88,7 @@ u64 InsTempAllGatherNHRDPU::CalcScratchMultiple(BufferType inBufferType, BufferT
 HcclResult InsTempAllGatherNHRDPU::KernelRun(
     const OpParam& param, const TemplateDataParams& tempAlgParams, TemplateResource& templateResource)
 {
+    CHK_RET(CheckScratchRepeatNum(tempAlgParams, "InsTempAllGatherNHRDPU"));
     HCCL_INFO("[InsTempAllGatherNHRDPU] Run Start");
 
     if (templateResource.threads.size() < 1) {
@@ -259,24 +260,21 @@ HcclResult InsTempAllGatherNHRDPU::RunNHR(
 {
     const uint32_t nSteps = GetNHRStepNum(templateRankSize_);
 
-    for (uint32_t rpt = 0; rpt < tempAlgParams.repeatNum; ++rpt) {
-        for (uint32_t step = 0; step < nSteps; ++step) {
-            AicpuNHRStepInfo stepInfo;
-            CHK_RET(GetStepInfo(step, nSteps, stepInfo));
+    for (uint32_t step = 0; step < nSteps; ++step) {
+        AicpuNHRStepInfo stepInfo;
+        CHK_RET(GetStepInfo(step, nSteps, stepInfo));
 
-            HCCL_DEBUG(
-                "[InsTempAllGatherNHRDPU] rank[%d] rankSize[%u] recvFrom[%u] sendTo[%u] step[%u] nSteps[%u] "
-                "nSlices[%u]",
-                myRank_, templateRankSize_, stepInfo.fromRank, stepInfo.toRank, step, nSteps, stepInfo.nSlices);
+        HCCL_DEBUG(
+            "[InsTempAllGatherNHRDPU] rank[%d] rankSize[%u] recvFrom[%u] sendTo[%u] step[%u] nSteps[%u] "
+            "nSlices[%u]",
+            myRank_, templateRankSize_, stepInfo.fromRank, stepInfo.toRank, step, nSteps, stepInfo.nSlices);
 
-            stepInfo.toRank = GetRankFromMap(stepInfo.toRank);
-            stepInfo.fromRank = GetRankFromMap(stepInfo.fromRank);
-            HCCL_INFO(
-                "[InsTempAllGatherNHRDPU][RunNHR] converted toRank=%u fromRank=%u channelsSize=%zu", stepInfo.toRank,
-                stepInfo.fromRank, channels.size());
-            CHK_RET(BatchTransferNHR(
-                stepInfo, channels, tempAlgParams, rpt, myRank_, templateRankSize_, thread, isDrainSupported));
-        }
+        stepInfo.toRank = GetRankFromMap(stepInfo.toRank);
+        stepInfo.fromRank = GetRankFromMap(stepInfo.fromRank);
+        HCCL_INFO(
+            "[InsTempAllGatherNHRDPU][RunNHR] converted toRank=%u fromRank=%u channelsSize=%zu", stepInfo.toRank,
+            stepInfo.fromRank, channels.size());
+        CHK_RET(BatchTransferNHR(stepInfo, channels, tempAlgParams, templateRankSize_, thread, isDrainSupported));
     }
     return HcclResult::HCCL_SUCCESS;
 }

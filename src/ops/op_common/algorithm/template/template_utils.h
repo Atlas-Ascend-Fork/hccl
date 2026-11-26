@@ -537,6 +537,22 @@ struct TemplateDataParams {
     }
 };
 
+/**
+ * @brief 当前相关模板的scratch均按单repeat申报。repeatNum==0不搬运数据，但部分模板仍保留通道通知握手；
+ *        repeatNum>1时拒绝。使能repeatNum>1前需同步扩容CalcScratchMultiple和maxDataSizePerLoop。
+ */
+inline HcclResult CheckScratchRepeatNum(const TemplateDataParams& tempAlgParams, const char* caller)
+{
+    if (tempAlgParams.repeatNum > 1) {
+        HCCL_ERROR(
+            "[%s] repeatNum [%llu] > 1 exceeds the declared scratch capacity (single repeat), "
+            "scratch would overflow cclBuff.",
+            caller, tempAlgParams.repeatNum);
+        return HCCL_E_INTERNAL;
+    }
+    return HCCL_SUCCESS;
+}
+
 struct TemplateResource {
     std::map<u32, std::vector<ChannelInfo>> channels;
     std::vector<ThreadHandle> threads;
