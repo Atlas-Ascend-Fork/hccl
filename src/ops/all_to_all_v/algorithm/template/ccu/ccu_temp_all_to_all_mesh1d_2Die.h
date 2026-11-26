@@ -45,6 +45,7 @@ public:
 
 private:
     HcclResult PartitionChannels(HcclComm comm, std::map<u32, std::vector<HcclChannelDesc>>& rankIdToChannelDesc);
+    uint64_t CalcMajorSliceSize(uint64_t full) const;
     HcclResult CalcFillArgsInfo(uint32_t kernelIdx, uint64_t& sliceSize, uint64_t& sliceOffset);
     HcclResult LaunchKernels(
         uint32_t kernelCount, uint64_t inputAddr, uint64_t outputAddr, uint64_t token, uint64_t sliceStride,
@@ -52,9 +53,16 @@ private:
         TemplateResource& templateResource);
 
     bool is2Plus6_ = false;
+    // isClosOnly: 通信域内只有CLOS链路、无mesh(如960 POD CLOS双平面, FULLMESH槽为空),
+    // 两个CLOS kernel各自含本地拷贝并按端口比切分数据。
+    // 运行时由KernelRun按结构推断(kernelCount==2且dieSplitRatio为有效切分), 与is2Plus6_推断同模式。
+    bool isClosOnly_ = false;
     uint32_t kernelCount_ = 2;
     uint32_t fullmeshDieId_ = 0;
     double dieSplitRatio_ = 1.0;
+    // 按带宽比切分数据时的对齐粒度(字节)：send/recv数据类型大小的较大值，
+    // 保证切分点不落在数据元素中间；CCU搬运操作datasize为0时由kernel侧CCU_IF跳过。
+    uint64_t splitAlignUnit_ = 1;
     std::array<bool, MAX_KERNEL_NUM_2DIE> kernelWithMyRank_ = {true, false, false};
     std::array<std::vector<HcclChannelDesc>, MAX_KERNEL_NUM_2DIE> kernelChannels_;
     std::array<std::vector<RankId>, MAX_KERNEL_NUM_2DIE> kernelRankGroup_;

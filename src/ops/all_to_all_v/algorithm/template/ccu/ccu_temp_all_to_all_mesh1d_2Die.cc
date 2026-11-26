@@ -8,6 +8,7 @@
  * See LICENSE in the root of the software repository for the full text of the License.
  */
 
+#include <algorithm>
 #include <iterator>
 #include <utility>
 #include "channel.h"
@@ -26,13 +27,20 @@ constexpr int DEFAULT_PORT_NUM = 8;
 
 std::vector<CostModelParam> CcuTempAllToAllMesh1D2Die::CalcCostCoeff(CalcCostCoeffParam param)
 {
+    // CLOS-only(如960 POD CLOS双平面): 无板内mesh链路，所有对端均经CLOS(两die平面)可达
+    bool isClosOnly = (param.topoInfo != nullptr && param.topoInfo->level0Topo == Level0Shape::CLOS);
     // 2Die场景: 板内MESH（同Die）和跨Die CLOS（8端口）并行执行，取max(A)
     // 板内卡数 = 每个module的device数（2Die一般为4或8）
     u32 intraDieRankSize = (param.topoInfo != nullptr) ? param.topoInfo->deviceNumPerModule : param.rankSize;
-    if (intraDieRankSize == 0 || intraDieRankSize >= param.rankSize) {
+    if (isClosOnly) {
+        intraDieRankSize = 0; // CLOS-only无mesh路径
+    } else if (intraDieRankSize == 0 || intraDieRankSize >= param.rankSize) {
         intraDieRankSize = param.rankSize / 2; // fallback: 对称分成两半
     }
     u32 interDieRankSize = param.rankSize - intraDieRankSize; // 另一个Die的对端数
+    if (isClosOnly) {
+        interDieRankSize = param.rankSize - 1; // CLOS-only: 全部对端走CLOS
+    }
 
     int meshPortNum = 1; // MESH: portNum不参与公式
     // CLOS跨Die: 端口数由 executor 通过 topomatch v2 动态传入，直接聚合使用
@@ -53,8 +61,10 @@ std::vector<CostModelParam> CcuTempAllToAllMesh1D2Die::CalcCostCoeff(CalcCostCoe
     float D = 0.0f;
 
     // 板内MESH: 同Die内intraDieRankSize个rank
-    CostModelManager::Global()->CalcMeshParam(
-        param.dataRatio, CommTopo::COMM_TOPO_1DMESH, meshPortNum, intraDieRankSize, A_mesh, param.isPod);
+    if (!isClosOnly) {
+        CostModelManager::Global()->CalcMeshParam(
+            param.dataRatio, CommTopo::COMM_TOPO_1DMESH, meshPortNum, intraDieRankSize, A_mesh, param.isPod);
+    }
     // 板外CLOS: 跨Die到interDieRankSize个对端，closPortNum端口共享
     CostModelManager::Global()->CalcMeshParam(
         param.dataRatio, CommTopo::COMM_TOPO_CLOS, closPortNum, closGroupSize, A_clos, param.isPod);
@@ -64,7 +74,7 @@ std::vector<CostModelParam> CcuTempAllToAllMesh1D2Die::CalcCostCoeff(CalcCostCoe
     if (param.isPod) { // pod场景ccu带宽更高
         A *= 0.8;
     }
-    // 2Die场景: 多个kernel并行+跨Die同步，kernelNum固定12
+    // kernelNum为两路并行(mesh+CLOS)折算的CCU任务数估计值, 非实际kernel下发数
     int kernelNum = 8;
     CostModelManager::Global()->CalcLatencyParams(kernelNum, EngineType::CCU, C);
     CostModelManager::Global()->CalcLaunchParams(0, EngineType::CCU, D);
@@ -113,6 +123,28 @@ HcclResult CcuTempAllToAllMesh1D2Die::CalcRes(
     double ratio = 1.0;
     CHK_RET(CalcDieSplitRatio(
         comm, myRank_, is2Plus6_, kernelChannels_[KERNEL_CLOS_MAJOR], kernelChannels_[KERNEL_CLOS_MINOR], ratio));
+    // 纯CLOS(如960 POD CLOS双平面): 无板内mesh链路, FULLMESH槽位无远端channel、仅剩本地拷贝,
+    // 不再单独占用一个kernel; 将本地拷贝随数据切分分别并入两个CLOS kernel
+    // (major/minor各自拷贝本slice对应的本地数据段, kernel侧GroupCopy的goSize即CalGoSize(本slice)),
+    // 落为两kernel: CLOS_MAJOR(含本地拷贝) + CLOS_MINOR(含本地拷贝)。
+    if (is2Plus6_ && kernelCount_ == MAX_KERNEL_NUM_2DIE && kernelChannels_[KERNEL_FULLMESH].empty()
+        && !kernelChannels_[KERNEL_CLOS_MAJOR].empty() && !kernelChannels_[KERNEL_CLOS_MINOR].empty()) {
+        kernelChannels_[KERNEL_FULLMESH] = std::move(kernelChannels_[KERNEL_CLOS_MAJOR]);
+        kernelRankGroup_[KERNEL_FULLMESH] = std::move(kernelRankGroup_[KERNEL_CLOS_MAJOR]);
+        kernelRankGroup_[KERNEL_FULLMESH].push_back(myRank_);
+        kernelChannels_[KERNEL_CLOS_MAJOR] = std::move(kernelChannels_[KERNEL_CLOS_MINOR]);
+        kernelRankGroup_[KERNEL_CLOS_MAJOR] = std::move(kernelRankGroup_[KERNEL_CLOS_MINOR]);
+        kernelRankGroup_[KERNEL_CLOS_MAJOR].push_back(myRank_);
+        kernelChannels_[KERNEL_CLOS_MINOR].clear();
+        kernelRankGroup_[KERNEL_CLOS_MINOR].clear();
+        kernelCount_ = MAX_KERNEL_NUM_2DIE - 1;
+        kernelWithMyRank_ = {true, true, false};
+        isClosOnly_ = true;
+        HCCL_INFO(
+            "[CcuTempAllToAllMesh1D2Die][CalcRes] CLOS-only topology, merge local copy into CLOS kernels, "
+            "kernelCount=2 (major+minor), dieSplitRatio=%f.",
+            ratio);
+    }
     resourceRequest.dieSplitRatio = ratio;
     uint32_t slaveThreadNum = kernelCount_ - 1;
     resourceRequest.notifyNumOnMainThread = slaveThreadNum;
@@ -154,23 +186,64 @@ HcclResult CcuTempAllToAllMesh1D2Die::PartitionChannels(
     CHK_RET(PartitionChannelsFor2Die(
         comm, singleChByDie, multiChByDie, is2Plus6_, myRank_, kernelCount_, fullmeshDieId_, kernelChannels_,
         kernelRankGroup_, "CcuTempAllToAllMesh1D2Die"));
+    // 防御：2Die场景下仅一个die存在多通道链路时（如非对称子通信域），空CLOS槽位退化为
+    // 单CLOS kernel(不切分数据)；kernelCount降为2，后续线程/notify均按2计算。
+    if (is2Plus6_ && kernelCount_ == MAX_KERNEL_NUM_2DIE
+        && (kernelChannels_[KERNEL_CLOS_MAJOR].empty() != kernelChannels_[KERNEL_CLOS_MINOR].empty())) {
+        uint32_t nonEmpty = kernelChannels_[KERNEL_CLOS_MAJOR].empty() ? KERNEL_CLOS_MINOR : KERNEL_CLOS_MAJOR;
+        if (nonEmpty != KERNEL_CLOS_MAJOR) {
+            kernelChannels_[KERNEL_CLOS_MAJOR] = std::move(kernelChannels_[KERNEL_CLOS_MINOR]);
+            kernelRankGroup_[KERNEL_CLOS_MAJOR] = std::move(kernelRankGroup_[KERNEL_CLOS_MINOR]);
+        }
+        kernelChannels_[KERNEL_CLOS_MINOR].clear();
+        kernelRankGroup_[KERNEL_CLOS_MINOR].clear();
+        kernelCount_ = MAX_KERNEL_NUM_2DIE - 1;
+        is2Plus6_ = false; // 单CLOS路径无需按die切分数据
+        HCCL_INFO("[CcuTempAllToAllMesh1D2Die][PartitionChannels] only one die has multi-channel links, "
+                  "degenerate to single CLOS kernel, no data split.");
+    }
     CHK_RET(ReorderAndLogKernelGroups(
         myRank_, static_cast<uint32_t>(subCommRanks_[0].size()), is2Plus6_, kernelCount_, kernelChannels_,
         kernelRankGroup_, "CcuTempAllToAllMesh1D2Die"));
     return HcclResult::HCCL_SUCCESS;
 }
 
+// 按dieSplitRatio计算major kernel的切分大小，并以splitAlignUnit_(数据类型粒度)对齐，
+// 保证切分点不落在数据元素中间；major+minor恒等于full，两侧均为0或>=对齐粒度。
+uint64_t CcuTempAllToAllMesh1D2Die::CalcMajorSliceSize(uint64_t full) const
+{
+    if (full == 0 || splitAlignUnit_ == 0 || splitAlignUnit_ >= full) {
+        // 数据不足一个对齐粒度时整体由major承担(major端口更多)，minor为0由kernel侧跳过
+        return full;
+    }
+    // 先四舍五入到最近整数再对齐到元素边界，带宽分配更均衡
+    uint64_t ideal = static_cast<uint64_t>(static_cast<double>(full) * dieSplitRatio_ + 0.5);
+    uint64_t aligned = (ideal + splitAlignUnit_ / 2) / splitAlignUnit_ * splitAlignUnit_;
+    return std::min(std::max(aligned, splitAlignUnit_), full);
+}
+
 HcclResult CcuTempAllToAllMesh1D2Die::CalcFillArgsInfo(uint32_t kernelIdx, uint64_t& sliceSize, uint64_t& sliceOffset)
 {
     const uint64_t full = sliceSize;
-    if (kernelIdx == KERNEL_FULLMESH) {
+    if (isClosOnly_) {
+        // CLOS-only两kernel: 槽0=CLOS_MAJOR(含本地拷贝), 槽1=CLOS_MINOR(含本地拷贝);
+        // 本地拷贝的GroupCopy goSize=CalGoSize(本slice), 与远端写同一份数据切片
+        if (kernelIdx == KERNEL_FULLMESH) {
+            sliceSize = CalcMajorSliceSize(full);
+            sliceOffset = 0;
+        } else {
+            uint64_t majorSize = CalcMajorSliceSize(full);
+            sliceSize = full - majorSize;
+            sliceOffset = majorSize;
+        }
+    } else if (kernelIdx == KERNEL_FULLMESH) {
         sliceSize = full;
         sliceOffset = 0;
     } else if (is2Plus6_ && kernelIdx == KERNEL_CLOS_MAJOR) {
-        sliceSize = static_cast<uint64_t>(full * dieSplitRatio_);
+        sliceSize = CalcMajorSliceSize(full);
         sliceOffset = 0;
     } else if (is2Plus6_ && kernelIdx == KERNEL_CLOS_MINOR) {
-        uint64_t majorSize = static_cast<uint64_t>(full * dieSplitRatio_);
+        uint64_t majorSize = CalcMajorSliceSize(full);
         sliceSize = full - majorSize;
         sliceOffset = majorSize;
     } else {
@@ -235,8 +308,15 @@ HcclResult CcuTempAllToAllMesh1D2Die::KernelRun(
     uint64_t outputAddr = PointerToAddr(buffInfo_.outputPtr) + buffInfo_.outBuffBaseOff;
     uint64_t token;
     CHK_RET(GetToken(buffInfo_, token));
+    // rankSize为1时无sdispls[1]，退化为count粒度stride（仅本地拷贝路径可达）
+    u64 strideDisplsIdx = (templateDataParams.sdispls.size() > 1) ? 1 : 0;
     uint64_t outputSliceStride
-        = templateDataParams.sdispls[1] * DATATYPE_SIZE_TABLE[param.all2AllDataDes.recvType] - buffInfo_.inBuffBaseOff;
+        = templateDataParams.sdispls[strideDisplsIdx] * DATATYPE_SIZE_TABLE[param.all2AllDataDes.recvType]
+          - buffInfo_.inBuffBaseOff;
+    // 切分对齐粒度: send/recv类型大小的较大值(数据类型字节数均为2的幂, 较大值即最小公倍数)
+    splitAlignUnit_ = std::max(
+        DATATYPE_SIZE_TABLE[param.all2AllDataDes.sendType], DATATYPE_SIZE_TABLE[param.all2AllDataDes.recvType]);
+    splitAlignUnit_ = std::max<uint64_t>(splitAlignUnit_, 1);
     HCCL_INFO(
         "[CcuTempAllToAllMesh1D2Die][KernelRun] begin. Rank[%d], input[%#llx/%#llx], output[%#llx/%#llx]", myRank_,
         inputAddr, param.inputPtr, outputAddr, param.outputPtr);
@@ -244,6 +324,19 @@ HcclResult CcuTempAllToAllMesh1D2Die::KernelRun(
     is2Plus6_ = (kernelCount == MAX_KERNEL_NUM_2DIE);
     if (templateResource.dieSplitRatio > 0.0) {
         dieSplitRatio_ = templateResource.dieSplitRatio;
+    }
+    // CLOS-only两kernel模式判定(运行时结构推断, 与is2Plus6_的kernelCount推断同一模式):
+    // kernelCount==2 且 dieSplitRatio为有效切分比例(非1.0)。闭环论证:
+    // CalcDieSplitRatio仅在is2Plus6且MAJOR/MINOR两槽非空时按bwCoeff计算, 其余恒为1.0;
+    // CLOS-only的CalcRes compaction恰好使kernelCount降为2且两槽非空(ratio有效);
+    // 非2Plus6场景(950 normal)与退化场景(is2Plus6被置false)均为kernelCount==2且ratio==1.0。
+    isClosOnly_ = (kernelCount == MAX_KERNEL_NUM_2DIE - 1 && dieSplitRatio_ > 0.0 && dieSplitRatio_ < 1.0);
+    if (isClosOnly_) {
+        kernelWithMyRank_ = {true, true, false};
+        HCCL_INFO(
+            "[CcuTempAllToAllMesh1D2Die][KernelRun] CLOS-only mode, 2 kernels with local copy merged, "
+            "dieSplitRatio=%f.",
+            dieSplitRatio_);
     }
 
     uint32_t subThreadCount = kernelCount - 1;

@@ -43,8 +43,9 @@ namespace ops_hccl {
 // 与 alltoall_auto_selector.cc 保持一致：4P 且 mesh 数等于 clos 数时走并发算法的卡数上限与数据量分界
 constexpr uint32_t CONCURRENT_RANK_LIMIT = 4;
 constexpr uint64_t BIG_DATA_SIZE_LIMIT = 512;
-// AllToAll MultiLink CCU算法最大支持的rank数(AllToAllV为A2AV_CCU_MAX_RANK_SIZE, 已放开到128)
-constexpr uint32_t A2A_CCU_MAX_RANK_SIZE = 64;
+// AllToAll MultiLink CCU算法最大支持的rank数(AllToAllV为A2AV_CCU_MAX_RANK_SIZE, 已放开到128)。
+// 64为950机型规模的历史取值而非硬性约束, 950 72p(9server×8卡/64+8)已验证通过, 统一放宽到72。
+constexpr uint32_t A2A_CCU_MAX_RANK_SIZE = 72;
 
 template <typename AlgTopoMatch, typename InsAlgTemplate>
 InsV2AlltoAllVSoleExecutor<AlgTopoMatch, InsAlgTemplate>::InsV2AlltoAllVSoleExecutor()
@@ -724,9 +725,20 @@ REGISTER_EXEC_V2(
     HcclCMDType::HCCL_CMD_ALLTOALL, CcuSchedAllToAllSoleMeshMultiLink, InsV2AlltoAllVSoleExecutor, TopoMatchOneLevel,
     CcuTempAllToAllMesh1D2Die);
 REGISTER_ALG_ATTRS(
-    CcuSchedAllToAllSoleMeshMultiLink, topo.minTopoLevelNum = TOPO_LEVEL_NUM_2;
-    topo.maxSupportRankSize = A2A_CCU_MAX_RANK_SIZE; topo.maxTopoLevelNum = TOPO_LEVEL_NUM_2;
-    op.isSupportInplace = false; topo.topoCustomCheck = [](const TopoInfoWithNetLayerDetails* t) -> bool {
+    CcuSchedAllToAllSoleMeshMultiLink, topo.minTopoLevelNum = 1; topo.maxSupportRankSize = A2A_CCU_MAX_RANK_SIZE;
+    topo.supportLevel0Topos = LEVEL0_TOPO_MESH_1D | LEVEL0_TOPO_CLOS; topo.maxTopoLevelNum = TOPO_LEVEL_NUM_2;
+    op.isSupportInplace = false; topo.topoPrecondCheck = [](const TopoInfoWithNetLayerDetails* t) -> bool {
+        // 硬前提(强制指定/tuner均不可绕过):
+        // 纯CLOS level0(960 POD CLOS双平面): layer0为POD级单实例交换网时topoLevelNums可为1,
+        // 两die均有CLOS链路可达全部对端, 允许单层;
+        // MESH_1D必须两层拓扑: 单层MESH(如1dpod64单board内8p, 无跨board对端)时CLOS槽位无链路, 不支持
+        if (t->level0Topo == Level0Shape::CLOS) {
+            return true;
+        }
+        return t->level0Topo == Level0Shape::MESH_1D && t->topoLevelNums >= TOPO_LEVEL_NUM_2;
+    };
+    topo.topoCustomCheck = [](const TopoInfoWithNetLayerDetails* t) -> bool {
+        // UBX机型排除维持原注册的软过滤口径(原topoCustomCheck: return !t->isUBX)
         return !t->isUBX;
     };);
 #endif // !HCCL_CANN_COMPAT_850
