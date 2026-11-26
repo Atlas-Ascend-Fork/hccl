@@ -108,17 +108,60 @@ namespace {
         EXPECT_FALSE(IsNeedStrictModeForOrderPreserved(param, 4));
     }
 
-    TEST(OrderPreservedCommonTest, KeepsReduceScatterVOutsideStrictGate)
+    TEST(OrderPreservedCommonTest, SupportsReduceScatterVInStrictGate)
+    {
+        OpParam param{};
+        param.opType = HcclCMDType::HCCL_CMD_REDUCE_SCATTER_V;
+        param.reduceType = HcclReduceOp::HCCL_REDUCE_SUM;
+        param.vDataDes = {nullptr, nullptr, HcclDataType::HCCL_DATA_TYPE_FP16};
+        int commToken = 0;
+        param.hcclComm = &commToken;
+
+        SetCommDeterministicLevel(static_cast<uint32_t>(DeterministicEnableLevel::DETERMINISTIC_STRICT));
+        g_queriedComm = nullptr;
+
+        EXPECT_TRUE(IsNeedStrictModeForOrderPreserved(param, 4));
+        EXPECT_EQ(g_queriedComm, param.hcclComm);
+    }
+
+    TEST(OrderPreservedCommonTest, ReduceScatterVReadsDataTypeFromVDataDes)
+    {
+        OpParam param{};
+        param.opType = HcclCMDType::HCCL_CMD_REDUCE_SCATTER_V;
+        param.reduceType = HcclReduceOp::HCCL_REDUCE_SUM;
+        SetCommDeterministicLevel(static_cast<uint32_t>(DeterministicEnableLevel::DETERMINISTIC_STRICT));
+
+        // vDataDes 为浮点、DataDes 为非浮点：应取 vDataDes.dataType → true
+        param.vDataDes = {nullptr, nullptr, HcclDataType::HCCL_DATA_TYPE_FP16};
+        param.DataDes.dataType = HcclDataType::HCCL_DATA_TYPE_INT32;
+        EXPECT_TRUE(IsNeedStrictModeForOrderPreserved(param, 4));
+
+        // vDataDes 为非浮点、DataDes 为浮点：仍取 vDataDes.dataType → false
+        param.vDataDes = {nullptr, nullptr, HcclDataType::HCCL_DATA_TYPE_INT32};
+        param.DataDes.dataType = HcclDataType::HCCL_DATA_TYPE_FP16;
+        EXPECT_FALSE(IsNeedStrictModeForOrderPreserved(param, 4));
+    }
+
+    TEST(OrderPreservedCommonTest, ReduceScatterVKeepsOtherStrictConditions)
     {
         OpParam param{};
         param.opType = HcclCMDType::HCCL_CMD_REDUCE_SCATTER_V;
         param.reduceType = HcclReduceOp::HCCL_REDUCE_SUM;
         param.vDataDes = {nullptr, nullptr, HcclDataType::HCCL_DATA_TYPE_FP16};
         SetCommDeterministicLevel(static_cast<uint32_t>(DeterministicEnableLevel::DETERMINISTIC_STRICT));
-        g_queriedComm = nullptr;
 
+        param.vDataDes = {nullptr, nullptr, HcclDataType::HCCL_DATA_TYPE_INT8};
         EXPECT_FALSE(IsNeedStrictModeForOrderPreserved(param, 4));
-        EXPECT_EQ(g_queriedComm, nullptr);
+        param.vDataDes = {nullptr, nullptr, HcclDataType::HCCL_DATA_TYPE_FP16};
+
+        param.reduceType = HcclReduceOp::HCCL_REDUCE_MAX;
+        EXPECT_FALSE(IsNeedStrictModeForOrderPreserved(param, 4));
+        param.reduceType = HcclReduceOp::HCCL_REDUCE_SUM;
+
+        EXPECT_FALSE(IsNeedStrictModeForOrderPreserved(param, MIN_STRICT_RANK_NUM_ORDER_PRESERVED));
+
+        SetCommDeterministicLevel(static_cast<uint32_t>(DeterministicEnableLevel::DETERMINISTIC_ENABLE));
+        EXPECT_FALSE(IsNeedStrictModeForOrderPreserved(param, 4));
     }
 
     TEST(OrderPreservedCommonTest, RejectsNonReduceOpTypes)
