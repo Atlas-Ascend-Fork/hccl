@@ -41,7 +41,6 @@ std::vector<CostModelParam> InsV2AllReduceSequenceExecutorDpu3Level<
     InsAlgTemplate5>::
     CalcCostCoeff(HcclComm comm, TopoInfoWithNetLayerDetails* topoInfo, const char* algName, const OpParam& param)
 {
-    (void)comm;
     AlgHierarchyInfoForAllLevel algHierarchyInfo;
     // 三级 topomatch 失败时回退二级（ST topoLevelNums 可能为 2 但物理上有 3 级）
     if (!MatchTopoForProbe<AlgTopoMatch>(
@@ -60,6 +59,18 @@ std::vector<CostModelParam> InsV2AllReduceSequenceExecutorDpu3Level<
         HCCL_INFO(
             "[InsV2AllReduceSequenceExecutorDpu3Level][CalcCostCoeff] rankSizeLevel2[%u] < 2, skip.", rankSizeLevel2);
         return {};
+    }
+    // 准入（与 PrepareRhdLoop 同口径）：L2 需 acc+recv 隔离区的变体在 d0*d1 < 2（即 d0=1 且 d1=1）退化
+    // 拓扑下 2·slice/d1 的 staging 超出 meshComm 区（d0·slice），运行期必失败；选型期拒绝、由无隔离
+    // 区需求的变体兜底（skipL1 下两者仅 L2 模板不同）。
+    if constexpr (InsAlgTemplate2::kNeedsAccRecvScratchIsolation) {
+        if (static_cast<u64>(rankSizeLevel0) * rankSizeLevel1 < 2) {
+            HCCL_INFO(
+                "[InsV2AllReduceSequenceExecutorDpu3Level][CalcCostCoeff] rankSizeLevel0[%u] * rankSizeLevel1[%u] "
+                "< 2 for L2 acc+recv scratch, skip.",
+                rankSizeLevel0, rankSizeLevel1);
+            return {};
+        }
     }
     // algo level 对应物理层(MeshConcur 为 2元组)逐层下传, 供跨物理层模板用; 层数不足时高层复用低层
     const auto& physIdx = algHierarchyInfo.physicalIdxForAlgoLevels;
@@ -159,6 +170,44 @@ std::vector<CostModelParam> InsV2AllReduceSequenceExecutorDpu3Level<
               v.insert(v.end(), p5.begin(), p5.end());
               return v;
           }();
+
+    // 多轮 loop 的固定开销按 (C+D)/P 折算进 B（折算函数在 3level utils 头，host-only 守卫同处）。
+    // P 镜像运行态 PrepareLoopBuffers 布局（cclBuffSliceNum = d0+1，NHR/RHD 同切分）与
+    // maxCountPerLoop 公式；设备镜像（AICPU_COMPILE）裁掉折算；算法名由 host 选定后传入，设备不重选。
+#ifndef AICPU_COMPILE
+    // 跨族 cost 扫描会以其他 op 的 OpParam 调用本函数（如 alltoall/alltoallv 选型期，其 DataDes
+    // 未初始化），dataType 非法时读 SIZE_TABLE 会越界导致 SIGSEGV；跳过折算即可，不影响准入。
+    if (static_cast<u32>(param.DataDes.dataType) >= HCCL_DATA_TYPE_RESERVED) {
+        return params;
+    }
+    u64 dataTypeSize = HCCL_SIZE_TABLE[param.DataDes.dataType];
+    u64 totalRankAlign = static_cast<u64>(rankSizeLevel0) * rankSizeLevel1 * rankSizeLevel2;
+    // RHD 运行态仅当 dataCount 非 totalRankAlign 整除时预留 2·slot 尾块（ArSeqRhdPrepareTailWorkspace）；
+    // 此处 P 需与消息长度无关（同一通信域内不同消息可能整除/非整除），故恒按最坏情况扣除，
+    // 整除消息 P 偏小、成本略高（方向保守）；NHR 无尾块预留，不扣。
+    const u64 tailTileBytes = totalRankAlign * dataTypeSize;
+    const u64 tailSlotBytes = ArSeqRhdTailSlotBytes(tailTileBytes);
+    const u64 tailReserveBytes = IsRhdTemplate<InsAlgTemplate1>::value ? 2ULL * tailSlotBytes : 0ULL;
+    u64 cclBuffSliceNum = static_cast<u64>(rankSizeLevel0) + 1; // 与 PrepareLoopBuffers 同口径
+    u64 perLoopDataSize = ArSeq3LevelCalcPerLoopDataSize(
+        comm, cclBuffSliceNum, rankSizeLevel0, dataTypeSize, totalRankAlign, tailReserveBytes);
+    // 单轮容量为 0（buffer 查询失败或过小，对齐后清零）：运行态必得 maxCountPerLoop==0 硬错误，
+    // 选型期拒绝准入、由选择器改选其他算法（超大节点/小 buffer 兜底）。
+    if (perLoopDataSize == 0) {
+        HCCL_WARNING(
+            "[InsV2AllReduceSequenceExecutorDpu3Level][CalcCostCoeff] perLoopDataSize is 0 "
+            "(buffer query failed or cclBuffSize too small for cclBuffSliceNum[%llu]), skip.",
+            cclBuffSliceNum);
+        return {};
+    }
+    ArSeq3LevelFoldPerLoopFixedCost(params, perLoopDataSize);
+    HCCL_INFO(
+        "[InsV2AllReduceSequenceExecutorDpu3Level][CalcCostCoeff] fold per-loop fixed cost into B slope: "
+        "perLoopDataSize[%llu], cclBuffSliceNum[%llu], paramCount[%zu]",
+        perLoopDataSize, cclBuffSliceNum, params.size());
+#else
+    (void)comm;
+#endif
     return params;
 }
 
@@ -582,30 +631,33 @@ HcclResult InsV2AllReduceSequenceExecutorDpu3Level<
     AlgTopoMatch, InsAlgTemplate0, InsAlgTemplate1, InsAlgTemplate2, InsAlgTemplate3, InsAlgTemplate4,
     InsAlgTemplate5>::PrepareLoopBuffers(const AlgResourceCtxSerializable& resCtx, LoopContext& ctx)
 {
-    // scratch 容量按各层倍率乘积计算，包含 DPU L2 的槽位需求。
-    u32 scratchMult0 = ctx.rsLevel0.algorithm->CalcScratchMultiple(BufferType::INPUT, BufferType::HCCL_BUFFER);
-    u32 scratchMult1
-        = skipLevel1_ ? 1 :
-                        ctx.rsLevel1.algorithm->CalcScratchMultiple(BufferType::HCCL_BUFFER, BufferType::HCCL_BUFFER);
+    // L2 模板自报倍率（乘数单位=该层每rank份额），供 PrepareRhdLoop 的 acc+recv 预算检查消费；
+    // L0/L1 乘率不参与 d0+1 布局，不再查询（L0 未覆写基类默认实现，L1 查询仅余与本执行器
+    // 布局无关的倍率日志）。
     ctx.scratchMult2 = ctx.rsLevel2.algorithm->CalcScratchMultiple(BufferType::HCCL_BUFFER, BufferType::HCCL_BUFFER);
-    ctx.scratchMultiplier
-        = static_cast<u64>(scratchMult0) * static_cast<u64>(scratchMult1) * static_cast<u64>(ctx.scratchMult2);
-    u32 cclBuffSliceNum = static_cast<u32>(ctx.scratchMultiplier) + 1;
+    // 布局按 d0+1 切：乘数连乘并非 slot 数（单位为各层每rank份额），模板 scratch 步长均为数据派生的
+    // sliceSize（NHR/Mesh/AG 寻址 scratchBase+j*sliceSize），真实峰值 = d0×份额（L0 mesh 对端落货，
+    // 全场最大），1 份 rsResult + d0 份 meshComm 精确覆盖；相比连乘切分（d0*d1*d2+1）消除 d1*d2 倍
+    // 布局浪费，单轮容量提升至 ≈cclMem*d0/(d0+1)。
+    u32 cclBuffSliceNum = static_cast<u32>(rankSizeLevel0_) + 1;
     // 限制来自local reduce的地址需要按照数据类型宽度对齐
     cclBuffSliceSize_ = resCtx.cclMem.size / cclBuffSliceNum / dataTypeSize_ * dataTypeSize_;
     rsResultBuffSize_ = cclBuffSliceSize_;
-    meshCommBuffSize_ = ctx.scratchMultiplier * cclBuffSliceSize_;
+    meshCommBuffSize_ = static_cast<u64>(rankSizeLevel0_) * cclBuffSliceSize_;
     rsResultBuffOffset_ = 0;
     meshCommBuffOffset_ = rsResultBuffSize_;
-    // 单轮处理量按 scratch 倍率限制并对齐总 rank 数，避免 RSL0 输出超出 rsResult 区。
+    // 单 loop 处理量约束：真实约束仅 rsResult 区需容纳 RSL0 输出 count/d0（尾片由尾块/staging 收缩
+    // 兜底），单轮按 rsResultBuffSize_*d0 收敛（与对称路径尾块收缩一致），slot 语义不变。NHR L1/AG 为
+    // 原地算法（scratch 跨度 = 数据跨度，不越 rsResult），无需额外越界检查。
     ctx.totalRankAlign = rankSizeLevel0_ * rankSizeLevel1_ * rankSizeLevel2_;
-    ctx.maxCountPerLoop = resCtx.cclMem.size / ctx.scratchMultiplier / HCCL_MIN_SLICE_ALIGN * HCCL_MIN_SLICE_ALIGN
-                          / dataTypeSize_ / ctx.totalRankAlign * ctx.totalRankAlign;
+    u64 maxLoopBytes = rsResultBuffSize_ * static_cast<u64>(rankSizeLevel0_);
+    ctx.maxCountPerLoop = maxLoopBytes / HCCL_MIN_SLICE_ALIGN * HCCL_MIN_SLICE_ALIGN / dataTypeSize_
+                          / ctx.totalRankAlign * ctx.totalRankAlign;
     if (ctx.maxCountPerLoop == 0) {
         HCCL_ERROR(
             "[InsV2AllReduceSequenceExecutorDpu3Level] maxCountPerLoop is 0, cclBuffSize[%llu], "
-            "scratchMultiplier[%llu], dataTypeSize[%llu]",
-            static_cast<u64>(resCtx.cclMem.size), ctx.scratchMultiplier, static_cast<u64>(dataTypeSize_));
+            "cclBuffSliceNum[%llu], dataTypeSize[%llu]",
+            static_cast<u64>(resCtx.cclMem.size), static_cast<u64>(cclBuffSliceNum), static_cast<u64>(dataTypeSize_));
         return HCCL_E_INTERNAL;
     }
     return HCCL_SUCCESS;
