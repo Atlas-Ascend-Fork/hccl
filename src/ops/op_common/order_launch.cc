@@ -9,6 +9,8 @@
  */
 
 #include "order_launch.h"
+#include <atomic>
+#include "hcomm_dlsym.h"
 #include "hcomm_primitives_dl.h"
 #include "hccl_res_dl.h"
 #include "dlhcomm_function.h"
@@ -83,6 +85,105 @@ static HcclDedicatedThreadType GetOrderLaunchHostThreadType(OrderLaunchMode mode
     return HCCL_DED_THREAD_TYPE_AICPU_ORDER_LAUNCH_OPBASE;
 }
 
+// 查询进程级缓存：-1未查询/0关闭/1开启，一次查询后粘滞
+static std::atomic<int8_t>& GetAicpuOrderLaunchEnableCache()
+{
+    static std::atomic<int8_t> cache{-1};
+    return cache;
+}
+
+// 查询HCOMM侧开关（进程级环境变量解析结果），dlsym缺失或查询失败fail-open默认开启
+static bool IsAicpuOrderLaunchEnabled(HcclComm comm)
+{
+    int8_t cached = GetAicpuOrderLaunchEnableCache().load(std::memory_order_relaxed);
+    if (cached >= 0) {
+        return cached != 0;
+    }
+    auto& hcommFunction = DlHcommFunction::GetInstance();
+    if (!hcommFunction.dlHcclConfigGetInfo) {
+        // dlsym缺失不写缓存，保持后续补齐语义
+        static std::atomic<bool> hasDlMissingLogged{false};
+        if (!hasDlMissingLogged.exchange(true)) {
+            HCCL_INFO("[%s] HcclConfigGetInfo is not supported, AICPU OrderLaunch use default enable.", __func__);
+        }
+        return true;
+    }
+    uint32_t aicpuOrderLaunchEnable = 0;
+    HcclResult ret = hcommFunction.dlHcclConfigGetInfo(
+        comm, static_cast<HcclConfigType>(HCCL_CONFIG_TYPE_AICPU_ORDER_LAUNCH_ENABLE), sizeof(aicpuOrderLaunchEnable),
+        &aicpuOrderLaunchEnable);
+    if (ret != HCCL_SUCCESS) {
+        // fail-open并粘滞，避免混布旧HCOMM逐算子报内部ERROR
+        HCCL_WARNING("[%s] query AICPU_ORDER_LAUNCH_ENABLE failed, ret[%d], use default enable.", __func__, ret);
+        GetAicpuOrderLaunchEnableCache().store(1, std::memory_order_relaxed);
+        return true;
+    }
+    int8_t enable = (aicpuOrderLaunchEnable != 0) ? 1 : 0;
+    GetAicpuOrderLaunchEnableCache().store(enable, std::memory_order_relaxed);
+    HCCL_DEBUG("[%s] AICPU OrderLaunch enable[%u].", __func__, aicpuOrderLaunchEnable);
+    return enable != 0;
+}
+
+// 保序跳过公共动作：句柄置零并关闭Phase2
+void OrderLaunch::MarkOrderLaunchSkipped(OpParam& param)
+{
+    param.exportHostOrderThread = 0;
+    param.deviceOrderThread = 0;
+    orderLaunchRequired_ = false;
+}
+
+// Phase1保序准入：HCOMM版本（未知/过低）、开关、展开线程依次校验，任一不满足即跳过
+static bool OrderLaunchAdmissionCheck(HcclComm comm, ThreadHandle unfoldThread, OrderLaunchMode mode)
+{
+    const char* modeName = GetOrderLaunchModeName(mode);
+    // 版本号单次取值，避免条件与日志间取值漂移
+    int hcommVersion = GetHcommVersion();
+    if (hcommVersion == 0) {
+        // 版本未知（查询失败）：无法判定枚举是否交付，保守跳过；去重WARNING供环境侧排查
+        static std::atomic<bool> hasUnknownVersionLogged{false};
+        if (!hasUnknownVersionLogged.exchange(true)) {
+            HCCL_WARNING(
+                "[%s]. hcommVersion is unknown (query failed), %s OrderLaunch is skipped for safety.", __func__,
+                modeName);
+        }
+        return false;
+    }
+    // 保序线程枚举自9.2.0_beta.2起交付，低版本HCOMM不识别、禁止传递
+    if (hcommVersion < CANN_VERSION(9, 2, 0, 2)) {
+        // 进程级恒定状态，去重打印防刷屏
+        static std::atomic<bool> hasLowVersionLogged{false};
+        if (!hasLowVersionLogged.exchange(true)) {
+            HCCL_INFO(
+                "[%s]. hcommVersion[%d] is lower than 9.2.0_beta.2 (CANN_VERSION(9,2,0,2)), %s OrderLaunch is not "
+                "supported, skipped.",
+                __func__, hcommVersion, modeName);
+        }
+        return false;
+    }
+
+    // 开关关闭不做保序
+    if (!IsAicpuOrderLaunchEnabled(comm)) {
+        // 进程级恒定状态，去重打印防刷屏
+        static std::atomic<bool> hasDisabledLogged{false};
+        if (!hasDisabledLogged.exchange(true)) {
+            HCCL_WARNING(
+                "[%s]. AICPU OrderLaunch is disabled by HCCL_AICPU_ORDER_LAUNCH_ENABLE, %s OrderLaunch is "
+                "skipped.",
+                __func__, modeName);
+        }
+        return false;
+    }
+
+    // 未提前展开或不支持专用线程时无需保序
+    if (unfoldThread == 0 || !HcommIsSupportHcclDedicatedThreadAcquire()) {
+        HCCL_WARNING(
+            "[%s]. unfoldThread is null or HcclDedicatedThreadAcquire not supported, %s OrderLaunch is skipped.",
+            __func__, modeName);
+        return false;
+    }
+    return true;
+}
+
 static HcclResult OpLaunchGetOrderStreams(
     HcclComm comm, ThreadHandle hostOrderThread, ThreadHandle unfoldThread, aclrtStream& hostOrderStream,
     aclrtStream& unfoldStream)
@@ -134,7 +235,7 @@ static HcclResult AclgraphOrderLaunchEventToKernelStream(
 }
 
 /**
- * @brief OrderLaunch第一阶段资源准备：获取超时时间、确定启动模式、GE模式覆盖展开线程、ACLGRAPH模式创建event。
+ * @brief OrderLaunch第一阶段资源准备：获取超时时间、确定启动模式、GE模式覆盖展开线程。
  * @param comm          通信域
  * @param param         算子参数
  * @param unfoldThread  展开线程句柄，GE模式下可能被覆盖
@@ -165,11 +266,6 @@ HcclResult OrderLaunch::HcclOrderLaunchPrepare(HcclComm comm, const OpParam& par
         }
     }
 
-    if (launchMode_ == OrderLaunchMode::ORDER_LAUNCH_ACLGRAPH) {
-        CHK_RET(event0Guard_.Create());
-        CHK_RET(event1Guard_.Create());
-    }
-
     HCCL_INFO("[%s]. %s OrderLaunch Prepare success, unfoldThread[0x%llx]", __func__, modeName, unfoldThread);
     return HCCL_SUCCESS;
 }
@@ -194,14 +290,9 @@ OrderLaunch::HcclOrderLaunchToOrderStream(HcclComm comm, OpParam& param, ThreadH
     HcclDedicatedThreadType hostThreadType = GetOrderLaunchHostThreadType(launchMode_);
     HCCL_INFO("[%s]. %s OrderLaunch Phase1 Start, Comm[%p], timeout[%u].", __func__, modeName, comm, execTimeout_);
 
-    // unfoldThread为0表示未走提前展开，或HcclDedicatedThreadAcquire不支持时，无需保序，直接跳过
-    if (unfoldThread == 0 || !HcommIsSupportHcclDedicatedThreadAcquire()) {
-        param.exportHostOrderThread = 0;
-        param.deviceOrderThread = 0;
-        orderLaunchRequired_ = false;
-        HCCL_WARNING(
-            "[%s]. unfoldThread is null or HcclDedicatedThreadAcquire not supported, %s OrderLaunch is skipped.",
-            __func__, modeName);
+    // 准入校验不通过即跳过保序
+    if (!OrderLaunchAdmissionCheck(comm, unfoldThread, launchMode_)) {
+        MarkOrderLaunchSkipped(param);
         return HCCL_SUCCESS;
     }
 
@@ -212,9 +303,7 @@ OrderLaunch::HcclOrderLaunchToOrderStream(HcclComm comm, OpParam& param, ThreadH
     HCCL_INFO(
         "[%s]. %s After HcclDedicatedThreadAcquire hostOrderThread [0x%llx]", __func__, modeName, hostOrderThread);
     if (hostOrderThread == 0) {
-        param.exportHostOrderThread = 0;
-        param.deviceOrderThread = 0;
-        orderLaunchRequired_ = false;
+        MarkOrderLaunchSkipped(param);
         HCCL_INFO(
             "[%s]. Communication domains Number is less than cores Number, %s OrderLaunch is not Required.", __func__,
             modeName);
@@ -232,6 +321,7 @@ OrderLaunch::HcclOrderLaunchToOrderStream(HcclComm comm, OpParam& param, ThreadH
 
     // 2、仅 ACLGRAPH 模式需要在 unfoldStream 上 record event，hostOrderStream 等待 event
     if (launchMode_ == OrderLaunchMode::ORDER_LAUNCH_ACLGRAPH) {
+        CHK_RET(event0Guard_.Create());
         CHK_RET(AclgraphOrderLaunchEventToOrderStream(comm, hostOrderThread, unfoldThread, event0Guard_.Get()));
     }
 
@@ -240,9 +330,7 @@ OrderLaunch::HcclOrderLaunchToOrderStream(HcclComm comm, OpParam& param, ThreadH
     CHK_RET(HcclDedicatedThreadAcquire(
         comm, HCCL_DED_THREAD_TYPE_AICPU_ORDER_LAUNCH_DEVICE, DEVICE_ORDER_THREAD_NOTIFY_NUM, &deviceOrderThread));
     if (deviceOrderThread == 0) {
-        param.exportHostOrderThread = 0;
-        param.deviceOrderThread = 0;
-        orderLaunchRequired_ = false;
+        MarkOrderLaunchSkipped(param);
         HCCL_INFO(
             "[%s]. HcclDedicatedThreadAcquire unable to obtain deviceOrderThread, %s OrderLaunch is not Required.",
             __func__, modeName);
@@ -297,6 +385,7 @@ HcclResult OrderLaunch::HcclOrderLaunchToKernelStream(HcclComm comm, ThreadHandl
 
     // 3、仅 ACLGRAPH 模式需要在 hostOrderStream 上 record event，unfoldStream 等待 event
     if (launchMode_ == OrderLaunchMode::ORDER_LAUNCH_ACLGRAPH) {
+        CHK_RET(event1Guard_.Create());
         CHK_RET(AclgraphOrderLaunchEventToKernelStream(comm, hostOrderThread, unfoldThread, event1Guard_.Get()));
     }
 

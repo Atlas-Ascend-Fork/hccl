@@ -75,6 +75,9 @@ private:
     bool orderLaunchRequired_{true};
     // Phase1获取并缓存的Host侧保序线程句柄，Phase2直接复用，避免二次acquire结果漂移
     ThreadHandle hostOrderThread_{0};
+
+    // 保序跳过公共动作：句柄置零并关闭Phase2（kernel侧按句柄判空跳过Notify1）
+    void MarkOrderLaunchSkipped(OpParam& param);
 };
 
 } // namespace ops_hccl
