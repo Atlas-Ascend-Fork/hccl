@@ -63,6 +63,8 @@ public:
     }
 
 private:
+    static constexpr uint64_t A2A_DMA_PHASE_BYTES = 256;
+
     __aicore__ inline void ProcessMultiCore()
     {
         // 本路径无SyncAll，空闲核直接跳过不影响同步结构
@@ -92,7 +94,7 @@ private:
         // 按核切分数据
         uint64_t sliceOffset;
         uint64_t sliceCount;
-        SplitData(len_, coresForDstRank, coreIdxForDstRank, sliceOffset, sliceCount);
+        SplitDataStagger(len_, coresForDstRank, coreIdxForDstRank, sliceOffset, sliceCount);
         uint64_t sliceOffsetSize = sliceOffset * sizeof(T);
         uint64_t sliceSize = sliceCount * sizeof(T);
 
@@ -211,6 +213,38 @@ private:
             CpGM2GM((__gm__ T*)dstOffset_, (__gm__ T*)srcOffset_, len_);
             pipe_barrier(PIPE_ALL);
         }
+    }
+
+    // 将原切点后移到目标相位。首尾切点固定，每片长度相对原等分结果的变化小于256B。
+    // PreCopy和ReadRemote共用同一切片，避免两侧边界不一致。
+    __aicore__ inline uint64_t StaggerCut(uint64_t cutIdx, uint64_t dataCount, uint64_t splitNum, uint64_t unit) const
+    {
+        if (cutIdx == 0) {
+            return 0;
+        }
+        if (cutIdx == splitNum) {
+            return dataCount;
+        }
+
+        const uint64_t baseSliceCount = dataCount / splitNum;
+        const uint64_t remainSize = dataCount % splitNum;
+        const uint64_t grid = cutIdx * baseSliceCount + (cutIdx < remainSize ? cutIdx : remainSize);
+        const uint64_t targetPhase = (cutIdx * unit + splitNum / 2) / splitNum;
+        return grid + (targetPhase + unit - grid % unit) % unit;
+    }
+
+    __aicore__ inline void
+    SplitDataStagger(uint64_t dataCount, uint64_t splitNum, uint64_t idx, uint64_t& sliceOffset, uint64_t& sliceCount)
+    {
+        constexpr uint64_t PHASE_ELEMENTS = A2A_DMA_PHASE_BYTES / sizeof(T);
+        static_assert(A2A_DMA_PHASE_BYTES % sizeof(T) == 0, "DMA phase size must be a multiple of the element size");
+        // 每个原切片至少跨一个相位周期，保证相邻切点后移后仍严格递增。
+        if (splitNum <= 1 || idx >= splitNum || dataCount / splitNum < PHASE_ELEMENTS) {
+            SplitData(dataCount, splitNum, idx, sliceOffset, sliceCount);
+            return;
+        }
+        sliceOffset = StaggerCut(idx, dataCount, splitNum, PHASE_ELEMENTS);
+        sliceCount = StaggerCut(idx + 1, dataCount, splitNum, PHASE_ELEMENTS) - sliceOffset;
     }
 
     __aicore__ inline void
