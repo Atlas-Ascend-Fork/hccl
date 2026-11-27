@@ -33,7 +33,7 @@ namespace ops_hccl {
 //   - DPUKernelRun：按域重建 RHD 步骤表后执行三相位循环（skipPrePhase 与基类 RunAllGatherRHD
 //     镜像门控），每步单对端 channels.at(peer)[0]、按步骤表展开 tx/rx 区段为 owner 槽位 run 表
 //     （公式与基类 BuildStepSlice 逐字节同源），每步一次 DpuBatchTransfer。
-// 绑定点：二级 DpuAllGatherSequenceMeshRHD（L1 inter）与三级 DpuAllGatherSequenceMeshConcurRHDRHD
+// 绑定点：二级 DpuAllGatherSequenceMeshConcurRHD（L1 inter）与三级 DpuAllGatherSequenceMeshConcurRHDRHD
 // （L2 host）共用本 template。
 class InsTempAllGatherRHDDPU : public InsTempAllGatherRHD {
 public:
