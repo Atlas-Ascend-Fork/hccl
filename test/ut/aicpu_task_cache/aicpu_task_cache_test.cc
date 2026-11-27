@@ -200,6 +200,7 @@ namespace {
     protected:
         void SetUp() override
         {
+            std::fill_n(counts_, RANK_SIZE, uint64_t{1});
             param_.aicpuCacheEnable = true;
             param_.deviceType = HcclDevType::DEV_TYPE_950;
             param_.opMode = OpMode::OPBASE;
@@ -265,17 +266,39 @@ namespace {
         }
     }
 
-    TEST_P(AlltoallvCachePolicyTest, EnablesCacheForSelfCopyOnlyRank)
+    TEST_P(AlltoallvCachePolicyTest, RejectsCacheForSelfCopyOnlyRank)
     {
+        std::fill_n(counts_, RANK_SIZE, uint64_t{0});
         for (uint32_t rank = 0; rank < RANK_SIZE; ++rank) {
             SCOPED_TRACE(rank);
             resCtx_.topoInfo.userRank = rank;
             counts_[rank] = 1;
             bool isCacheEnable = true;
             ASSERT_EQ(AicpuTaskCachePolicy::IsAicpuTaskCacheEnable(param_, resCtx_, isCacheEnable), HCCL_SUCCESS);
-            EXPECT_TRUE(isCacheEnable);
+            EXPECT_FALSE(isCacheEnable);
             counts_[rank] = 0;
         }
+    }
+
+    TEST_P(AlltoallvCachePolicyTest, RejectsZeroSendOrRecvCountForAnyRank)
+    {
+        uint64_t sendCounts[RANK_SIZE] = {1, 1, 1};
+        uint64_t recvCounts[RANK_SIZE] = {1, 1, 1};
+        param_.all2AllVDataDes.sendCounts = sendCounts;
+        param_.all2AllVDataDes.recvCounts = recvCounts;
+        for (uint32_t rank = 0; rank < RANK_SIZE; ++rank) {
+            SCOPED_TRACE(rank);
+            for (auto* counts : {sendCounts, recvCounts}) {
+                counts[rank] = 0;
+                bool enabled = true;
+                ASSERT_EQ(AicpuTaskCachePolicy::IsAicpuTaskCacheEnable(param_, resCtx_, enabled), HCCL_SUCCESS);
+                EXPECT_FALSE(enabled);
+                counts[rank] = 1;
+            }
+        }
+        bool enabled = false;
+        ASSERT_EQ(AicpuTaskCachePolicy::IsAicpuTaskCacheEnable(param_, resCtx_, enabled), HCCL_SUCCESS);
+        EXPECT_TRUE(enabled);
     }
 
     TEST_P(AlltoallvCachePolicyTest, RejectsSelfCopyCountRequiringSplit)
@@ -447,13 +470,13 @@ namespace {
         }
     }
 
-    TEST_P(AlltoallvCachePolicyTest, AllowsCaptureWithOtherwiseSupportedInput)
+    TEST_P(AlltoallvCachePolicyTest, RejectsCaptureWithOtherwiseSupportedInput)
     {
         counts_[1] = 1;
         param_.isCapture = true;
-        bool enabled = false;
+        bool enabled = true;
         ASSERT_EQ(AicpuTaskCachePolicy::IsAicpuTaskCacheEnable(param_, resCtx_, enabled), HCCL_SUCCESS);
-        EXPECT_TRUE(enabled);
+        EXPECT_FALSE(enabled);
     }
 
     TEST_P(AlltoallvCachePolicyTest, RejectsInplaceOverlapForVariableOps)
