@@ -53,7 +53,8 @@ struct ScatterMesh1DContext : CcuKernelCtxBase {
 
     std::vector<ccu::LocalAddr> inputMem;
     std::vector<ccu::RemoteAddr> outputMem;
-    ccu::Event event;
+    // 单个 ccu::Event 的 16 位 mask 最多支持 16 个 rank 信号，改用 CcuEventGroup 支持 rankSize > 16
+    CcuEventGroup eventGroup;
 };
 
 CcuResult CcuScatterMesh1DKernel(CcuKernelArg arg);
