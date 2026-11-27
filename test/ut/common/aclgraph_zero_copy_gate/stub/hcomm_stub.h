@@ -11,8 +11,15 @@
 #ifndef ACLGRAPH_GATE_HCOMM_STUB_H
 #define ACLGRAPH_GATE_HCOMM_STUB_H
 
+#include <cstdint>
+#include <map>
+#include <string>
+#include <tuple>
+#include <vector>
+
 #include "hccl.h"
 #include "hccl_host_comm_dl.h"
+#include "hccl/hccl_res.h"
 
 namespace ut_stub {
 // 流捕获态桩：aclmdlRICaptureGetInfo 的可控行为
@@ -20,6 +27,13 @@ extern int g_utCaptureStatus;        // aclmdlRICaptureStatus 出参（NONE/ACTI
 extern int g_utCaptureRet;           // aclmdlRICaptureGetInfo 返回值（模拟 API 失败）
 extern unsigned g_utCaptureGetCalls; // 查询调用计数
 void UtCaptureStubReset();           // 恢复默认桩行为（ACTIVE + 成功）
+
+// engine ctx桩：HcclEngineCtxCreate/Get 按(comm, ctxTag, engine)三元组键值模拟
+extern std::map<std::tuple<void*, std::string, uint32_t>, std::vector<char>> g_utEngineCtxMap;
+extern bool g_utEngineCtxCreateFail; // 置true模拟本rank取号失败（Create返回HCCL_E_INTERNAL）
+void UtEngineCtxStubReset();
+// 预置条目：模拟撞键场景（CPU_TS域同串条目/CPU域异常尺寸条目）
+void UtEngineCtxPreset(HcclComm comm, const std::string& ctxTag, CommEngine engine, uint64_t size);
 } // namespace ut_stub
 
 #endif // ACLGRAPH_GATE_HCOMM_STUB_H

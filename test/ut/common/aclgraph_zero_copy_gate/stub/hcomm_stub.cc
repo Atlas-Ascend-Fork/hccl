@@ -18,6 +18,7 @@
 
 #include "acl_base.h"
 #include "acl_rt.h"
+#include "hccl/hccl_res.h"
 
 namespace ut_stub {
 int g_utCaptureStatus = 0;
@@ -29,6 +30,23 @@ void UtCaptureStubReset()
     g_utCaptureStatus = 1; // ACL_MODEL_RI_CAPTURE_STATUS_ACTIVE
     g_utCaptureRet = 0;    // ACL_SUCCESS
     g_utCaptureGetCalls = 0;
+}
+
+std::map<std::tuple<void*, std::string, uint32_t>, std::vector<char>> g_utEngineCtxMap;
+
+// 模拟本rank取号失败（ctx创建失败）：置true后Create返回HCCL_E_INTERNAL
+bool g_utEngineCtxCreateFail = false;
+
+void UtEngineCtxStubReset()
+{
+    g_utEngineCtxMap.clear();
+    g_utEngineCtxCreateFail = false;
+}
+
+void UtEngineCtxPreset(HcclComm comm, const std::string& ctxTag, CommEngine engine, uint64_t size)
+{
+    auto key = std::make_tuple(static_cast<void*>(comm), ctxTag, static_cast<uint32_t>(engine));
+    g_utEngineCtxMap[key].assign(static_cast<size_t>(size), 0);
 }
 } // namespace ut_stub
 
@@ -63,4 +81,45 @@ HcclCommSymWinGet(HcclComm comm, void* ptr, size_t size, HcclCommSymWindow* winH
     (void)offset;
     ADD_FAILURE() << "aclgraph gate用例不应调用HcclCommSymWinGet";
     return HCCL_E_NOT_SUPPORT;
+}
+
+// HcclEngineCtxCreate/Get 桩（可执行文件定义优先于 libhcomm 同名动态符号解析，与上方桩同模式）：
+// aclgraph seq 簿记经 comm 级 engine ctx 存取，真实实现需要合法 HcclComm 句柄，桩按
+// (comm, ctxTag, engine) 三元组键值模拟；返回码对齐真实语义（hcomm EngineCtxs）：
+// Get未找到NOT_FOUND、Create同键重复E_PARA。
+static std::tuple<void*, std::string, uint32_t> UtEngineCtxKey(HcclComm comm, const char* ctxTag, CommEngine engine)
+{
+    return std::make_tuple(static_cast<void*>(comm), std::string(ctxTag), static_cast<uint32_t>(engine));
+}
+
+HcclResult HcclEngineCtxCreate(HcclComm comm, const char* ctxTag, CommEngine engine, uint64_t size, void** ctx)
+{
+    if (ctxTag == nullptr || ctx == nullptr || size == 0) {
+        return HCCL_E_PARA;
+    }
+    if (ut_stub::g_utEngineCtxCreateFail) {
+        return HCCL_E_INTERNAL;
+    }
+    auto key = UtEngineCtxKey(comm, ctxTag, engine);
+    if (ut_stub::g_utEngineCtxMap.count(key) != 0) {
+        return HCCL_E_PARA;
+    }
+    auto& buf = ut_stub::g_utEngineCtxMap[key];
+    buf.assign(static_cast<size_t>(size), 0);
+    *ctx = buf.data();
+    return HCCL_SUCCESS;
+}
+
+HcclResult HcclEngineCtxGet(HcclComm comm, const char* ctxTag, CommEngine engine, void** ctx, uint64_t* size)
+{
+    if (ctxTag == nullptr || ctx == nullptr || size == nullptr) {
+        return HCCL_E_PARA;
+    }
+    auto it = ut_stub::g_utEngineCtxMap.find(UtEngineCtxKey(comm, ctxTag, engine));
+    if (it == ut_stub::g_utEngineCtxMap.end()) {
+        return HCCL_E_NOT_FOUND;
+    }
+    *ctx = it->second.data();
+    *size = it->second.size();
+    return HCCL_SUCCESS;
 }
