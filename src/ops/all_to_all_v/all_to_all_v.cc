@@ -503,7 +503,11 @@ HcclResult CheckAlltoAllInputPara(
         stream == nullptr, "EI0003", std::vector<std::string>({"ccl_op", "value", "parameter", "expect"}),
         std::vector<std::string>({"HcclAlltoAllV", "nullptr", "stream", "non-null pointer"}));
     CHK_PTR_NULL(stream);
-    CHK_PRT_RET(sendBuf == recvBuf, HCCL_ERROR("[HcclAlltoAll] sendBuf and recvBuf cannot be same."), HCCL_E_PARA);
+    CHK_PRT_RET(
+        sendBuf == recvBuf,
+        HCCL_ERROR(
+            "[HcclAlltoAll] sendBuf and recvBuf cannot be the same, AlltoAll does not support in-place operation."),
+        HCCL_E_PARA);
     CHK_PRT_RET(
         sendType >= HCCL_DATA_TYPE_RESERVED || DATATYPE_SIZE_TABLE[sendType] == 0,
         HCCL_ERROR("[HcclAlltoAll] sendType[%u] is not supported.", sendType), HCCL_E_PARA);
