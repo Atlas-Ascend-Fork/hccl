@@ -156,6 +156,8 @@ HcclResult AivTempAlltoAllMesh1D::KernelRun(
         = tempAlgParams.buffInfo.inBuffBaseOff + reinterpret_cast<u64>(tempAlgParams.buffInfo.inputPtr);
     aivAlltoAllArgs.output
         = tempAlgParams.buffInfo.outBuffBaseOff + reinterpret_cast<u64>(tempAlgParams.buffInfo.outputPtr);
+    aivAlltoAllArgs.inBuffType = tempAlgParams.buffInfo.inBuffType;
+    aivAlltoAllArgs.outBuffType = tempAlgParams.buffInfo.outBuffType;
     aivAlltoAllArgs.rank = u32(myRank_);
     aivAlltoAllArgs.rankSize = tempRankSize_;
 

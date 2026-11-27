@@ -137,6 +137,8 @@ HcclResult AivTempReduceMesh1D::KernelRun(
     aivReduceArgs.input = tempAlgParams.buffInfo.inBuffBaseOff + reinterpret_cast<u64>(tempAlgParams.buffInfo.inputPtr);
     aivReduceArgs.output
         = tempAlgParams.buffInfo.outBuffBaseOff + reinterpret_cast<u64>(tempAlgParams.buffInfo.outputPtr);
+    aivReduceArgs.inBuffType = tempAlgParams.buffInfo.inBuffType;
+    aivReduceArgs.outBuffType = tempAlgParams.buffInfo.outBuffType;
     aivReduceArgs.rank = u32(myRank_);
     aivReduceArgs.rankSize = tempRankSize_;
     aivReduceArgs.count = tempAlgParams.sliceSize / HCCL_SIZE_TABLE[dataType_];

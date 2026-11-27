@@ -142,6 +142,8 @@ HcclResult InsV2RecvExecutor::OrchestrateImpl(const OpParam& param, const AlgRes
         aivSendArgs.cmdType = HcclCMDType::HCCL_CMD_RECEIVE;
         aivSendArgs.input = reinterpret_cast<u64>(param.inputPtr);
         aivSendArgs.output = reinterpret_cast<u64>(param.outputPtr) + processedDataCount * dataTypeSize_;
+        aivSendArgs.inBuffType = BufferType::INPUT;
+        aivSendArgs.outBuffType = BufferType::OUTPUT;
         aivSendArgs.rank = u32(myRank_);
         aivSendArgs.dataType = dataType_;
         aivSendArgs.sliceId = sliceId_;

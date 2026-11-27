@@ -464,6 +464,7 @@ thread_local std::shared_ptr<InsQueue> g_recordingQueue = nullptr;
 thread_local bool g_recordOnlyMode = false;
 thread_local u64 g_baseInputAddr = 0;
 thread_local u64 g_baseOutputAddr = 0;
+thread_local bool g_recordingUncacheable = false;
 static HcclResult GetMinAndMaxNpuSchedTimeOut(u64& minNpuSchedTimeout, u64& maxNpuSchedTimeout)
 {
     uint64_t interval = 0;
@@ -586,6 +587,14 @@ static_assert(
 static_assert(
     std::is_same<decltype(AivKernelArgs::isEnableCounter), bool>::value,
     "host AivKernelArgs::isEnableCounter must be bool to match device layout");
+// 尾部 URMA 子通信域字段与 device 侧 SkArgsStruct（aiv_communication_base_v2.h）绝对偏移对齐：
+// __global__ 平铺解包与超核 __sk__ 槽位解包共用同一份 launch blob，错位即读错字段
+static_assert(
+    offsetof(AivKernelArgs, subCommRankLevel) == 148,
+    "AivKernelArgs::subCommRankLevel offset must be 148 to match device SkArgsStruct layout");
+static_assert(
+    offsetof(AivKernelArgs, level0ChannelNumPerRank) == 152,
+    "AivKernelArgs::level0ChannelNumPerRank offset must be 152 to match device SkArgsStruct layout");
 
 template <typename ExtraArgsT>
 struct AivExtraKernelArgsDef {
@@ -1043,7 +1052,6 @@ u64 CalcAivCacheKeyHash(const AivOpCacheArgs& cacheKey)
     HashAppendValue(hash, cacheKey.reduceOp);
     HashAppendValue(hash, cacheKey.root);
     HashAppendValue(hash, cacheKey.numBlocksLimit);
-    HashAppendValue(hash, cacheKey.opExecuteConfig);
     HCCL_INFO("[%s] hashKey[%llu]", __func__, hash);
     return hash;
 }
@@ -1184,8 +1192,16 @@ HcclResult ReplayAivInstructions(const AivInstruction* instructions, u32 insCoun
     for (uint32_t i = 0; i < insCount; ++i) {
         AivOpArgs newArgs = instructions[i].opArgs;
         newArgs.stream = param.stream;
-        newArgs.input = reinterpret_cast<u64>(param.inputPtr) + instructions[i].inputOffset;
-        newArgs.output = reinterpret_cast<u64>(param.outputPtr) + instructions[i].outputOffset;
+        // 地址按录制期归属类型还原：多级算法中间级可能以 output/cclBuffer 为输入/输出，
+        // 不能一律以 param.inputPtr/outputPtr 为基址
+        CHK_RET(ResolveAivReplayAddr(
+            instructions[i].opArgs.inBuffType, reinterpret_cast<u64>(param.inputPtr),
+            reinterpret_cast<u64>(param.outputPtr), instructions[i].inputOffset, instructions[i].opArgs.input,
+            newArgs.input));
+        CHK_RET(ResolveAivReplayAddr(
+            instructions[i].opArgs.outBuffType, reinterpret_cast<u64>(param.inputPtr),
+            reinterpret_cast<u64>(param.outputPtr), instructions[i].outputOffset, instructions[i].opArgs.output,
+            newArgs.output));
         CHK_RET(ExecuteKernelLaunch(newArgs));
     }
     return HCCL_SUCCESS;
@@ -1211,8 +1227,14 @@ HcclResult ReplayAivInstructionsV(const AivInstruction* instructions, u32 insCou
     for (uint32_t i = 0; i < insCount; ++i) {
         AivOpArgs newArgs = instructions[i].opArgs;
         newArgs.stream = param.stream;
-        newArgs.input = reinterpret_cast<u64>(param.inputPtr) + instructions[i].inputOffset;
-        newArgs.output = reinterpret_cast<u64>(param.outputPtr) + instructions[i].outputOffset;
+        CHK_RET(ResolveAivReplayAddr(
+            instructions[i].opArgs.inBuffType, reinterpret_cast<u64>(param.inputPtr),
+            reinterpret_cast<u64>(param.outputPtr), instructions[i].inputOffset, instructions[i].opArgs.input,
+            newArgs.input));
+        CHK_RET(ResolveAivReplayAddr(
+            instructions[i].opArgs.outBuffType, reinterpret_cast<u64>(param.inputPtr),
+            reinterpret_cast<u64>(param.outputPtr), instructions[i].outputOffset, instructions[i].opArgs.output,
+            newArgs.output));
 
         u64 copySize = static_cast<u64>(rankSize) * sizeof(u64);
         if (rankSize > MAX_RANK_SIZE_V) {
@@ -1244,6 +1266,13 @@ HcclResult StoreAivCacheCtx(
     const std::lock_guard<std::mutex> lock(g_aivCacheMutex);
     CHK_PTR_NULL(indexCtx);
     CHK_PTR_NULL(g_recordingQueue);
+    // 本次录制存在无法安全还原归属的指令：拒绝落库，回放退化为完整流程
+    if (g_recordingUncacheable) {
+        HCCL_WARNING(
+            "[StoreAivCacheCtx] instruction set contains unresolvable addr origin, skip store, insCount[%zu]",
+            g_recordingQueue->size());
+        return HCCL_SUCCESS;
+    }
     // Another miss may have published this key while this thread recorded it.
     void* existingCtx = nullptr;
     uint64_t existingSize = 0;
@@ -1393,18 +1422,25 @@ HcclResult ExecuteKernelLaunch(const AivOpArgs& opArgs)
     if (g_recordingQueue) {
         AivInstruction ins;
         ins.opArgs = opArgs;
-        // Calculate offsets
-        // Note: opArgs.input is absolute address.
-        if (opArgs.input >= g_baseInputAddr) {
-            ins.inputOffset = opArgs.input - g_baseInputAddr;
-        } else {
-            ins.inputOffset = 0;
-        }
-
-        if (opArgs.output >= g_baseOutputAddr) {
-            ins.outputOffset = opArgs.output - g_baseOutputAddr;
-        } else {
-            ins.outputOffset = 0;
+        // 地址归属按 BufferType 判定（见 hccl_aiv_utils.h 的 CalcAivAddrOffset）：
+        // 多级算法中间级可能以 output/cclBuffer 为输入/输出，按地址数值大小猜归属会录错偏移；
+        // 无法安全判定的指令集置不可缓存，回放退化为完整流程，宁失缓存不回放错误地址
+        AivAddrOffsetResult inRes
+            = CalcAivAddrOffset(opArgs.inBuffType, opArgs.input, g_baseInputAddr, g_baseOutputAddr);
+        AivAddrOffsetResult outRes
+            = CalcAivAddrOffset(opArgs.outBuffType, opArgs.output, g_baseInputAddr, g_baseOutputAddr);
+        ins.inputOffset = inRes.offset;
+        ins.outputOffset = outRes.offset;
+        if (!inRes.cacheable || !outRes.cacheable) {
+            if (!g_recordingUncacheable) {
+                HCCL_WARNING(
+                    "[ExecuteKernelLaunch] cmdType[%d] inBuffType[%d] outBuffType[%d] cannot resolve addr origin "
+                    "(input addr[%llu] baseIn[%llu] baseOut[%llu], output addr[%llu]), this op will not be cached.",
+                    static_cast<int>(opArgs.cmdType), static_cast<int>(opArgs.inBuffType),
+                    static_cast<int>(opArgs.outBuffType), opArgs.input, g_baseInputAddr, g_baseOutputAddr,
+                    opArgs.output);
+            }
+            g_recordingUncacheable = true;
         }
         g_recordingQueue->push_back(ins);
 

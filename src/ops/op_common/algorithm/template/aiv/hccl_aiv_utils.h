@@ -20,6 +20,7 @@
 #include "hccl_types.h"
 #include "acl/acl_rt.h"
 #include "alg_param.h"
+#include "template_utils.h"
 
 namespace ops_hccl {
 constexpr u32 MAX_RANK_SIZE_V = 256;               // 注意要和device侧的一致
@@ -181,6 +182,11 @@ struct AivOpArgs {
     void* buffersIn = nullptr;
     u64 input = 0;
     u64 output = 0;
+    // input/output 地址归属（录制/回放消费，不下发 kernel，分派见本文件 CalcAivAddrOffset/ResolveAivReplayAddr）：
+    // 模板从 TemplateDataParams.buffInfo 透传；多级算法中间级可能以 output/cclBuffer 为输入，
+    // 回放按该类型选基址还原，地址数值猜归属的方式对多级算法必错
+    BufferType inBuffType = BufferType::DEFAULT;
+    BufferType outBuffType = BufferType::DEFAULT;
     u32 rank = 0;
     u32 sendRecvRemoteRank = 0;
     u32 rankSize = 0;
@@ -208,6 +214,9 @@ struct AivOpArgs {
 };
 
 // AIV Cache Definitions
+// key 维度不含执行配置档：桶为 comm 级（ctx 按 comm 隔离），同 comm 的展开模式在生命周期内
+// 恒定（comm 创建时配置 + 进程级环境变量，无运行期修改路径），该维度不提供区分度；桶内指令
+// 集与算法的对应由 selector 决策确定性保证（同 key 输入不变必选同一算法）。
 struct AivOpCacheArgs {
     std::string commName;
     u64 count;
@@ -216,7 +225,6 @@ struct AivOpCacheArgs {
     HcclReduceOp reduceOp;
     u32 root;
     u32 numBlocksLimit;
-    OpExecuteConfig opExecuteConfig{OpExecuteConfig::DEFAULT};
 
     bool operator<(const AivOpCacheArgs& other) const
     {
@@ -232,9 +240,7 @@ struct AivOpCacheArgs {
             return reduceOp < other.reduceOp;
         if (root != other.root)
             return root < other.root;
-        if (numBlocksLimit != other.numBlocksLimit)
-            return numBlocksLimit < other.numBlocksLimit;
-        return opExecuteConfig < other.opExecuteConfig;
+        return numBlocksLimit < other.numBlocksLimit;
     }
 };
 
@@ -274,14 +280,115 @@ struct AivInstruction {
     u64 outputOffset;
 };
 
+// 录制期单侧地址归属判定结果：offset 为相对归属基址的字节偏移；
+// cacheable=false 表示归属无法安全判定（类型 DEFAULT，或类型与地址矛盾），
+// 该指令集不允许进入缓存，回放退化为完整流程。
+struct AivAddrOffsetResult {
+    u64 offset{0};
+    bool cacheable{true};
+};
+
+// 录制期：按 BufferType 判定 kernel 单侧地址归属，计算相对外部基址的偏移。
+// INPUT/OUTPUT：要求地址不小于对应基址，下溢说明标注与地址矛盾，置不可缓存，
+// 不能按地址数值大小猜归属——多级算法中间级会以 output/cclBuffer 为输入；
+// HCCL_BUFFER：归属 comm 级内部 buffer（随 comm 申请释放，跨调用稳定），偏移恒 0，
+// 回放直接复用录制期绝对地址；
+// DEFAULT：归属未知，置不可缓存，宁失缓存不回放出错地址。
+inline AivAddrOffsetResult CalcAivAddrOffset(BufferType buffType, u64 addr, u64 baseInput, u64 baseOutput)
+{
+    AivAddrOffsetResult result;
+    switch (buffType) {
+        case BufferType::INPUT:
+            if (addr >= baseInput) {
+                result.offset = addr - baseInput;
+            } else {
+                result.cacheable = false;
+            }
+            break;
+        case BufferType::OUTPUT:
+            if (addr >= baseOutput) {
+                result.offset = addr - baseOutput;
+            } else {
+                result.cacheable = false;
+            }
+            break;
+        case BufferType::HCCL_BUFFER:
+            result.offset = 0;
+            break;
+        default:
+            result.offset = 0;
+            result.cacheable = false;
+            break;
+    }
+    return result;
+}
+
+// 回放期：按 BufferType 以本次调用的外部基址还原地址。
+// INPUT：本次 input 基址 + 录制偏移；OUTPUT：本次 output 基址 + 录制偏移
+// （两侧各自独立分派，Broadcast 的落点在 input buffer、outBuffType 标 INPUT 属正常路径）；
+// HCCL_BUFFER：录制期绝对地址原样复用；其余类型不可缓存指令不应存在，返回错误。
+inline HcclResult
+ResolveAivReplayAddr(BufferType buffType, u64 baseInput, u64 baseOutput, u64 offset, u64 recordedAddr, u64& newAddr)
+{
+    switch (buffType) {
+        case BufferType::INPUT:
+            newAddr = baseInput + offset;
+            return HCCL_SUCCESS;
+        case BufferType::OUTPUT:
+            newAddr = baseOutput + offset;
+            return HCCL_SUCCESS;
+        case BufferType::HCCL_BUFFER:
+            newAddr = recordedAddr;
+            return HCCL_SUCCESS;
+        default:
+            return HCCL_E_INTERNAL;
+    }
+}
+
 using InsQueue = std::vector<AivInstruction>;
 
 extern thread_local std::shared_ptr<InsQueue> g_recordingQueue;
 extern thread_local bool g_recordOnlyMode;
 extern thread_local u64 g_baseInputAddr;
 extern thread_local u64 g_baseOutputAddr;
+// 录制会话不可缓存标记：录制点发现地址归属无法安全判定（类型 DEFAULT 或标注与地址矛盾）时置位，
+// StoreAivCacheCtx 拒绝落库并告警；每个录制会话开始时复位
+extern thread_local bool g_recordingUncacheable;
 extern thread_local HcclComm g_aivCurrentComm;
 extern thread_local std::string g_aivCurrentCommName;
+
+// AIV 录制会话 RAII 守卫：Start 后无论正常返回、CHK_RET 早退还是异常退出，析构统一复位全部录制态，
+// 防止 thread_local 跨会话残留（recordOnlyMode 残留会导致本线程后续算子只录不下发）。
+// 会话不可重入：录制入口（ExecuteAivCacheLogic / RecordAivOpArgsGraphMode）互不嵌套。
+class AivRecordingSessionGuard {
+public:
+    AivRecordingSessionGuard() = default;
+    ~AivRecordingSessionGuard()
+    {
+        if (started_) {
+            g_recordingQueue = nullptr;
+            g_baseInputAddr = 0;
+            g_baseOutputAddr = 0;
+            g_recordOnlyMode = false;
+            g_recordingUncacheable = false;
+        }
+    }
+    AivRecordingSessionGuard(const AivRecordingSessionGuard&) = delete;
+    AivRecordingSessionGuard& operator=(const AivRecordingSessionGuard&) = delete;
+
+    void Start(u64 baseInputAddr, u64 baseOutputAddr, bool recordOnly = false)
+    {
+        g_recordingQueue = std::make_shared<InsQueue>();
+        g_baseInputAddr = baseInputAddr;
+        g_baseOutputAddr = baseOutputAddr;
+        g_recordOnlyMode = recordOnly;
+        g_recordingUncacheable = false;
+        started_ = true;
+    }
+
+private:
+    bool started_ = false;
+};
 
 using AivSuperKernelArgs = struct AivSuperKernelArgsDef {
     const void* buffersIn = nullptr; // 注册的CCLIN地址，所有卡可访问

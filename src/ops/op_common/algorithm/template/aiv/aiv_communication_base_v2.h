@@ -45,6 +45,8 @@ struct SkArgsStruct {
     uint32_t counterMemSize;
     alignas(SK_ARGS_BOOL_ALIGN_SIZE) bool isEnableCounter;
     alignas(SK_ARGS_BOOL_ALIGN_SIZE) bool isWrite;
+    uint32_t subCommRankLevel;        // 0=框内, 1=跨框
+    uint32_t level0ChannelNumPerRank; // Z轴绕路: 框内level0链路数(0或1)
 };
 
 static_assert(
@@ -52,40 +54,50 @@ static_assert(
 static_assert(
     alignof(SkArgsStruct::isEnableCounter) == SK_ARGS_BOOL_ALIGN_SIZE,
     "SkArgsStruct bool fields must be aligned to SK_ARGS_BOOL_ALIGN_SIZE");
+// 与 host 侧 AivKernelArgsDef（hccl_aiv_utils.cc）逐字节对齐：绝对偏移错位时编译期报错，
+// 避免超核槽位解包与 __global__ 平铺解包读错同一份 launch blob 的字段
+static_assert(
+    offsetof(SkArgsStruct, subCommRankLevel) == 148,
+    "SkArgsStruct::subCommRankLevel offset must be 148 to match host AivKernelArgsDef layout");
+static_assert(
+    offsetof(SkArgsStruct, level0ChannelNumPerRank) == 152,
+    "SkArgsStruct::level0ChannelNumPerRank offset must be 152 to match host AivKernelArgsDef layout");
 
 // __sk__定义的函数参数
 #define SK_BIND_FUNC_ARGS __gm__ struct SkArgsStruct* args
 
 // 将__sk__参数转成__aicore__参数
-#define CONVERT_SK_PARAM_TO_KERNEL_ARGS                                                                      \
-    GM_ADDR buffIn = args->buffersIn;                                                                        \
-    uint64_t input = args->input;                                                                            \
-    uint64_t output = args->output;                                                                          \
-    uint32_t rank = args->rank;                                                                              \
-    uint32_t sendRecvRemoteRank = args->sendRecvRemoteRank;                                                  \
-    uint32_t rankSize = args->rankSize;                                                                      \
-    uint64_t len = args->len;                                                                                \
-    uint32_t dataType = args->dataType;                                                                      \
-    uint32_t reduceOp = args->reduceOp;                                                                      \
-    uint32_t root = args->root;                                                                              \
-    uint32_t sliceId = args->tag;                                                                            \
-    uint64_t inputSliceStride = args->inputSliceStride;                                                      \
-    uint64_t outputSliceStride = args->outputSliceStride;                                                    \
-    uint64_t repeatNum = args->repeatNum;                                                                    \
-    uint64_t inputRepeatStride = args->inputRepeatStride;                                                    \
-    uint64_t outputRepeatStride = args->outputRepeatStride;                                                  \
-    uint32_t numBlocks = args->numBlocks;                                                                    \
-    bool isOpBase = args->isOpBase;                                                                          \
-    GM_ADDR headCountMem = args->headCountMem;                                                               \
-    GM_ADDR tailCountMem = args->tailCountMem;                                                               \
-    GM_ADDR addOneMem = args->addOneMem;                                                                     \
-    uint32_t counterMemSize = args->counterMemSize;                                                          \
-    bool isEnableCounter = args->isEnableCounter;                                                            \
-    bool isWrite = args->isWrite;                                                                            \
-    /* SK路径暂时不走URMA，但为编译通过需要增加 subCommRankLevel/level0ChannelNumPerRank， \
-       AivSuperKernelArgsDef无此字段，默认0 */                                                        \
-    uint32_t subCommRankLevel = 0;                                                                           \
-    uint32_t level0ChannelNumPerRank = 0
+// subCommRankLevel/level0ChannelNumPerRank 与 host 侧 AivKernelArgsDef（hccl_aiv_utils.cc，
+// ExecuteKernelLaunch 构造 launch blob 时已透传）尾部同名字段逐字节对齐：__global__ 平铺解包与
+// __sk__ 槽位解包共用同一份 blob，读取前提为超核运行时按 argsSize 全量拷贝；上板以
+// [AivUrmaAllGatherMesh1D][Process] 日志的 level 值校验（跨框级应为 1）
+#define CONVERT_SK_PARAM_TO_KERNEL_ARGS                     \
+    GM_ADDR buffIn = args->buffersIn;                       \
+    uint64_t input = args->input;                           \
+    uint64_t output = args->output;                         \
+    uint32_t rank = args->rank;                             \
+    uint32_t sendRecvRemoteRank = args->sendRecvRemoteRank; \
+    uint32_t rankSize = args->rankSize;                     \
+    uint64_t len = args->len;                               \
+    uint32_t dataType = args->dataType;                     \
+    uint32_t reduceOp = args->reduceOp;                     \
+    uint32_t root = args->root;                             \
+    uint32_t sliceId = args->tag;                           \
+    uint64_t inputSliceStride = args->inputSliceStride;     \
+    uint64_t outputSliceStride = args->outputSliceStride;   \
+    uint64_t repeatNum = args->repeatNum;                   \
+    uint64_t inputRepeatStride = args->inputRepeatStride;   \
+    uint64_t outputRepeatStride = args->outputRepeatStride; \
+    uint32_t numBlocks = args->numBlocks;                   \
+    bool isOpBase = args->isOpBase;                         \
+    GM_ADDR headCountMem = args->headCountMem;              \
+    GM_ADDR tailCountMem = args->tailCountMem;              \
+    GM_ADDR addOneMem = args->addOneMem;                    \
+    uint32_t counterMemSize = args->counterMemSize;         \
+    bool isEnableCounter = args->isEnableCounter;           \
+    bool isWrite = args->isWrite;                           \
+    uint32_t subCommRankLevel = args->subCommRankLevel;     \
+    uint32_t level0ChannelNumPerRank = args->level0ChannelNumPerRank
 // sk 绑定函数
 #define SuperKernelBind(kernel_name)                           \
     extern "C" __sk__ void kernel_name##_1(SK_BIND_FUNC_ARGS); \

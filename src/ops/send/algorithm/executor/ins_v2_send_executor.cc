@@ -141,6 +141,8 @@ HcclResult InsV2SendExecutor::OrchestrateImpl(const OpParam& param, const AlgRes
         aivSendArgs.cmdType = HcclCMDType::HCCL_CMD_SEND;
         aivSendArgs.input = reinterpret_cast<u64>(param.inputPtr) + processedDataCount * dataTypeSize_;
         aivSendArgs.output = reinterpret_cast<u64>(param.outputPtr);
+        aivSendArgs.inBuffType = BufferType::INPUT;
+        aivSendArgs.outBuffType = BufferType::OUTPUT;
         aivSendArgs.rank = u32(myRank_);
         aivSendArgs.sendRecvRemoteRank = remoteRank_;
         aivSendArgs.rankSize = resCtx.topoInfo.userRankSize;

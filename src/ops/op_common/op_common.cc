@@ -712,8 +712,6 @@ HcclResult HcclAivCacheCheckAndReplay(HcclComm comm, OpParam& param, bool& cache
     cacheKey.root = param.root;
     cacheKey.reduceOp = param.reduceType;
     cacheKey.numBlocksLimit = numBlocksLimit;
-    cacheKey.opExecuteConfig
-        = (param.opExecuteConfig == OpExecuteConfig::AIV_URMA) ? OpExecuteConfig::AIV_URMA : OpExecuteConfig::AIV;
     if (param.opType == HCCL_CMD_ALLTOALL) {
         cacheKey.dataType = param.all2AllVDataDes.sendType;
         cacheKey.count = static_cast<const u64*>(param.all2AllVDataDes.sendCounts)[0];
@@ -876,6 +874,7 @@ HcclResult ExecuteAivCacheLogic(
 
     std::string ctxTag;
     u64 keyHash = 0;
+    AivRecordingSessionGuard recordingGuard;
     if (useCache) {
         AivOpCacheArgs cacheKey = {};
         cacheKey.root = param.root;
@@ -883,8 +882,6 @@ HcclResult ExecuteAivCacheLogic(
         cacheKey.opType = param.opType;
         cacheKey.reduceOp = param.reduceType;
         cacheKey.numBlocksLimit = param.numBlocksLimit;
-        cacheKey.opExecuteConfig
-            = (param.opExecuteConfig == OpExecuteConfig::AIV_URMA) ? OpExecuteConfig::AIV_URMA : OpExecuteConfig::AIV;
         if (param.opType == HCCL_CMD_ALLTOALL) {
             cacheKey.dataType = param.all2AllVDataDes.sendType;
             cacheKey.count = static_cast<const u64*>(param.all2AllVDataDes.sendCounts)[0];
@@ -897,9 +894,7 @@ HcclResult ExecuteAivCacheLogic(
         }
         keyHash = CalcAivCacheKeyHash(cacheKey);
         CHK_RET(BuildAivCacheCtxTag(keyHash, ctxTag));
-        g_recordingQueue = std::make_shared<InsQueue>();
-        g_baseInputAddr = reinterpret_cast<u64>(param.inputPtr);
-        g_baseOutputAddr = reinterpret_cast<u64>(param.outputPtr);
+        recordingGuard.Start(reinterpret_cast<u64>(param.inputPtr), reinterpret_cast<u64>(param.outputPtr));
     }
 
     CHK_RET(executor->Orchestrate(param, resCtxHost));
@@ -908,9 +903,6 @@ HcclResult ExecuteAivCacheLogic(
         AivCacheIndexCtx* indexCtx = nullptr;
         CHK_RET(GetOrCreateAivCacheIndexCtx(comm, &indexCtx));
         CHK_RET(StoreAivCacheCtx(comm, ctxTag, keyHash, algName, indexCtx, symMode, symSign));
-        g_recordingQueue = nullptr;
-        g_baseInputAddr = 0;
-        g_baseOutputAddr = 0;
     }
     return HCCL_SUCCESS;
 }

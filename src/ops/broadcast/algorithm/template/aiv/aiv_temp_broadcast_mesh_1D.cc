@@ -143,6 +143,8 @@ HcclResult AivTempBroadcastMesh1D::KernelRun(
         = tempAlgParams.buffInfo.inBuffBaseOff + reinterpret_cast<u64>(tempAlgParams.buffInfo.inputPtr);
     aivBroadcastArgs.output
         = tempAlgParams.buffInfo.outBuffBaseOff + reinterpret_cast<u64>(tempAlgParams.buffInfo.outputPtr);
+    aivBroadcastArgs.inBuffType = tempAlgParams.buffInfo.inBuffType;
+    aivBroadcastArgs.outBuffType = tempAlgParams.buffInfo.outBuffType;
     aivBroadcastArgs.rank = u32(myRank_);
     aivBroadcastArgs.rankSize = tempRankSize_;
     aivBroadcastArgs.count = tempAlgParams.sliceSize / HCCL_SIZE_TABLE[dataType_];

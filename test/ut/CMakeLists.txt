@@ -32,6 +32,9 @@ add_subdirectory(common/sym_mem_gate)
 # seq分桶含send-recv同pair同号），直编op_common.cc/stream_capture.cc + 捕获态可控桩
 add_subdirectory(common/aclgraph_zero_copy_gate)
 add_subdirectory(common/template_utils)
+# aiv_replay_addr_resolver: AIV 指令缓存录制/回放地址归属分派 UT（类型分派/下溢防御/
+# DEFAULT 拒缓存/回放基址还原），纯头实现直编，无生产闭包依赖。
+add_subdirectory(common/aiv_replay_addr_resolver)
 add_subdirectory(common/alg_rank)
 add_subdirectory(selector_engine)
 add_subdirectory(op_graph_utils)
