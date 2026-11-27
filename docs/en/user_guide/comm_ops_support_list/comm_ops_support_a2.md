@@ -14,6 +14,85 @@ This section provides the communication operator support status for the Atlas A2
 > - In the tables in this section, "√" indicates supported, "×" indicates not supported, and "NA" indicates not applicable. Atlas A2 products do not support single-operator zero-copy or re-execution.
 > - Operators and network running modes not listed are not supported.
 
+## AI CPU
+
+<table><thead align="left"><tr><th><p>Operator</p></th>
+<th><p>Network Running Mode</p></th>
+<th><p>Single-Operator Zero-Copy</p></th>
+<th><p>Deterministic Computation</p></th>
+<th><p>Re-execution</p></th>
+<th><p>Intra-Node Communication</p></th>
+<th><p>Inter-Node Communication</p></th>
+</tr>
+</thead>
+<tbody><tr><td rowspan="2"><p>AllGather</p></td>
+<td><p>Single-Operator Mode</p></td>
+<td><p>×</p></td>
+<td><p>NA</p></td>
+<td><p>×</p></td>
+<td><p>√</p></td>
+<td><p>√</p></td>
+</tr>
+<tr><td><p>Graph Mode (Ascend IR)</p></td>
+<td><p>×</p></td>
+<td><p>NA</p></td>
+<td><p>×</p></td>
+<td><p>√</p></td>
+<td><p>√</p></td>
+</tr>
+<tr><td rowspan="2"><p>AlltoAll</p></td>
+<td><p>Single-Operator Mode</p></td>
+<td><p>×</p></td>
+<td><p>NA</p></td>
+<td><p>×</p></td>
+<td><p>√</p></td>
+<td><p>√</p></td>
+</tr>
+<tr><td><p>Graph Mode (Ascend IR)</p></td>
+<td><p>×</p></td>
+<td><p>NA</p></td>
+<td><p>×</p></td>
+<td><p>√</p></td>
+<td><p>√</p></td>
+</tr>
+<tr><td rowspan="2"><p>AlltoAllV</p></td>
+<td><p>Single-Operator Mode</p></td>
+<td><p>×</p></td>
+<td><p>NA</p></td>
+<td><p>×</p></td>
+<td><p>√</p></td>
+<td><p>√</p></td>
+</tr>
+<tr><td><p>Graph Mode (Ascend IR)</p></td>
+<td><p>×</p></td>
+<td><p>NA</p></td>
+<td><p>×</p></td>
+<td><p>√</p></td>
+<td><p>√</p></td>
+</tr>
+<tr><td rowspan="2"><p>AlltoAllVC</p></td>
+<td><p>Single-Operator Mode</p></td>
+<td><p>×</p></td>
+<td><p>NA</p></td>
+<td><p>×</p></td>
+<td><p>√</p></td>
+<td><p>√</p></td>
+</tr>
+<tr><td><p>Graph Mode (Ascend IR)</p></td>
+<td><p>×</p></td>
+<td><p>NA</p></td>
+<td><p>×</p></td>
+<td><p>√</p></td>
+<td><p>√</p></td>
+</tr>
+</tbody>
+</table>
+
+> [!NOTE]
+>
+> - In graph capture (aclgraph) scenarios, Atlas A2 products do not support AI CPU expansion and automatically fall back to host-side expansion.
+> - In graph mode (Ascend IR) scenarios, the number of concurrent graphs on a single device cannot exceed 6. Otherwise, communication may be blocked because the AI CPU cores are fully occupied. For details, see [HCCL_OP_EXPANSION_MODE](../hccl_env/HCCL_OP_EXPANSION_MODE.md).
+
 ## HOST/HOST_TS
 
 <table><thead align="left"><tr><th><p>Operator</p></th>

@@ -12,6 +12,144 @@
 > - 本节表格中“√”代表支持，“×”代表不支持，“NA”代表不涉及，Atlas A2系列产品不支持单算子零拷贝与重执行。
 > - 未列出的算子与网络运行模式代表不支持。
 
+## AI CPU
+
+<table><thead align="left"><tr><th><p>算子</p>
+</th>
+<th><p>网络运行模式</p>
+</th>
+<th><p>单算子零拷贝</p>
+</th>
+<th><p>确定性计算</p>
+</th>
+<th><p>重执行</p>
+</th>
+<th><p>节点内通信</p>
+</th>
+<th><p>节点间通信</p>
+</th>
+</tr>
+</thead>
+<tbody><tr><td rowspan="2"><p>AllGather</p>
+</td>
+<td><p>单算子模式</p>
+</td>
+<td><p>×</p>
+</td>
+<td><p>NA</p>
+</td>
+<td><p>×</p>
+</td>
+<td><p>√</p>
+</td>
+<td><p>√</p>
+</td>
+</tr>
+<tr><td><p>图模式Ascend IR</p>
+</td>
+<td><p>×</p>
+</td>
+<td><p>NA</p>
+</td>
+<td><p>×</p>
+</td>
+<td><p>√</p>
+</td>
+<td><p>√</p>
+</td>
+</tr>
+<tr><td rowspan="2"><p>AlltoAll</p>
+</td>
+<td><p>单算子模式</p>
+</td>
+<td><p>×</p>
+</td>
+<td><p>NA</p>
+</td>
+<td><p>×</p>
+</td>
+<td><p>√</p>
+</td>
+<td><p>√</p>
+</td>
+</tr>
+<tr><td><p>图模式Ascend IR</p>
+</td>
+<td><p>×</p>
+</td>
+<td><p>NA</p>
+</td>
+<td><p>×</p>
+</td>
+<td><p>√</p>
+</td>
+<td><p>√</p>
+</td>
+</tr>
+<tr><td rowspan="2"><p>AlltoAllV</p>
+</td>
+<td><p>单算子模式</p>
+</td>
+<td><p>×</p>
+</td>
+<td><p>NA</p>
+</td>
+<td><p>×</p>
+</td>
+<td><p>√</p>
+</td>
+<td><p>√</p>
+</td>
+</tr>
+<tr><td><p>图模式Ascend IR</p>
+</td>
+<td><p>×</p>
+</td>
+<td><p>NA</p>
+</td>
+<td><p>×</p>
+</td>
+<td><p>√</p>
+</td>
+<td><p>√</p>
+</td>
+</tr>
+<tr><td rowspan="2"><p>AlltoAllVC</p>
+</td>
+<td><p>单算子模式</p>
+</td>
+<td><p>×</p>
+</td>
+<td><p>NA</p>
+</td>
+<td><p>×</p>
+</td>
+<td><p>√</p>
+</td>
+<td><p>√</p>
+</td>
+</tr>
+<tr><td><p>图模式Ascend IR</p>
+</td>
+<td><p>×</p>
+</td>
+<td><p>NA</p>
+</td>
+<td><p>×</p>
+</td>
+<td><p>√</p>
+</td>
+<td><p>√</p>
+</td>
+</tr>
+</tbody>
+</table>
+
+> [!NOTE]说明
+>
+> - 图捕获模式aclgraph场景下，Atlas A2系列产品不支持AI CPU展开，自动回退到Host侧展开。
+> - 图模式（Ascend IR）场景下，单卡上的并发图数量不能超过6个，否则可能会因AI CPU核被占满而导致通信阻塞，详见[HCCL_OP_EXPANSION_MODE](../hccl_env/HCCL_OP_EXPANSION_MODE.md)。
+
 ## HOST/HOST_TS
 
 <table><thead align="left"><tr><th><p>算子</p>
