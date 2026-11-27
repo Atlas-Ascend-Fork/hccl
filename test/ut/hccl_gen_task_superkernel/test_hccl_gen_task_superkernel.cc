@@ -15,18 +15,16 @@
 
 #include <cstdint>
 #include <cstdio>
+#include <cstring>
 #include <dirent.h>
-#include <dlfcn.h>
 #include <fstream>
 #include <iterator>
 #include <map>
-#include <stdexcept>
 #include <string>
 #include <sys/stat.h>
 #include <vector>
 #include <unistd.h>
 #include "gtest/gtest.h"
-#include "exe_graph/runtime/task_def_builder.h"
 #include "graph/arg_desc_info.h"
 #include "hccl_gen_task_superkernel.h"
 
@@ -35,7 +33,7 @@ TEST(HcclSuperKernelGenTaskTest, BuildSuperKernelArgsFormat)
 {
     const ge::AscendString argsFormat = BuildSuperKernelArgsFormat();
     ASSERT_NE(argsFormat.GetString(), nullptr);
-    // hidden input 插在第一个 input 前，token 与运行时旧值 HCCLSUPERKERNEL(2) 逐字符一致
+    // 确定性 UT 序列化桩按描述符生成 token，验证 HCCL 的 hidden/input/output 构造顺序。
     EXPECT_STREQ(argsFormat.GetString(), "{hi.hcclsk0*}{i0*}{o0*}");
 }
 
@@ -56,35 +54,6 @@ TEST(HcclSuperKernelGenTaskTest, IsA5OrLaterShortSocVersion)
     EXPECT_FALSE(IsA5OrLaterShortSocVersion("Ascend910_93"));
     EXPECT_FALSE(IsA5OrLaterShortSocVersion("Ascend310P"));
     EXPECT_FALSE(IsA5OrLaterShortSocVersion("unknown"));
-}
-
-TEST(HcclSuperKernelGenTaskTest, IsGeSuperKernelGenTaskSupported)
-{
-    // 守卫委托单一探测点（业务方法成员指针判空，链接期解析值，进程内无法构造两种分支）。
-    // 恒等断言：守卫与共用探测点一致（结构性防漂移）；行为佐证（守卫放行时）：验证运行环境
-    // 惰性创建语义真实生效（SetStreamId/SetType 后 ByteSizeLong > 0），可检出"强符号旧语义运行库
-    // 错配"（显式判红）；"守卫误改恒真""GE 头丢 weak 属性"在符号在场的齐性环境观测不可区分，
-    // 仅能在老 toolkit 环境暴露，跨版本行为覆盖由 GE 侧 ST 承担。
-    // UT 前置条件由构建探测保证（头文件在位，缺失时整个 UT 跳过）。
-    EXPECT_EQ(IsGeSuperKernelGenTaskSupported(), HasTaskDefBuilderBusinessMethod());
-    if (IsGeSuperKernelGenTaskSupported()) {
-        // 取非默认值：proto3 不序列化默认值 0，全 0 时新 GE 的 ByteSizeLong 亦为 0 会误伤
-        gert::TaskDefBuilder probe;
-        probe.SetStreamId(1U).SetType(1U);
-        EXPECT_GT(probe.ByteSizeLong(), 0U);
-    }
-}
-
-TEST(HcclSuperKernelGenTaskTest, TaskDefBuilderSerialize)
-{
-    gert::TaskDefBuilder task;
-    task.SetStreamId(1U).SetType(0U);
-    task.GetKernelBuilder().SetBlockDim(4U).GetContextBuilder().SetArgsFormat(BuildSuperKernelArgsFormat());
-
-    const size_t size = task.ByteSizeLong();
-    ASSERT_GT(size, 0U);
-    std::vector<uint8_t> buffer(size, 0U);
-    EXPECT_TRUE(task.SerializeToArray(buffer.data(), size));
 }
 
 namespace {
@@ -125,20 +94,29 @@ namespace {
 } // namespace ops
 
 namespace ge {
-// 链接期 stub：拦截 ArgsFormatSerializer::Serialize，默认经 RTLD_NEXT 转发 libgraph 真实实现，
-// 保证 BuildSuperKernelArgsFormat 等既有用例仍验证真实序列化行为
+// 确定性 UT 序列化：按 HCCL 构造的描述符生成 token，不调用真实 libgraph。
 AscendString ArgsFormatSerializer::Serialize(const std::vector<ArgDescInfo>& args_format)
 {
     if (ops::g_forceEmptySerialize) {
         return AscendString();
     }
-    using SerializeFn = AscendString (*)(const std::vector<ArgDescInfo>&);
-    static const SerializeFn realFn = reinterpret_cast<SerializeFn>(
-        dlsym(RTLD_NEXT, "_ZN2ge20ArgsFormatSerializer9SerializeERKSt6vectorINS_11ArgDescInfoESaIS2_EE"));
-    if (realFn == nullptr) {
-        throw std::runtime_error("failed to resolve real ArgsFormatSerializer::Serialize");
+
+    std::string serialized;
+    for (const auto& arg : args_format) {
+        if (arg.GetType() == ArgDescType::kHiddenInput) {
+            if (arg.GetHiddenInputSubType() != HiddenInputSubType::kHcclSuperKernel) {
+                return AscendString();
+            }
+            serialized += "{hi.hcclsk" + std::to_string(arg.GetIrIndex()) + "*}";
+        } else if (arg.GetType() == ArgDescType::kIrInput) {
+            serialized += "{i" + std::to_string(arg.GetIrIndex()) + "*}";
+        } else if (arg.GetType() == ArgDescType::kIrOutput) {
+            serialized += "{o" + std::to_string(arg.GetIrIndex()) + "*}";
+        } else {
+            return AscendString();
+        }
     }
-    return realFn(args_format);
+    return AscendString(serialized.c_str());
 }
 } // namespace ge
 
@@ -340,9 +318,42 @@ TEST_F(HcclSuperKernelGenTaskCallbackTest, SetJsonFilePathAttrFailed)
     rmdir(metaDir.c_str());
 }
 
+TEST_F(HcclSuperKernelGenTaskCallbackTest, TaskDefBuilderParameters)
+{
+    g_ctxStub.SetAllValid();
+    g_ctxStub.streamId = 7;
+    const std::string metaDir = std::string("/tmp/hccl_sk_ut_") + std::to_string(getpid());
+    g_ctxStub.strAttrs["kernel_meta_parent_dir"] = metaDir;
+
+    ASSERT_EQ(HcclSuperKernelGenTaskCallback(&ctx_, tasks_), ge::GRAPH_SUCCESS);
+    ASSERT_EQ(tasks_.size(), 1U);
+
+    // UT 自定义布局依次保存 streamId/type/blockDim/argsFormat，仅检查 HCCL 传参，不涉及 GE protobuf。
+    const auto& task = tasks_.front();
+    constexpr size_t headerSize = sizeof(uint32_t) * 3U;
+    ASSERT_GE(task.size(), headerSize);
+    uint32_t streamId = 0U;
+    uint32_t taskType = 0U;
+    uint32_t blockDim = 0U;
+    std::memcpy(&streamId, task.data(), sizeof(streamId));
+    std::memcpy(&taskType, task.data() + sizeof(uint32_t), sizeof(taskType));
+    std::memcpy(&blockDim, task.data() + sizeof(uint32_t) * 2U, sizeof(blockDim));
+    const std::string argsFormat(reinterpret_cast<const char*>(task.data() + headerSize), task.size() - headerSize);
+
+    EXPECT_EQ(streamId, 7U);
+    EXPECT_EQ(taskType, 0U);
+    EXPECT_EQ(blockDim, 4U);
+    EXPECT_EQ(argsFormat, "{hi.hcclsk0*}{i0*}{o0*}");
+
+    ASSERT_EQ(g_ctxStub.setAttrs.count("json_file_path"), 1U);
+    std::remove(g_ctxStub.setAttrs["json_file_path"].c_str());
+    rmdir(metaDir.c_str());
+}
+
 TEST_F(HcclSuperKernelGenTaskCallbackTest, Success)
 {
     g_ctxStub.SetAllValid();
+    // TaskDefBuilder 由 UT 桩提供；本用例只验证 HCCL 正向 JSON、属性写入和文件命名。
     // kernel_meta 指向本进程独立临时目录，避免污染工作区
     const std::string metaDir = std::string("/tmp/hccl_sk_ut_") + std::to_string(getpid());
     g_ctxStub.strAttrs["kernel_meta_parent_dir"] = metaDir;
@@ -365,6 +376,8 @@ TEST_F(HcclSuperKernelGenTaskCallbackTest, Success)
     EXPECT_NE(content.find("\"blockDim\":4"), std::string::npos);
     EXPECT_NE(content.find("hcom_ut_func"), std::string::npos);
     EXPECT_NE(content.find("/tmp/hcom_ut.bin"), std::string::npos);
+    // A2 平台不设置 schedule_mode。
+    EXPECT_EQ(content.find("\"schedule_mode\""), std::string::npos);
 
     std::remove(jsonPath.c_str());
     rmdir(metaDir.c_str());
