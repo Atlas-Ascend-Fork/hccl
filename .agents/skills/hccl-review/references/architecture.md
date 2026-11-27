@@ -1,6 +1,6 @@
 # 检视规范：架构合规
 
-检视 `src/` 变更时逐条对照。权威来源：根 `AGENTS.md` 第 3 节、`docs/zh/architecture/architecture-brief.md`（「3 软件分层逻辑」+ 末尾「软件架构约束说明」）。改 `src/`、`include/`、`pkg_inc/` 前必须先读 architecture-brief。
+检视 `src/` 变更时逐条对照。权威来源：根 `AGENTS.md` 第 3 节、`docs/zh/architecture/architecture-brief.md`（「3 软件分层逻辑」+ 末尾「软件架构约束说明」）。改 `src/`、`include/` 前必须先读 architecture-brief。
 
 ## 分层依赖方向（硬性）
 
