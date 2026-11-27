@@ -446,9 +446,10 @@ TEST_F(ST_ALL_GATHER_DPU_3LEVEL_SEQ_TEST, sequence_dpu_3level_4x2x2_int32_stomp)
 // ========== DPU RHD 二级/三级 Sequence 绑定点（PR#3933 评审 MEDIUM：ST 零覆盖定向补齐）==========
 // 选路词与 AICPU 侧 RHD（all_gather_aicpu_testcase.cc §RHD）不同源，按注册名拼名口径（alg_parse
 // ComposeAlgoName 按 [Engine]AllGatherSequence[level0 词][level1 词]… 精确匹配注册名）：
-//   二级 DpuAllGatherSequenceMeshRHD（L0 词=Mesh：L0=server 内 ZAxisDetour、L1=server 间
-//   host-DPU RHD）← allgather:sequence{level0=mesh,level1=rhd}；meshconcur 词拼出的是 AICPU 款
-//   AicpuAllGatherSequenceMeshConcurRHD，host-DPU 拓扑下被 isHostDpuOnly 硬检查互斥过滤不可达；
+//   二级 DpuAllGatherSequenceMeshConcurRHD（L0 词=MeshConcur：L0=server 内 ZAxisDetour、L1=
+//   server 间 host-DPU RHD）← allgather:sequence{level0=meshconcur,level1=rhd}，与 AICPU 款
+//   AicpuAllGatherSequenceMeshConcurRHD 同串，host-DPU 拓扑下 AICPU 款被 isHostDpuOnly 硬检查
+//   互斥过滤、preferred 收敛 DPU 款；
 //   三级 DpuAllGatherSequenceMeshConcurRHDRHD（L0 词=MeshConcur，执行序 L2→L1→L0）←
 //   allgather:sequence{level0=meshconcur,level1=rhd,level2=rhd}，与 AICPU 款同串，host-DPU
 //   拓扑（hostDpuOnly=true）下 AICPU 款被硬检查过滤、preferred 唯一收敛 DPU 款。
@@ -469,7 +470,7 @@ TEST_F(ST_ALL_GATHER_DPU_3LEVEL_SEQ_TEST, sequence_dpu_3level_4x2x2_int32_stomp)
 // (1, 2, 2)，RHD 域 p=2 真命中（Level1Nhr=false 同 nonpow3 形态）
 TEST_F(ST_ALL_GATHER_DPU_TEST, st_all_gather_dpu_rhd_sequence_2level_pow2_fp32)
 {
-    setenv("HCCL_ALGO", "allgather:sequence{level0=mesh,level1=rhd}", 1);
+    setenv("HCCL_ALGO", "allgather:sequence{level0=meshconcur,level1=rhd}", 1);
     TopoMeta topoMeta;
     GenTopoMeta(topoMeta, 1, 2, 2); // 1 超节点 × 2 server × 2 rank=4 rank，RHD 域 p=2
     u64 sendCount = 512;
@@ -482,7 +483,7 @@ TEST_F(ST_ALL_GATHER_DPU_TEST, st_all_gather_dpu_rhd_sequence_2level_pow2_fp32)
 // 相邻配对 (0,1)、代表 0/被合并 1/block 2；AICPU 侧装载/卸载槽位按非幂 run 表落位）
 TEST_F(ST_ALL_GATHER_DPU_TEST, st_all_gather_dpu_rhd_sequence_2level_nonpow3_int8)
 {
-    setenv("HCCL_ALGO", "allgather:sequence{level0=mesh,level1=rhd}", 1);
+    setenv("HCCL_ALGO", "allgather:sequence{level0=meshconcur,level1=rhd}", 1);
     TopoMeta topoMeta;
     GenTopoMeta(topoMeta, 1, 3, 2); // 1 超节点 × 3 server × 2 rank，RHD 域 p=3
     u64 sendCount = 512;

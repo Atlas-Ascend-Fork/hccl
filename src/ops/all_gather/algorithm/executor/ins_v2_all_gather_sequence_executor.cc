@@ -374,12 +374,11 @@ REGISTER_ALG_ATTRS(
     });
 
 REGISTER_EXECUTOR_BY_TWO_TEMPS(
-    HcclCMDType::HCCL_CMD_ALLGATHER, DpuAllGatherSequenceMeshRHD, InsV2AllGatherSequenceExecutor, TopoMatchTwoLevel,
-    InsTempAllGatherMesh1D1DZAxisDetour, InsTempAllGatherRHDDPU);
+    HcclCMDType::HCCL_CMD_ALLGATHER, DpuAllGatherSequenceMeshConcurRHD, InsV2AllGatherSequenceExecutor,
+    TopoMatchTwoLevel, InsTempAllGatherMesh1D1DZAxisDetour, InsTempAllGatherRHDDPU);
 REGISTER_ALG_ATTRS(
-    DpuAllGatherSequenceMeshRHD, topo.minTopoLevelNum = TOPO_LEVEL_NUM_2; topo.maxTopoLevelNum = TOPO_LEVEL_NUM_2;
-    topo.isHostDpuOnly = true;
-    topo.supportLevel0Topos = LEVEL0_TOPO_MESH_1D | LEVEL0_TOPO_MESH_1D_CLOS | LEVEL0_TOPO_CLOS;
+    DpuAllGatherSequenceMeshConcurRHD, topo.minTopoLevelNum = TOPO_LEVEL_NUM_2; topo.maxTopoLevelNum = TOPO_LEVEL_NUM_2;
+    topo.isHostDpuOnly = true; topo.supportLevel0Topos = LEVEL0_TOPO_MESH_1D;
     topo.topoCustomCheck = [](const TopoInfoWithNetLayerDetails*) -> bool {
         return false;
     };);
