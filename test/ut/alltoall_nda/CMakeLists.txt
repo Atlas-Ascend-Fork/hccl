@@ -16,6 +16,7 @@
 set(_repo_root ${CMAKE_CURRENT_SOURCE_DIR}/../../..)
 
 add_executable(alltoall_nda_test
+    alltoall_grouped_mesh_test.cc
     alltoall_nda_test.cc
     alltoall_nda_executor_test.cc
     nda_test_stubs.cc
@@ -26,6 +27,7 @@ add_executable(alltoall_nda_test
     ${_repo_root}/src/ops/op_common/algorithm/template/template_utils.cc
     ${_repo_root}/src/ops/op_common/algorithm/template/alg_v2_template_base.cc
     ${_repo_root}/src/ops/all_to_all_v/algorithm/template/aicpu/ins_temp_dpu_alltoall_mesh_nda.cc
+    ${_repo_root}/src/ops/all_to_all_v/algorithm/template/aicpu/ins_temp_dpu_alltoall_mesh.cc
 )
 
 target_compile_options(alltoall_nda_test PRIVATE

@@ -156,6 +156,7 @@ endmacro()
 # ---------- alltoall_hier_test：偏移公式与选路逻辑镜像（保留既有目标） ----------
 set(ut_src_list
     ${CMAKE_CURRENT_SOURCE_DIR}/alltoall_hier_test.cc
+    ${CMAKE_CURRENT_SOURCE_DIR}/dpu_alltoall_topology_test.cc
 )
 
 add_executable(alltoall_hier_test ${ut_src_list})

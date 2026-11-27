@@ -8,10 +8,15 @@
  * See LICENSE in the root of the software repository for the full text of the License.
  */
 
-#include <gtest/gtest.h>
+#include <algorithm>
 #include <cstdint>
-#include <vector>
 #include <string>
+#include <tuple>
+#include <vector>
+
+#include <gtest/gtest.h>
+
+#include "alltoall_mesh_group.h"
 
 namespace ops_hccl {
 
@@ -73,4 +78,90 @@ TEST_F(AlltoAllHierSelectorLogicTest, HierConfiguredWithSingleLevelFallsThrough)
     EXPECT_TRUE(expectedFallthrough);
 }
 
+} // namespace ops_hccl
+
+namespace ops_hccl {
+TEST(AlltoAllMeshGroupTest, CoversPeersOnceAndPairsEndpointsInSameRound)
+{
+    for (uint32_t size : {1U, 2U, 3U, 16U, 17U, 18U, 32U, 33U, 34U, 65U, 128U}) {
+        std::vector<uint32_t> ranks;
+        for (uint32_t i = 0; i < size; ++i) {
+            ranks.push_back(i * 3 + 7); // Non-contiguous user rank IDs.
+        }
+        for (uint32_t myIndex = 0; myIndex < size; ++myIndex) {
+            std::vector<uint32_t> visits(size, 0);
+            uint32_t round = 0;
+            for (;; ++round) {
+                const auto peers = CalcAlltoAllMeshGroup(ranks, myIndex, round);
+                if (peers.empty()) {
+                    break;
+                }
+                ASSERT_LE(peers.size(), ALLTOALLV_DIRECT_FULLMESH_CONCURRENT_SIZE);
+                for (auto peer : peers) {
+                    const auto peerIndex
+                        = static_cast<uint32_t>(std::find(ranks.begin(), ranks.end(), peer) - ranks.begin());
+                    ASSERT_LT(peerIndex, size);
+                    ASSERT_NE(peerIndex, myIndex);
+                    ++visits[peerIndex];
+                    const auto reversePeers = CalcAlltoAllMeshGroup(ranks, peerIndex, round);
+                    EXPECT_NE(std::find(reversePeers.begin(), reversePeers.end(), ranks[myIndex]), reversePeers.end());
+                }
+            }
+            EXPECT_EQ(
+                round,
+                (size - 1 + ALLTOALLV_DIRECT_FULLMESH_CONCURRENT_SIZE - 1) / ALLTOALLV_DIRECT_FULLMESH_CONCURRENT_SIZE);
+            for (uint32_t i = 0; i < size; ++i) {
+                EXPECT_EQ(visits[i], i == myIndex ? 0U : 1U);
+            }
+        }
+    }
+}
+
+TEST(AlltoAllMeshGroupTest, MatchesAicpuDistanceOrder)
+{
+    std::vector<uint32_t> ranks;
+    for (uint32_t i = 0; i < 32; ++i) {
+        ranks.push_back(i);
+    }
+    EXPECT_EQ(
+        CalcAlltoAllMeshGroup(ranks, 0, 0),
+        (std::vector<uint32_t>{31, 1, 30, 2, 29, 3, 28, 4, 27, 5, 26, 6, 25, 7, 24, 8}));
+    EXPECT_EQ(
+        CalcAlltoAllMeshGroup(ranks, 0, 1),
+        (std::vector<uint32_t>{23, 9, 22, 10, 21, 11, 20, 12, 19, 13, 18, 14, 17, 15, 16}));
+    EXPECT_TRUE(CalcAlltoAllMeshGroup(ranks, 0, 2).empty());
+    EXPECT_TRUE(CalcAlltoAllMeshGroup({}, 0, 0).empty());
+    EXPECT_TRUE(CalcAlltoAllMeshGroup(ranks, 32, 0).empty());
+}
+} // namespace ops_hccl
+
+namespace ops_hccl {
+TEST(AlltoAllMeshGroupTest, DeviceFilteringSkipsHostPeersAndContinuesAfterEmptyRound)
+{
+    std::vector<uint32_t> ranks;
+    for (uint32_t i = 0; i < 65; ++i) {
+        ranks.push_back(i);
+    }
+    // rank0's first distance group is HOST-only, but a later group contains DEVICE peers.
+    const std::vector<uint32_t> devices{9, 56, 10, 55, 11, 54, 12, 53, 13, 52, 14, 51, 15, 50, 16, 49, 17, 48};
+    EXPECT_TRUE(CalcAlltoAllMeshGroup(ranks, 0, 0, &devices).empty());
+    EXPECT_EQ(CalcAlltoAllMeshGroup(ranks, 0, 1, &devices).size(), 16U);
+    EXPECT_EQ(CalcAlltoAllMeshGroup(ranks, 0, 2, &devices).size(), 2U);
+    std::vector<uint32_t> covered;
+    for (uint32_t round = 0; round < 4; ++round) {
+        const auto group = CalcAlltoAllMeshGroup(ranks, 0, round, &devices);
+        covered.insert(covered.end(), group.begin(), group.end());
+        for (auto peer : group) {
+            const std::vector<uint32_t> reverseDevices{0};
+            const auto reverse = CalcAlltoAllMeshGroup(ranks, peer, round, &reverseDevices);
+            EXPECT_NE(std::find(reverse.begin(), reverse.end(), 0), reverse.end());
+        }
+    }
+    std::sort(covered.begin(), covered.end());
+    auto expected = devices;
+    std::sort(expected.begin(), expected.end());
+    EXPECT_EQ(covered, expected);
+    const std::vector<uint32_t> noDevices;
+    EXPECT_TRUE(CalcAlltoAllMeshGroup(ranks, 0, 0, &noDevices).empty());
+}
 } // namespace ops_hccl

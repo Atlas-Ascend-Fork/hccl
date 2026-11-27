@@ -9,6 +9,8 @@
  */
 
 #include "ins_temp_dpu_alltoall_mesh.h"
+#include "alltoall_mesh_group.h"
+#include "alltoall_dpu_topology.h"
 #include "exec_timeout_manager.h"
 
 #include <algorithm>
@@ -23,6 +25,12 @@ InsTempDpuAlltoAllMesh::InsTempDpuAlltoAllMesh(
 {}
 
 InsTempDpuAlltoAllMesh::~InsTempDpuAlltoAllMesh() {}
+
+HcclResult InsTempDpuAlltoAllMesh::SetLocalPodRanks(const TopoInfoWithNetLayerDetails& topoInfo)
+{
+    CHK_RET(GetAlltoAllLocalPodRanks(topoInfo, localPodRanks_));
+    return HCCL_SUCCESS;
+}
 
 u32 InsTempDpuAlltoAllMesh::GetIntraRankNumFromPhysicalLevels(const TopoInfoWithNetLayerDetails* topoInfo)
 {
@@ -82,6 +90,9 @@ HcclResult InsTempDpuAlltoAllMesh::CalcRes(
             comm, param, topoInfo, subCommRanks_, level0Channels, CommTopo::COMM_TOPO_1DMESH));
     }
 
+    // DEVICE transfers reuse at most 16 threads across symmetric peer groups.
+    threadNum = std::min(threadNum, ALLTOALLV_DIRECT_FULLMESH_CONCURRENT_SIZE);
+
     // 计算从流以及Notify数量
     resourceRequest.slaveThreadNum = threadNum - 1;
     for (u32 index = 0; index < threadNum - 1; index++) {
@@ -127,6 +138,9 @@ HcclResult InsTempDpuAlltoAllMesh::KernelRun(
         subCommRanks_[0].empty(), HCCL_ERROR("[InsTempDpuAlltoAllMesh] [KernelRun] subCommRanks[0] is empty"),
         HCCL_E_PARA);
 
+    // Validate the selected channels before either engine submits work.
+    std::vector<u32> deviceRanks;
+    CHK_RET(CollectDevicePeers(subCommRanks_[0], templateResource, deviceRanks));
     CHK_RET(LocalCopyforMyRank(subCommRanks_[0], tempAlgParams, threads_));
 
     // 将待发送数据从sendBuf拷贝到CCL_IN上
@@ -149,32 +163,49 @@ HcclResult InsTempDpuAlltoAllMesh::KernelRun(
         }
     }
 
-    if (threadNum_ > 1) {
-        std::vector<ThreadHandle> subThreads(templateResource.threads.begin() + 1, templateResource.threads.end());
-        GetNotifyIdxMainToSub(notifyIdxMainToSub_);
-        CHK_RET(PreSyncInterThreads(templateResource.threads[0], subThreads, notifyIdxMainToSub_));
-    }
-    // 从CCL_IN发送数据给对端CCL_OUT
-    CHK_RET(SendRecvData(param, subCommRanks_[0], tempAlgParams, templateResource, threads_));
-    if (threadNum_ > 1) {
-        std::vector<ThreadHandle> subThreads(templateResource.threads.begin() + 1, templateResource.threads.end());
-        GetNotifyIdxSubToMain(notifyIdxSubToMain_);
-        CHK_RET(PostSyncInterThreads(templateResource.threads[0], subThreads, notifyIdxSubToMain_));
-    }
-
-    if (threadNum_ > 1) {
-        std::vector<ThreadHandle> subThreads(templateResource.threads.begin() + 1, templateResource.threads.end());
-        GetNotifyIdxMainToSub(notifyIdxMainToSub_);
-        CHK_RET(PreSyncInterThreads(templateResource.threads[0], subThreads, notifyIdxMainToSub_));
-    }
-    // 将接收到的数据从CCL_OUT拷贝recvBuf
+    // DEVICE groups own their thread synchronization. Wrapping them in another pair of
+    // Pre/PostSync calls reuses the same notify IDs without a consume-before-record dependency.
+    // SendRecvData also joins the HOST/DPU path before the main thread copies received data.
+    CHK_RET(SendRecvData(param, subCommRanks_[0], deviceRanks, tempAlgParams, templateResource, threads_));
     CHK_RET(PostCopyDataToRecvBuf(subCommRanks_[0], tempAlgParams, threads_));
-    if (threadNum_ > 1) {
-        std::vector<ThreadHandle> subThreads(templateResource.threads.begin() + 1, templateResource.threads.end());
-        GetNotifyIdxSubToMain(notifyIdxSubToMain_);
-        CHK_RET(PostSyncInterThreads(templateResource.threads[0], subThreads, notifyIdxSubToMain_));
-    }
 
+    return HCCL_SUCCESS;
+}
+
+HcclResult InsTempDpuAlltoAllMesh::CollectDevicePeers(
+    const std::vector<u32>& commRanks, const TemplateResource& templateResource, std::vector<u32>& deviceRanks) const
+{
+    CHK_PRT_RET(
+        localPodRanks_.empty(),
+        HCCL_ERROR(
+            "[InsTempDpuAlltoAllMesh] myRank[%u] local pod is not initialized, podSize[%zu]", myRank_,
+            localPodRanks_.size()),
+        HCCL_E_PARA);
+    CHK_PRT_RET(
+        !std::binary_search(localPodRanks_.begin(), localPodRanks_.end(), myRank_),
+        HCCL_ERROR(
+            "[InsTempDpuAlltoAllMesh] myRank[%u] is absent from local pod of size[%zu]", myRank_,
+            localPodRanks_.size()),
+        HCCL_E_PARA);
+    for (u32 peer : commRanks) {
+        if (peer == myRank_) {
+            continue;
+        }
+        const auto it = templateResource.channels.find(peer);
+        CHK_PRT_RET(
+            it == templateResource.channels.end() || it->second.empty(),
+            HCCL_ERROR("[InsTempDpuAlltoAllMesh] myRank[%u] is missing a channel for peer[%u]", myRank_, peer),
+            HCCL_E_PARA);
+        if (it->second[0].locationType == EndpointLocType::ENDPOINT_LOC_TYPE_DEVICE) {
+            CHK_PRT_RET(
+                !std::binary_search(localPodRanks_.begin(), localPodRanks_.end(), peer),
+                HCCL_ERROR(
+                    "[InsTempDpuAlltoAllMesh] myRank[%u] DEVICE peer[%u] is outside the local pod of size[%zu]",
+                    myRank_, peer, localPodRanks_.size()),
+                HCCL_E_NOT_SUPPORT);
+            deviceRanks.push_back(peer);
+        }
+    }
     return HCCL_SUCCESS;
 }
 
@@ -218,8 +249,9 @@ HcclResult InsTempDpuAlltoAllMesh::PreCopyDataToCclInBuf(
 }
 
 HcclResult InsTempDpuAlltoAllMesh::SendRecvData(
-    const OpParam& param, const std::vector<u32>& commRanks, const TemplateDataParams& tempAlgParams,
-    const TemplateResource& templateResource, std::vector<ThreadHandle>& threads)
+    const OpParam& param, const std::vector<u32>& commRanks, const std::vector<u32>& deviceRanks,
+    const TemplateDataParams& tempAlgParams, const TemplateResource& templateResource,
+    std::vector<ThreadHandle>& threads)
 {
     if (templateResource.isDpuThreadEnabled) {
         // 新路径：主流通知DPU线程开工，再由主流把搬运任务下发到DPU线程队列，最后等其完工通知
@@ -230,9 +262,9 @@ HcclResult InsTempDpuAlltoAllMesh::SendRecvData(
             HcommThreadNotifyWaitOnThread(templateResource.dpuThread, HOST_DPU_THREAD_NOTIFY_IDX, execTimeout)));
         // 照抄DPUKernelRun逻辑：把批量搬运任务下发到DPU线程
         CHK_RET(RunDpuTransfer(
-            templateResource.channels, tempAlgParams, templateResource.dpuThread,
+            templateResource.channels, tempAlgParams, commRanks, templateResource.dpuThread,
             templateResource.isHcommChannelDrainSupported));
-        CHK_RET(RunAicpuTransfer(commRanks, tempAlgParams, templateResource, threads));
+        CHK_RET(RunGroupedAicpuTransfer(deviceRanks, tempAlgParams, templateResource, threads));
         CHK_RET(static_cast<HcclResult>(HcommThreadNotifyRecordOnThread(
             templateResource.dpuThread, threads[0], templateResource.dpuThreadNotifyIdxOnMain)));
         CHK_RET(static_cast<HcclResult>(
@@ -245,7 +277,7 @@ HcclResult InsTempDpuAlltoAllMesh::SendRecvData(
     dpuRunInfo.execTimeout = param.opConfig.execTimeout;
     dpuRunInfo.templateName = "InsTempDpuAlltoAllMesh";
     dpuRunInfo.tempAlgParams = tempAlgParams;
-    dpuRunInfo.subCommRanks = subCommRanks_;
+    dpuRunInfo.subCommRanks = {commRanks};
     dpuRunInfo.channels = templateResource.channels;
     dpuRunInfo.myRank = myRank_;
     u32 sendMsgId = 0;
@@ -257,7 +289,7 @@ HcclResult InsTempDpuAlltoAllMesh::SendRecvData(
         HCCL_ERROR("[InsTempDpuAlltoAllMesh] [SendRecvData] HcommSendRequest failed");
         return HCCL_E_INTERNAL;
     }
-    CHK_RET(RunAicpuTransfer(commRanks, tempAlgParams, templateResource, threads));
+    CHK_RET(RunGroupedAicpuTransfer(deviceRanks, tempAlgParams, templateResource, threads));
 
     // 等待dpu完成
     HCCL_INFO("[InsTempDpuAlltoAllMesh] [SendRecvData] HcommSendRequest run over, sendMsgId[%u]", sendMsgId);
@@ -278,6 +310,35 @@ HcclResult InsTempDpuAlltoAllMesh::SendRecvData(
         return HCCL_E_INTERNAL;
     }
     return HcclResult::HCCL_SUCCESS;
+}
+
+HcclResult InsTempDpuAlltoAllMesh::RunGroupedAicpuTransfer(
+    const std::vector<u32>& deviceRanks, const TemplateDataParams& tempAlgParams,
+    const TemplateResource& templateResource, std::vector<ThreadHandle>& threads)
+{
+    const auto local = std::lower_bound(localPodRanks_.begin(), localPodRanks_.end(), myRank_);
+    const u32 myIndex = static_cast<u32>(local - localPodRanks_.begin());
+    const std::vector<ThreadHandle> subThreads(threads.begin() + 1, threads.end());
+    GetNotifyIdxMainToSub(notifyIdxMainToSub_);
+    GetNotifyIdxSubToMain(notifyIdxSubToMain_);
+    // Pair left/right positions within this pod, using the same ordered membership on every local rank.
+    // HOST peers are excluded from DEVICE work and transferred once by RunDpuTransfer.
+    const size_t roundCount = (localPodRanks_.size() - 1 + ALLTOALLV_DIRECT_FULLMESH_CONCURRENT_SIZE - 1)
+                              / ALLTOALLV_DIRECT_FULLMESH_CONCURRENT_SIZE;
+    for (u32 roundIdx = 0; roundIdx < roundCount; ++roundIdx) {
+        const auto devicePeers = CalcAlltoAllMeshGroup(localPodRanks_, myIndex, roundIdx, &deviceRanks);
+        if (devicePeers.empty()) {
+            continue;
+        }
+        if (!subThreads.empty()) {
+            CHK_RET(PreSyncInterThreads(threads[0], subThreads, notifyIdxMainToSub_));
+        }
+        CHK_RET(RunAicpuTransfer(devicePeers, tempAlgParams, templateResource, threads));
+        if (!subThreads.empty()) {
+            CHK_RET(PostSyncInterThreads(threads[0], subThreads, notifyIdxSubToMain_));
+        }
+    }
+    return HCCL_SUCCESS;
 }
 
 HcclResult InsTempDpuAlltoAllMesh::RunAicpuTransfer(
@@ -482,7 +543,7 @@ void InsTempDpuAlltoAllMesh::GetNotifyIdxSubToMain(std::vector<u32>& notifyIdxSu
 
 HcclResult InsTempDpuAlltoAllMesh::RunDpuTransfer(
     const std::map<u32, std::vector<ChannelInfo>>& channels, const TemplateDataParams& tempAlgParams,
-    ThreadHandle thread, bool isDrainSupported)
+    const std::vector<u32>& commRanks, ThreadHandle thread, bool isDrainSupported)
 {
     // 网卡通信流程
     HCCL_INFO("[InsTempDpuAlltoAllMesh] [DPUKernelRun] start");
@@ -492,7 +553,6 @@ HcclResult InsTempDpuAlltoAllMesh::RunDpuTransfer(
     CHK_PRT_RET(
         subCommRanks_[0].empty(), HCCL_ERROR("[InsTempDpuAlltoAllMesh] [DPUKernelRun] subCommRanks[0] is empty"),
         HCCL_E_PARA);
-    const std::vector<u32>& commRanks = subCommRanks_[0];
     const u32 templateRankSize = static_cast<u32>(commRanks.size());
 
     u64 splitParts = 2;
@@ -573,7 +633,8 @@ HcclResult InsTempDpuAlltoAllMesh::DPUKernelRun(
 #ifndef AICPU_COMPILE
     myRank_ = myRank;
     subCommRanks_ = subCommRanks;
-    CHK_RET(RunDpuTransfer(channels, tempAlgParams));
+    CHK_PRT_RET(subCommRanks_.empty(), HCCL_ERROR("[InsTempDpuAlltoAllMesh] DPU subCommRanks is empty"), HCCL_E_PARA);
+    CHK_RET(RunDpuTransfer(channels, tempAlgParams, subCommRanks_[0]));
 #endif
     return HCCL_SUCCESS;
 }
