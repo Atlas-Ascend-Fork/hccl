@@ -1279,7 +1279,7 @@ HcclResult CalcChannelRequestNhrMultiJettyUbx(
         HCCL_E_PARA);
     u64 perDataSize = DATATYPE_SIZE_TABLE[param.DataDes.dataType];
     u64 dataSize = param.DataDes.count * perDataSize;
-    bool isIsolation = !(IsAllConnetedWithTopo(topoInfo, 0, CommTopo::COMM_TOPO_1DMESH) || dataSize <= isoThreshold);
+    bool isIsolation = !(IsAllConnetedWithTopo(topoInfo, 0, CommTopo::COMM_TOPO_1DMESH) || dataSize < isoThreshold);
     std::vector<HcclChannelDesc> myChannelDescs;
     CHK_RET(CalcChannelRequestNhrMultiJetty(comm, param, topoInfo, subcommInfo, myChannelDescs, isIsolation));
     for (auto channel : myChannelDescs) {
