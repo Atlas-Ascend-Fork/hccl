@@ -14,9 +14,13 @@
 //   2. IsAclgraphZeroCopyGateHit 条件组合（捕获态/OPBASE/AICPU_TS/白名单/非协商域/非对称，逐项负例）
 //   3. TryEnableAclgraphZeroCopy tag追加分支：tag带_aclgraph_<seq>、opMode=OFFLOAD、algTag按memTag重拼
 //   4. TryEnableAclgraphZeroCopy 无空间回退分支：tag/opMode/algTag零改写、返回SUCCESS（优雅降级）
-//   5. seq分桶：集合类按(comm,opType)、send/recv按(发送方,接收方)——两侧视角同一pair键，
-//      多进程部署下两侧进程独立计数、同一次通信同号
-// 说明：g_aclgraphTagCtxMap为进程级状态（号永不归零），各用例使用独立commName隔离计数桶。
+//   4b. TryEnableAclgraphZeroCopy 取号失败分支（ctx创建失败/条目尺寸异常）：错误码
+//      透传整算子报错、tag/opMode/algTag零改写（seq为跨rank契约，禁止本rank静默回退）
+//   5. seq分桶：计数簿记挂comm的engine ctx，桶随comm隔离——集合类按(comm,opType)、send/recv按
+//      (comm,发送方,接收方)。单进程多rank（HcclCommInitAll每卡一comm）下匹配的send/recv各自独立
+//      计数取同号；多进程部署每进程一comm同理由同号
+// 说明：seq簿记随engine ctx桩存取（UtEngineCtxStubReset每用例复位，seq从1起），用例以不同
+// comm句柄（UT_COMM_A/B）模拟单进程多rank下的桶隔离。
 
 #include <gtest/gtest.h>
 
@@ -31,11 +35,16 @@ using namespace ut_stub;
 
 namespace {
 
+// 模拟单进程多 rank 场景下两个 rank 各自的通信域句柄
+const HcclComm UT_COMM_A = reinterpret_cast<HcclComm>(0x10);
+const HcclComm UT_COMM_B = reinterpret_cast<HcclComm>(0x20);
+
 class AclgraphGateTest : public testing::Test {
 protected:
     void SetUp() override
     {
         UtCaptureStubReset();
+        UtEngineCtxStubReset();
         param_ = OpParam{};
         topo_ = TopoInfoWithNetLayerDetails{};
         // 默认满足gate全部条件：捕获态+OPBASE+AICPU_TS+白名单算子+非协商域+非对称
@@ -43,6 +52,7 @@ protected:
         param_.engine = CommEngine::COMM_ENGINE_AICPU_TS;
         param_.stream = reinterpret_cast<aclrtStream>(0x1);
         param_.opType = HcclCMDType::HCCL_CMD_ALLGATHER;
+        param_.hcclComm = UT_COMM_A;
         ASSERT_EQ(strcpy_s(param_.tag, sizeof(param_.tag), "AllGather_ut_comm"), EOK);
         ASSERT_EQ(strcpy_s(param_.commName, sizeof(param_.commName), "ut_comm"), EOK);
         topo_.userRank = 0;
@@ -177,11 +187,25 @@ TEST_F(AclgraphGateTest, TryEnableNoRoomFallsBackWithoutAnyMutation)
     EXPECT_STREQ(param_.algTag, "alg_sentinel");
 }
 
-// ---------------- 5. seq分桶（跨用例状态用独立commName隔离） ----------------
+// ---------------- 4b. TryEnable：取号失败硬报错分支 ----------------
+
+TEST_F(AclgraphGateTest, TryEnableHardFailsWhenAllocSeqFails)
+{
+    SetCommName("ut_alloc_fail");
+    ASSERT_EQ(strcpy_s(param_.algTag, sizeof(param_.algTag), "alg_sentinel"), EOK);
+    // 本rank ctx创建失败：错误码透传整算子报错（静默回退会导致同桶跨rank永久错位）
+    ut_stub::g_utEngineCtxCreateFail = true;
+    EXPECT_EQ(TryEnableAclgraphZeroCopy(param_, &topo_, std::string("AicpuTestAlg")), HCCL_E_INTERNAL);
+    // 硬报错路径同样零改写tag/opMode/algTag
+    EXPECT_STREQ(param_.tag, "AllGather_ut_comm");
+    EXPECT_EQ(param_.opMode, OpMode::OPBASE);
+    EXPECT_STREQ(param_.algTag, "alg_sentinel");
+}
+
+// ---------------- 5. seq分桶（簿记随comm的engine ctx隔离，每用例桩复位） ----------------
 
 TEST_F(AclgraphGateTest, SeqIncrementsWithinSameOpTypeBucket)
 {
-    SetCommName("ut_seq_same_bucket");
     ASSERT_EQ(TryEnableAclgraphZeroCopy(param_, &topo_, std::string("AicpuTestAlg")), HCCL_SUCCESS);
     EXPECT_TRUE(strstr(param_.tag, "_aclgraph_1") != nullptr);
     ASSERT_EQ(strcpy_s(param_.tag, sizeof(param_.tag), "AllGather_ut_comm"), EOK);
@@ -192,27 +216,25 @@ TEST_F(AclgraphGateTest, SeqIncrementsWithinSameOpTypeBucket)
 TEST_F(AclgraphGateTest, SeqIndependentAcrossOpTypeAndCommBuckets)
 {
     // 同comm不同opType：各自独立计数
-    SetCommName("ut_seq_buckets");
     ASSERT_EQ(TryEnableAclgraphZeroCopy(param_, &topo_, std::string("AicpuTestAlg")), HCCL_SUCCESS);
     EXPECT_TRUE(strstr(param_.tag, "_aclgraph_1") != nullptr);
     param_.opType = HcclCMDType::HCCL_CMD_BROADCAST;
     ASSERT_EQ(strcpy_s(param_.tag, sizeof(param_.tag), "Broadcast_ut_comm"), EOK);
     ASSERT_EQ(TryEnableAclgraphZeroCopy(param_, &topo_, std::string("AicpuTestAlg")), HCCL_SUCCESS);
     EXPECT_TRUE(strstr(param_.tag, "_aclgraph_1") != nullptr);
-    // 不同comm：独立计数
-    SetCommName("ut_seq_other_comm");
+    // 不同comm：桶随comm隔离，独立计数
+    param_.opType = HcclCMDType::HCCL_CMD_ALLGATHER;
+    param_.hcclComm = UT_COMM_B;
     ASSERT_EQ(strcpy_s(param_.tag, sizeof(param_.tag), "AllGather_ut_comm"), EOK);
     ASSERT_EQ(TryEnableAclgraphZeroCopy(param_, &topo_, std::string("AicpuTestAlg")), HCCL_SUCCESS);
     EXPECT_TRUE(strstr(param_.tag, "_aclgraph_1") != nullptr);
 }
 
-TEST_F(AclgraphGateTest, PairBucketSharedBySendRecvOfSamePair)
+TEST_F(AclgraphGateTest, PairSeqSameAcrossPairedCommRanks)
 {
-    // 匹配流原则核心机制：send(0→1)与对端recv(1←0)两侧视角生成同一pair键("P2P_0_1")，落入同一pair桶。
-    // 多进程部署（每rank独立进程、各进程计数互不可见）下两侧各自独立计数，同一次通信的send与recv
-    // 取到同号，memTag一致完成注册/反查配对；本UT单进程模拟两侧调用、共享同一进程级pair桶，表现为
-    // 续号（send取1、recv续2）——续号即"同桶"证据：若pair键误按方向分桶，recv将从1独立起号。
-    SetCommName("ut_pair");
+    // 单进程多rank（HcclCommInitAll每卡一comm）下的匹配流配对：rank0的send(comm_A)与rank1的
+    // recv(comm_B)生成同一pair键("P2P_0_1")，计数桶随comm隔离后两侧各自独立计数，
+    // 同一次配对通信取到同号，memTag一致完成注册/反查配对
     param_.opType = HcclCMDType::HCCL_CMD_SEND;
     param_.sendRecvRemoteRank = 1;
     topo_.userRank = 0;
@@ -220,14 +242,39 @@ TEST_F(AclgraphGateTest, PairBucketSharedBySendRecvOfSamePair)
     ASSERT_EQ(TryEnableAclgraphZeroCopy(param_, &topo_, std::string("AicpuTestAlg")), HCCL_SUCCESS);
     EXPECT_TRUE(strstr(param_.tag, "_aclgraph_1") != nullptr);
 
-    // 对端recv视角：userRank=1、对端=0 → 同一pair键(0,1) → seq续号为2
+    // 对端recv视角：comm_B、userRank=1、对端=0 → 独立桶计数，与send侧同号
     param_ = OpParam{};
     param_.opMode = OpMode::OPBASE;
     param_.engine = CommEngine::COMM_ENGINE_AICPU_TS;
+    param_.hcclComm = UT_COMM_B;
     param_.opType = HcclCMDType::HCCL_CMD_RECEIVE;
     param_.sendRecvRemoteRank = 0;
     topo_.userRank = 1;
-    ASSERT_EQ(strcpy_s(param_.commName, sizeof(param_.commName), "ut_pair"), EOK);
+    ASSERT_EQ(strcpy_s(param_.commName, sizeof(param_.commName), "ut_comm"), EOK);
+    ASSERT_EQ(strcpy_s(param_.tag, sizeof(param_.tag), "SendRecv_ut_comm_0_1"), EOK);
+    ASSERT_EQ(TryEnableAclgraphZeroCopy(param_, &topo_, std::string("AicpuTestAlg")), HCCL_SUCCESS);
+    EXPECT_TRUE(strstr(param_.tag, "_aclgraph_1") != nullptr);
+}
+
+TEST_F(AclgraphGateTest, PairSeqSharedWithinSameComm)
+{
+    // 同一comm内两侧视角生成同一pair键、共享同一桶，续号（send取1、recv续2）——
+    // 续号即"键方向无关"证据：若pair键误按方向分桶，recv将从1独立起号
+    param_.opType = HcclCMDType::HCCL_CMD_SEND;
+    param_.sendRecvRemoteRank = 1;
+    topo_.userRank = 0;
+    ASSERT_EQ(strcpy_s(param_.tag, sizeof(param_.tag), "SendRecv_ut_comm_0_1"), EOK);
+    ASSERT_EQ(TryEnableAclgraphZeroCopy(param_, &topo_, std::string("AicpuTestAlg")), HCCL_SUCCESS);
+    EXPECT_TRUE(strstr(param_.tag, "_aclgraph_1") != nullptr);
+
+    param_ = OpParam{};
+    param_.opMode = OpMode::OPBASE;
+    param_.engine = CommEngine::COMM_ENGINE_AICPU_TS;
+    param_.hcclComm = UT_COMM_A;
+    param_.opType = HcclCMDType::HCCL_CMD_RECEIVE;
+    param_.sendRecvRemoteRank = 0;
+    topo_.userRank = 1;
+    ASSERT_EQ(strcpy_s(param_.commName, sizeof(param_.commName), "ut_comm"), EOK);
     ASSERT_EQ(strcpy_s(param_.tag, sizeof(param_.tag), "SendRecv_ut_comm_0_1"), EOK);
     ASSERT_EQ(TryEnableAclgraphZeroCopy(param_, &topo_, std::string("AicpuTestAlg")), HCCL_SUCCESS);
     EXPECT_TRUE(strstr(param_.tag, "_aclgraph_2") != nullptr);
@@ -235,7 +282,6 @@ TEST_F(AclgraphGateTest, PairBucketSharedBySendRecvOfSamePair)
 
 TEST_F(AclgraphGateTest, PairBucketIndependentPerPair)
 {
-    SetCommName("ut_pair_independent");
     param_.opType = HcclCMDType::HCCL_CMD_SEND;
     param_.sendRecvRemoteRank = 1;
     topo_.userRank = 0;
@@ -246,6 +292,28 @@ TEST_F(AclgraphGateTest, PairBucketIndependentPerPair)
     ASSERT_EQ(strcpy_s(param_.tag, sizeof(param_.tag), "SendRecv_ut_comm_0_2"), EOK);
     ASSERT_EQ(TryEnableAclgraphZeroCopy(param_, &topo_, std::string("AicpuTestAlg")), HCCL_SUCCESS);
     EXPECT_TRUE(strstr(param_.tag, "_aclgraph_1") != nullptr);
+}
+
+TEST_F(AclgraphGateTest, SeqCtxIsolatedFromCpuTsTagSpace)
+{
+    // CPU_TS域存在同字符串大条目（topo缓存/algTag键空间含用户tag，用户可构造同串）：
+    // 簿记在CPU域，(ctxTag, engine)二元组不同，不受影响正常取号
+    std::string collTag = "__aclgraph_seq_coll_" + std::to_string(static_cast<u32>(param_.opType));
+    UtEngineCtxPreset(UT_COMM_A, collTag, CommEngine::COMM_ENGINE_CPU_TS, 4096);
+    ASSERT_EQ(TryEnableAclgraphZeroCopy(param_, &topo_, std::string("AicpuTestAlg")), HCCL_SUCCESS);
+    EXPECT_TRUE(strstr(param_.tag, "_aclgraph_1") != nullptr);
+}
+
+TEST_F(AclgraphGateTest, SeqSizeMismatchHardFailsWithoutMutation)
+{
+    // CPU域同键非4字节条目（异常条目）：同为rank局部失败源，整算子硬报错透传
+    ASSERT_EQ(strcpy_s(param_.algTag, sizeof(param_.algTag), "alg_sentinel"), EOK);
+    std::string collTag = "__aclgraph_seq_coll_" + std::to_string(static_cast<u32>(param_.opType));
+    UtEngineCtxPreset(UT_COMM_A, collTag, CommEngine::COMM_ENGINE_CPU, 8);
+    EXPECT_EQ(TryEnableAclgraphZeroCopy(param_, &topo_, std::string("AicpuTestAlg")), HCCL_E_INTERNAL);
+    EXPECT_STREQ(param_.tag, "AllGather_ut_comm");
+    EXPECT_TRUE(param_.opMode == OpMode::OPBASE);
+    EXPECT_STREQ(param_.algTag, "alg_sentinel");
 }
 
 } // namespace

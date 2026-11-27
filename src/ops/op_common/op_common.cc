@@ -1268,31 +1268,55 @@ namespace {
 } // namespace
 
 namespace {
-    // aclgraph memTag计数上下文：号永不归零（通信域销毁重建不回退，避免与注册表残留旧条目重名）。
-    // 按commName键控进程级存储。计数粒度按匹配流原则：集合类按(comm, opType)分桶，
-    // send/recv按(comm, 发送方, 接收方)分桶，各rank相同调用序列即可生成相同memTag。
-    struct AclgraphTagCtx {
-        u32 collSeq[static_cast<u32>(HcclCMDType::HCCL_CMD_MAX)] = {0};
-        std::map<std::string, u32> pairSeq;
-    };
+    // 计数随通信域隔离与销毁。计数粒度按匹配流原则：集合类按(comm, opType)分桶，
+    // send/recv按(comm, 发送方, 接收方)分桶；各rank相同调用序列取同号，跨rank靠此
+    // 对齐memTag。归零安全：mem注册表与seq ctx同挂per-comm实例、同域同生命周期，
+    // 重建后一起从头计数，不会与残留旧条目撞名。
+    constexpr const char* ACLGRAPH_SEQ_CTX_TAG_PREFIX = "__aclgraph_seq_";
 
-    std::mutex g_aclgraphTagMutex;
-    std::map<std::string, AclgraphTagCtx> g_aclgraphTagCtxMap;
+    std::mutex g_aclgraphSeqMutex;
 
-    u32 AllocAclgraphSeqLocked(AclgraphTagCtx& ctx, const OpParam& param, u32 userRank)
+    std::string MakeAclgraphSeqCtxTag(const OpParam& param, u32 userRank)
     {
+        std::string ctxTag = ACLGRAPH_SEQ_CTX_TAG_PREFIX;
         if (param.opType == HcclCMDType::HCCL_CMD_SEND || param.opType == HcclCMDType::HCCL_CMD_RECEIVE) {
             // pair以(发送方, 接收方)为准：send侧(src=本rank,dst=对端)与recv侧(src=对端,dst=本rank)得到同一键
             u32 srcRank = (param.opType == HcclCMDType::HCCL_CMD_SEND) ? userRank : param.sendRecvRemoteRank;
             u32 dstRank = (param.opType == HcclCMDType::HCCL_CMD_SEND) ? param.sendRecvRemoteRank : userRank;
-            std::string pairKey = "P2P_" + std::to_string(srcRank) + "_" + std::to_string(dstRank);
-            return ++ctx.pairSeq[pairKey];
+            ctxTag += "P2P_" + std::to_string(srcRank) + "_" + std::to_string(dstRank);
+        } else {
+            ctxTag += "coll_" + std::to_string(static_cast<u32>(param.opType));
         }
-        return ++ctx.collSeq[static_cast<u32>(param.opType)];
+        return ctxTag;
+    }
+
+    HcclResult AllocAclgraphSeq(HcclComm comm, const std::string& ctxTag, u32& seq)
+    {
+        std::lock_guard<std::mutex> lock(g_aclgraphSeqMutex);
+        void* ctx = nullptr;
+        uint64_t ctxSize = 0;
+        HcclResult getRet = HcclEngineCtxGet(comm, ctxTag.c_str(), CommEngine::COMM_ENGINE_CPU, &ctx, &ctxSize);
+        if (getRet == HCCL_SUCCESS && ctx != nullptr) {
+            // 命中条目尺寸异常（未来CPU域新占用者/异常条目）不误增，失败交由上层整算子报错
+            CHK_PRT_RET(
+                ctxSize != sizeof(u32),
+                HCCL_ERROR(
+                    "[%s] aclgraph seq ctx size mismatch, ctxTag[%s], size[%llu], expect[%zu].", __func__,
+                    ctxTag.c_str(), static_cast<unsigned long long>(ctxSize), sizeof(u32)),
+                HCCL_E_INTERNAL);
+        } else {
+            CHK_RET(HcclEngineCtxCreate(comm, ctxTag.c_str(), CommEngine::COMM_ENGINE_CPU, sizeof(u32), &ctx));
+            CHK_PRT_RET(
+                ctx == nullptr,
+                HCCL_ERROR("[%s] aclgraph seq ctx is null after create, ctxTag[%s].", __func__, ctxTag.c_str()),
+                HCCL_E_INTERNAL);
+            *static_cast<u32*>(ctx) = 0;
+        }
+        seq = ++(*static_cast<u32*>(ctx));
+        return HCCL_SUCCESS;
     }
 } // namespace
 
-// aclgraph零拷贝gate放行的算子白名单（导出供UT覆盖）
 bool IsAclgraphZeroCopySupportedOp(HcclCMDType opType)
 {
     return opType == HcclCMDType::HCCL_CMD_ALLGATHER || opType == HcclCMDType::HCCL_CMD_ALLGATHER_V
@@ -1300,7 +1324,7 @@ bool IsAclgraphZeroCopySupportedOp(HcclCMDType opType)
            || opType == HcclCMDType::HCCL_CMD_RECEIVE || opType == HcclCMDType::HCCL_CMD_ALLTOALL;
 }
 
-// aclgraph零拷贝gate命中判定（导出供UT覆盖）：捕获态 + OPBASE + AICPU_TS引擎 + 白名单算子
+// aclgraph零拷贝gate命中判定，捕获态 + OPBASE + AICPU_TS引擎 + 白名单算子
 // + 非协商域 + 非对称内存（对称内存优先级更高，走对称零拷贝通道）
 bool IsAclgraphZeroCopyGateHit(const OpParam& param)
 {
@@ -1316,9 +1340,18 @@ TryEnableAclgraphZeroCopy(OpParam& param, const TopoInfoWithNetLayerDetails* top
     CHK_PTR_NULL(topoInfo);
     u32 seq = 0;
     {
-        std::lock_guard<std::mutex> lock(g_aclgraphTagMutex);
-        AclgraphTagCtx& ctx = g_aclgraphTagCtxMap[std::string(param.commName)];
-        seq = AllocAclgraphSeqLocked(ctx, param, topoInfo->userRank);
+        std::string ctxTag = MakeAclgraphSeqCtxTag(param, topoInfo->userRank);
+        // 取号失败整算子报错，禁止本rank静默回退：seq是跨rank memTag配对键，本rank
+        // 失败不消耗号而对端照常+1，同桶永久错位。与「tag空间不足」回退不同：那条
+        // 跨rank确定性一致、仅损失零拷贝收益；本条是rank局部故障，静默回退即两侧
+        // gate决策分叉。
+        HcclResult seqRet = AllocAclgraphSeq(param.hcclComm, ctxTag, seq);
+        CHK_PRT_RET(
+            seqRet != HCCL_SUCCESS,
+            HCCL_ERROR(
+                "[%s] alloc aclgraph seq failed, abort op to keep cross-rank memTag aligned, ret[%d], ctxTag[%s].",
+                __func__, seqRet, ctxTag.c_str()),
+            seqRet);
     }
 
     char suffix[32] = {0};
