@@ -48,6 +48,8 @@ public:
         HcclComm comm, const OpParam& param, const TopoInfoWithNetLayerDetails* topoInfo,
         AlgResourceRequest& resourceRequest) override;
 
+    HcclResult SetLocalPodRanks(const TopoInfoWithNetLayerDetails& topoInfo);
+
     void GetNotifyIdxMainToSub(std::vector<u32>& notifyIdxMainToSub) override;
     void GetNotifyIdxSubToMain(std::vector<u32>& notifyIdxSubToMain) override;
 
@@ -56,6 +58,10 @@ public:
         const u32 myRank, const std::vector<std::vector<u32>>& subCommRanks) override;
 
 private:
+    HcclResult CollectDevicePeers(
+        const std::vector<u32>& commRanks, const TemplateResource& templateResource,
+        std::vector<u32>& deviceRanks) const;
+
     HcclResult LocalCopyforMyRank(
         const std::vector<u32>& commRanks, const TemplateDataParams& tempAlgParams, std::vector<ThreadHandle>& threads);
 
@@ -63,7 +69,12 @@ private:
         const std::vector<u32>& commRanks, const TemplateDataParams& tempAlgParams, std::vector<ThreadHandle>& threads);
 
     HcclResult SendRecvData(
-        const OpParam& param, const std::vector<u32>& commRanks, const TemplateDataParams& tempAlgParams,
+        const OpParam& param, const std::vector<u32>& commRanks, const std::vector<u32>& deviceRanks,
+        const TemplateDataParams& tempAlgParams, const TemplateResource& templateResource,
+        std::vector<ThreadHandle>& threads);
+
+    HcclResult RunGroupedAicpuTransfer(
+        const std::vector<u32>& deviceRanks, const TemplateDataParams& tempAlgParams,
         const TemplateResource& templateResource, std::vector<ThreadHandle>& threads);
 
     HcclResult RunAicpuTransfer(
@@ -72,7 +83,7 @@ private:
 
     HcclResult RunDpuTransfer(
         const std::map<u32, std::vector<ChannelInfo>>& channels, const TemplateDataParams& tempAlgParams,
-        ThreadHandle thread = 0, bool isDrainSupported = false);
+        const std::vector<u32>& commRanks, ThreadHandle thread = 0, bool isDrainSupported = false);
 
     HcclResult PostCopyDataToRecvBuf(
         const std::vector<u32>& commRanks, const TemplateDataParams& tempAlgParams, std::vector<ThreadHandle>& threads);
@@ -86,6 +97,7 @@ private:
     u64 hcclbuffBlockMemSize_{0};
     u64 dataTypeSize_{0};
     std::vector<ThreadHandle> threads_;
+    std::vector<u32> localPodRanks_;
 };
 
 } // namespace ops_hccl

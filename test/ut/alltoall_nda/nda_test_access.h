@@ -54,6 +54,17 @@ struct WriteCall {
 
 std::vector<WriteCall>& WriteCalls();
 
+struct GroupSyncCall {
+    bool beforeTransfer;
+    size_t writeCount;
+    ThreadHandle mainThread;
+    std::vector<ThreadHandle> subThreads;
+    std::vector<u32> notifyIndices;
+};
+
+std::vector<GroupSyncCall>& GroupSyncCalls();
+std::vector<HcclChannelDesc>& MeshChannelDescs();
+
 // NDA 通道级握手原语桩记录（NotifyRecord / NotifyWait / WriteWithNotify），用于断言握手时序
 struct HandshakeCall {
     enum Kind { kNotifyRecord, kNotifyWait, kWriteWithNotify } kind = kNotifyRecord;

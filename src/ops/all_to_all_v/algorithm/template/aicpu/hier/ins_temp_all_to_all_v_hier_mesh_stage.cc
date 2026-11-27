@@ -24,7 +24,7 @@ HcclResult InsTempAlltoAllVHierMeshStage::CalcRes(
     HcclComm comm, const OpParam& param, const TopoInfoWithNetLayerDetails* topoInfo,
     AlgResourceRequest& resourceRequest)
 {
-    u32 threadNum = std::min(ALLTOALLV_DIRECT_FULLMESH_CONCURRENT_SIZE, templateRankSize_);
+    u32 threadNum = std::min(ALLTOALLV_HIER_MAX_THREAD_NUM, templateRankSize_);
     resourceRequest.slaveThreadNum = (threadNum > 1) ? (threadNum - 1) : 0;
     for (u32 index = 0; index < resourceRequest.slaveThreadNum; index++) {
         resourceRequest.notifyNumPerThread.push_back(1);
@@ -45,7 +45,7 @@ HcclResult InsTempAlltoAllVHierMeshStage::CalcRes(
 void InsTempAlltoAllVHierMeshStage::GetNotifyIdxMainToSub(std::vector<u32>& notifyIdxMainToSub)
 {
     notifyIdxMainToSub.clear();
-    u32 threadNum = std::min(ALLTOALLV_DIRECT_FULLMESH_CONCURRENT_SIZE, templateRankSize_);
+    u32 threadNum = std::min(ALLTOALLV_HIER_MAX_THREAD_NUM, templateRankSize_);
     u32 slaveThreadNum = (threadNum > 1) ? (threadNum - 1) : 0;
     for (u32 i = 0; i < slaveThreadNum; i++) {
         notifyIdxMainToSub.push_back(0);
@@ -55,7 +55,7 @@ void InsTempAlltoAllVHierMeshStage::GetNotifyIdxMainToSub(std::vector<u32>& noti
 void InsTempAlltoAllVHierMeshStage::GetNotifyIdxSubToMain(std::vector<u32>& notifyIdxSubToMain)
 {
     notifyIdxSubToMain.clear();
-    u32 threadNum = std::min(ALLTOALLV_DIRECT_FULLMESH_CONCURRENT_SIZE, templateRankSize_);
+    u32 threadNum = std::min(ALLTOALLV_HIER_MAX_THREAD_NUM, templateRankSize_);
     u32 slaveThreadNum = (threadNum > 1) ? (threadNum - 1) : 0;
     for (u32 i = 0; i < slaveThreadNum; i++) {
         notifyIdxSubToMain.push_back(i);

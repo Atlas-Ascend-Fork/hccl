@@ -270,6 +270,9 @@ HcclResult InsV2AlltoAllVSoleExecutor<AlgTopoMatch, InsAlgTemplate>::Orchestrate
     // 构建template
     std::shared_ptr<InsAlgTemplate> algTemplate
         = std::make_shared<InsAlgTemplate>(param, resCtx.topoInfo.userRank, tempAlgHierarchyInfo);
+    if constexpr (std::is_same_v<InsAlgTemplate, InsTempDpuAlltoAllMesh>) {
+        CHK_RET(algTemplate->SetLocalPodRanks(resCtx.topoInfo));
+    }
     u32 templateScratchMultiplier
         = algTemplate->CalcScratchMultiple(tempAlgParams.buffInfo.inBuffType, tempAlgParams.buffInfo.outBuffType);
 

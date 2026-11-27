@@ -12,13 +12,12 @@
 #define INS_TEMP_ALL_TO_ALL_V_MESH_1D_H
 
 #include "alg_v2_template_base.h"
+#include "alltoall_mesh_group.h"
 #include "cost_model.h"
 #include "executor_base.h"
 #include "alg_data_trans_wrapper.h"
 
 namespace ops_hccl {
-
-const uint32_t ALLTOALLV_DIRECT_FULLMESH_CONCURRENT_SIZE = 16; // fullmesh最大的并发数量
 
 class InsTempAlltoAllVMesh1D : public InsAlgTemplateBase {
 public:

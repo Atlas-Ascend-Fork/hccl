@@ -15,6 +15,7 @@
 #include "alg_data_trans_wrapper.h"
 #include "channel.h"
 #include "dpu_alg_data_trans_wrapper.h"
+#include "dpu_alg_nhr_opt_wrapper.h"
 #include "hccl_sym_win_dl.h"
 
 namespace {
@@ -23,6 +24,8 @@ std::vector<nda_ut::LocalCopyCall> g_localCopyCalls;
 std::vector<nda_ut::WriteCall> g_writeCalls;
 std::vector<nda_ut::HandshakeCall> g_handshakeCalls;
 std::vector<nda_ut::BatchCall> g_batchCalls;
+std::vector<nda_ut::GroupSyncCall> g_groupSyncCalls;
+std::vector<HcclChannelDesc> g_meshChannelDescs;
 
 s32 g_notifyRecordResult = 0;
 s32 g_notifyWaitResult = 0;
@@ -38,6 +41,8 @@ std::vector<LocalCopyCall>& LocalCopyCalls() { return g_localCopyCalls; }
 std::vector<WriteCall>& WriteCalls() { return g_writeCalls; }
 std::vector<HandshakeCall>& HandshakeCalls() { return g_handshakeCalls; }
 std::vector<BatchCall>& BatchCalls() { return g_batchCalls; }
+std::vector<GroupSyncCall>& GroupSyncCalls() { return g_groupSyncCalls; }
+std::vector<HcclChannelDesc>& MeshChannelDescs() { return g_meshChannelDescs; }
 
 void SetNotifyRecordResult(s32 result) { g_notifyRecordResult = result; }
 void SetNotifyWaitResult(s32 result) { g_notifyWaitResult = result; }
@@ -51,6 +56,8 @@ void ResetStubState()
     g_writeCalls.clear();
     g_handshakeCalls.clear();
     g_batchCalls.clear();
+    g_groupSyncCalls.clear();
+    g_meshChannelDescs.clear();
     g_notifyRecordResult = 0;
     g_notifyWaitResult = 0;
     g_writeWithNotifyResult = 0;
@@ -153,9 +160,7 @@ HcclResult PreSyncInterThreads(
     const ThreadHandle& mainThread, const std::vector<ThreadHandle>& subThreads,
     const std::vector<u32>& notifyIdxMainToSub)
 {
-    (void)mainThread;
-    (void)subThreads;
-    (void)notifyIdxMainToSub;
+    g_groupSyncCalls.push_back({true, g_writeCalls.size(), mainThread, subThreads, notifyIdxMainToSub});
     return HCCL_SUCCESS;
 }
 
@@ -163,9 +168,7 @@ HcclResult PostSyncInterThreads(
     const ThreadHandle& mainThread, const std::vector<ThreadHandle>& subThreads,
     const std::vector<u32>& notifyIdxSubToMain)
 {
-    (void)mainThread;
-    (void)subThreads;
-    (void)notifyIdxSubToMain;
+    g_groupSyncCalls.push_back({false, g_writeCalls.size(), mainThread, subThreads, notifyIdxSubToMain});
     return HCCL_SUCCESS;
 }
 
@@ -177,7 +180,7 @@ HcclResult CalcChannelRequestMesh1D(
     (void)param;
     (void)topoInfo;
     (void)subcommInfo;
-    (void)channels;
+    channels = g_meshChannelDescs;
     return HCCL_SUCCESS;
 }
 
@@ -191,6 +194,12 @@ HcclResult CalcChannelRequestMesh1DWithPriorityTopo(
     (void)subcommInfo;
     (void)channels;
     (void)priorityTopo;
+    return HCCL_SUCCESS;
+}
+
+HcclResult DpuBatchTransfer(std::vector<DpuTransferCtx>& pairs, ThreadHandle, bool)
+{
+    EXPECT_TRUE(pairs.empty());
     return HCCL_SUCCESS;
 }
 
@@ -223,6 +232,28 @@ HcclResult GetSymWinRemoteMem(HcclCommSymWindow, size_t, uint32_t, void**)
 }
 
 extern "C" {
+
+int32_t HcommThreadNotifyRecordOnThread(ThreadHandle, ThreadHandle, uint32_t) { return HCCL_SUCCESS; }
+
+int32_t HcommThreadNotifyWaitOnThread(ThreadHandle, uint32_t, uint32_t) { return HCCL_SUCCESS; }
+
+int32_t HcommThreadSynchronize(ThreadHandle)
+{
+    ADD_FAILURE() << "unexpected shared-memory path";
+    return HCCL_E_NOT_SUPPORT;
+}
+
+int32_t HcommSendRequest(uint64_t, const char*, const void*, size_t, uint32_t*)
+{
+    ADD_FAILURE() << "unexpected shared-memory request";
+    return HCCL_E_NOT_SUPPORT;
+}
+
+int32_t HcommWaitResponse(uint64_t, void*, size_t, uint32_t*)
+{
+    ADD_FAILURE() << "unexpected shared-memory response";
+    return HCCL_E_NOT_SUPPORT;
+}
 
 int32_t HcommBatchModeStart(const char* batchTag)
 {

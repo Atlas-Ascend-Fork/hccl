@@ -42,7 +42,7 @@ HcclResult InsTempAlltoAllVHierMetaStage::CalcRes(
 void InsTempAlltoAllVHierMetaStage::GetNotifyIdxMainToSub(std::vector<u32>& notifyIdxMainToSub)
 {
     notifyIdxMainToSub.clear();
-    u32 threadNum = std::min(ALLTOALLV_DIRECT_FULLMESH_CONCURRENT_SIZE, templateRankSize_);
+    u32 threadNum = std::min(ALLTOALLV_HIER_MAX_THREAD_NUM, templateRankSize_);
     u32 slaveThreadNum = (threadNum > 1) ? (threadNum - 1) : 0;
     for (u32 i = 0; i < slaveThreadNum; i++) {
         notifyIdxMainToSub.push_back(0);
@@ -52,7 +52,7 @@ void InsTempAlltoAllVHierMetaStage::GetNotifyIdxMainToSub(std::vector<u32>& noti
 void InsTempAlltoAllVHierMetaStage::GetNotifyIdxSubToMain(std::vector<u32>& notifyIdxSubToMain)
 {
     notifyIdxSubToMain.clear();
-    u32 threadNum = std::min(ALLTOALLV_DIRECT_FULLMESH_CONCURRENT_SIZE, templateRankSize_);
+    u32 threadNum = std::min(ALLTOALLV_HIER_MAX_THREAD_NUM, templateRankSize_);
     u32 slaveThreadNum = (threadNum > 1) ? (threadNum - 1) : 0;
     for (u32 i = 0; i < slaveThreadNum; i++) {
         notifyIdxSubToMain.push_back(i);

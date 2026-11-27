@@ -15,7 +15,7 @@
 
 namespace ops_hccl {
 
-constexpr u32 ALLTOALLV_DIRECT_FULLMESH_CONCURRENT_SIZE = 16;
+constexpr u32 ALLTOALLV_HIER_MAX_THREAD_NUM = 16;
 
 class InsTempAlltoAllHierStageBase : public InsAlgTemplateBase {
 public:
