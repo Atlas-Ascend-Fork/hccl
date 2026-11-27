@@ -59,14 +59,11 @@ struct AlltoAllVMesh1DContext : CcuKernelCtxBase {
     ccu::Variable xnMaxTransportSize;
     GroupOpSizeVars xnMaxTransportGoSize;
     std::vector<A2AsingleSendRecvInfo> sendRecvInfo;
-    uint16_t selfBit{0};
-    uint16_t allBit{0};
-    uint16_t allOtherBit{0};
     ccu::LocalAddr myDst;
     std::vector<ccu::RemoteAddr> dst;
     std::vector<ccu::LocalAddr> src;
-    ccu::Event event;
-    ccu::Variable flag; // 用以判断是否是第一次重复
+    // 单个 ccu::Event 的 16 位 mask 最多支持 16 个 rank 信号，改用 CcuEventGroup 支持 rankSize > 16
+    CcuEventGroup eventGroup;
     ccu::Variable xnConst1;
     bool loadFromMem = false;
 };

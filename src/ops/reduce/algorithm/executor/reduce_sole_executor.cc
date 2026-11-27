@@ -32,6 +32,8 @@ namespace ops_hccl {
 // MESH_1D aicpu 单发/两发算法数据量分界，与 selector 保持一致
 constexpr u64 REDUCE_AICPU_1D_MAX_DATA_SIZE = 8 * 1024 * 1024;
 constexpr u64 AICPU_MESH_MAX_RANK_SIZE = 64;
+// TwoShot算法归约段依赖CCU LocalReduce引擎，操作数上限为8，超8卡不允许选择该算法
+constexpr u32 REDUCE_TWOSHOT_MESH_MAX_RANK_SIZE = 8;
 template <typename AlgTopoMatch, typename AlgTemplate>
 ReduceSoleExecutor<AlgTopoMatch, AlgTemplate>::ReduceSoleExecutor()
 {}
@@ -435,7 +437,7 @@ REGISTER_ALG_ATTRS(
 REGISTER_EXEC_V2(
     HcclCMDType::HCCL_CMD_REDUCE, CcuSchedReduceSoleMeshTwoShot, ReduceSoleExecutor, TopoMatchOneLevel,
     CcuTempReduceMesh1DTwoShotMem2Mem);
-REGISTER_ALG_ATTRS(CcuSchedReduceSoleMeshTwoShot, topo.maxSupportRankSize = CCU_SCHED_MAX_RANK_SIZE;
+REGISTER_ALG_ATTRS(CcuSchedReduceSoleMeshTwoShot, topo.maxSupportRankSize = REDUCE_TWOSHOT_MESH_MAX_RANK_SIZE;
                    topo.maxTopoLevelNum = 1; topo.supportLevel0Topos = LEVEL0_TOPO_MESH_1D; op.isSupportProd = false;
                    op.unsupportedDataTypes = UNSUPPORTED_INT8_AND_64BIT; op.isSupportInplace = true);
 #endif // CANN_VERSION_NUM >= CANN_VERSION(9, 0, 0)

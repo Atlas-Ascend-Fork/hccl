@@ -41,6 +41,8 @@ constexpr u32 REDUCE_CCU_MAX_RANK_SIZE = 64;
 // CLOS 单层组网下 Mesh/NHR 选路阈值，小数据量场景 Mesh 性能优于 NHR
 constexpr u64 REDUCE_CCU_CLOS_MESH_SMALL_DATA_SIZE = 512 * 1024;
 constexpr u32 UBX_REDUCE_CONCURRENT_DATA_SIZE = 2 * 1024 * 1024;
+// 与 reduce_sole_executor.cc 注册保持一致：TwoShot算法归约段依赖CCU LocalReduce引擎，操作数上限为8
+constexpr u32 REDUCE_TWOSHOT_MESH_MAX_RANK_SIZE = 8;
 
 SelectorStatus ReduceAutoSelector::SelectCcuMsAlgo(
     const TopoInfoWithNetLayerDetails* topoInfo, const OpParam& opParam,
@@ -238,6 +240,12 @@ SelectorStatus ReduceAutoSelector::SelectMeshAlgoCcuSchedule(
             return SelectorStatus::NOT_MATCH;
         } else if (dataSize > REDUCE_CCU_TWOSHOT_1D_MAX_DATA_SIZE) {
             HCCL_INFO("[ReduceAutoSelector] Mesh1D dataSize[%llu] > 16MB, fallback to aicpu.", dataSize);
+            return SelectorStatus::NOT_MATCH;
+        } else if (topoInfo->userRankSize > REDUCE_TWOSHOT_MESH_MAX_RANK_SIZE) {
+            HCCL_INFO(
+                "[ReduceAutoSelector] TwoShot algo relies on CCU LocalReduce with max 8 operands, "
+                "userRankSize[%u] exceeds limit, fallback to aicpu.",
+                topoInfo->userRankSize);
             return SelectorStatus::NOT_MATCH;
         } else {
             CHK_PRT_RET(

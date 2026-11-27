@@ -47,7 +47,8 @@ struct AlltoAllMesh1DContext : CcuKernelCtxBase {
     std::vector<ccu::LocalAddr> srcAddr;
     std::vector<ccu::Variable> dstToken;
     std::vector<ccu::Variable> srcToken;
-    ccu::Event event;
+    // 单个 ccu::Event 的 16 位 mask 最多支持 16 个 rank 信号，改用 CcuEventGroup 支持 rankSize > 16
+    CcuEventGroup eventGroup;
     ccu::Variable flag; // 用以判断是否是第一次重复
     bool loadFromMem = false;
 };

@@ -53,6 +53,8 @@ static CcuResult InitResource(ScatterMesh1DContext& ctx)
     ctx.flag = 0;
     ctx.inputMem.resize(ctx.rankSize);
     ctx.outputMem.resize(ctx.rankSize);
+    // 单个 Event 的 16 位 mask 不支持 rankSize > 16，使用 CcuEventGroup 管理所有 rank 的完成信号
+    ctx.eventGroup.Init(ctx.rankSize);
     return CCU_SUCCESS;
 }
 
@@ -113,16 +115,15 @@ static CcuResult DoScatterOnce(ScatterMesh1DContext& ctx)
         if (rankIdx == ctx.rankId) {
             continue;
         }
-        uint16_t mask = 1 << rankIdx;
         sliceSize = (rankIdx == ctx.rankSize - 1) ? ctx.lastSliceSize : ctx.normalSliceSize;
         CCU_IF(sliceSize != 0)
         {
-            ccu::Write(
-                ctx.arg->channels[channelId], ctx.outputMem[rankIdx], ctx.inputMem[rankIdx], sliceSize, ctx.event,
-                mask);
+            CCU_CHK_RET(ccu::Write(
+                ctx.arg->channels[channelId], ctx.outputMem[rankIdx], ctx.inputMem[rankIdx], sliceSize,
+                ctx.eventGroup.GetEvent(rankIdx), ctx.eventGroup.GetMask(rankIdx)));
             channelId++;
         }
-        CCU_IF(sliceSize == 0) { ccu::EventRecord(ctx.event, mask); }
+        CCU_IF(sliceSize == 0) { CCU_CHK_RET(ctx.eventGroup.Record(rankIdx)); }
     }
 
     // 阻塞接口放在Write之后，Write与GroupCopy并行执行
@@ -132,11 +133,10 @@ static CcuResult DoScatterOnce(ScatterMesh1DContext& ctx)
     ccu::LocalAddr myInput;
     myInput.addr = ctx.inputMem[ctx.rankId].addr;
     myInput.token = ctx.inputMem[ctx.rankId].token;
-    CCU_IF(ctx.isInputOutputEqual == 0) { GroupCopy(ctx, myOutput, myInput, ctx.goSize); }
+    CCU_IF(ctx.isInputOutputEqual == 0) { CCU_CHK_RET(GroupCopy(ctx, myOutput, myInput, ctx.goSize)); }
 
-    // 仅等待远端Write完成
-    uint16_t allBit = ((1 << ctx.rankSize) - 1) & (~(1 << ctx.rankId));
-    ccu::EventWait(ctx.event, allBit);
+    // 仅等待远端Write完成（本rank由GroupCopy同步保证，无需等待）
+    CCU_CHK_RET(ctx.eventGroup.WaitAllExcept(ctx.rankId));
     return CCU_SUCCESS;
 }
 

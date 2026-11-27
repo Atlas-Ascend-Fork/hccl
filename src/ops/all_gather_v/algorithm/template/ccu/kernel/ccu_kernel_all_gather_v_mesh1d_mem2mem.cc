@@ -41,6 +41,8 @@ static CcuResult InitResource(AllGatherVMesh1DMem2MemContext& ctx)
             channelIdx++;
         }
     }
+    // 单个 Event 的 16 位 mask 不支持 rankSize > 16，使用 CcuEventGroup 管理所有 rank 的完成信号
+    ctx.eventGroup.Init(arg->rankSize);
     ctx.resourceAllocated = false;
     return CCU_SUCCESS;
 }
@@ -91,7 +93,7 @@ static void PostSync(AllGatherVMesh1DMem2MemContext& ctx)
     HCCL_INFO("[CcuKernelAllGatherVMesh1DMem2Mem] AllgatherVMesh1D post sync end");
 }
 
-static void DoAllGatherV(AllGatherVMesh1DMem2MemContext& ctx)
+static CcuResult DoAllGatherV(AllGatherVMesh1DMem2MemContext& ctx)
 {
     const auto* arg = ctx.arg;
     uint32_t channelId = 0;
@@ -104,22 +106,24 @@ static void DoAllGatherV(AllGatherVMesh1DMem2MemContext& ctx)
                 ctx.localDst.addr = ctx.output[arg->rankId];
                 ctx.localDst.addr += ctx.mySliceSizeOutputOffset;
                 ctx.localDst.token = ctx.token[arg->rankId];
-                ccu::EventRecord(ctx.event, 1 << rankIdx);
+                CCU_CHK_RET(ctx.eventGroup.Record(rankIdx));
             } else {
                 ctx.dst[rankIdx].addr = ctx.output[rankIdx];
                 ctx.dst[rankIdx].addr += ctx.mySliceSizeOutputOffset;
                 ctx.dst[rankIdx].token = ctx.token[rankIdx];
                 CCU_IF(ctx.mySliceSize != 0)
                 {
-                    ccu::Write(
-                        arg->channels[channelId], ctx.dst[rankIdx], ctx.src, ctx.mySliceSize, ctx.event, 1 << rankIdx);
+                    CCU_CHK_RET(ccu::Write(
+                        arg->channels[channelId], ctx.dst[rankIdx], ctx.src, ctx.mySliceSize,
+                        ctx.eventGroup.GetEvent(rankIdx), ctx.eventGroup.GetMask(rankIdx)));
                 }
                 channelId++;
             }
         }
-        GroupCopy(ctx, ctx.localDst, ctx.src, ctx.localGoSize, GetCcuVersion());
-        ccu::EventWait(ctx.event, (1 << arg->rankSize) - 1);
+        CCU_CHK_RET(GroupCopy(ctx, ctx.localDst, ctx.src, ctx.localGoSize, GetCcuVersion()));
+        CCU_CHK_RET(ctx.eventGroup.WaitAll());
     }
+    return CCU_SUCCESS;
 }
 
 CcuResult CcuAllGatherVMesh1DMem2MemKernel(CcuKernelArg arg)
@@ -131,7 +135,7 @@ CcuResult CcuAllGatherVMesh1DMem2MemKernel(CcuKernelArg arg)
     CCU_CHK_RET(InitResource(ctx));
     CCU_CHK_RET(LoadArgs(ctx));
     PreSync(ctx);
-    DoAllGatherV(ctx);
+    CCU_CHK_RET(DoAllGatherV(ctx));
     PostSync(ctx);
     return CCU_SUCCESS;
 }
