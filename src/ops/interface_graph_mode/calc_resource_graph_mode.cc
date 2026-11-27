@@ -420,11 +420,9 @@ HcclResult RecordAivOpArgsGraphMode(
         executor.get() == nullptr,
         HCCL_ERROR("[RecordAivOpArgsGraphMode] Failed to find executor for algName[%s]", algName.c_str()), HCCL_E_PARA);
 
-    // 启用Only录制模式
-    ops_hccl::g_recordingQueue = std::make_shared<ops_hccl::InsQueue>();
-    ops_hccl::g_baseInputAddr = reinterpret_cast<u64>(inputPtr);
-    ops_hccl::g_baseOutputAddr = reinterpret_cast<u64>(outputPtr);
-    ops_hccl::g_recordOnlyMode = true;
+    // 启用Only录制模式（会话态由 guard 析构统一清理，覆盖本函数后续全部早退路径）
+    ops_hccl::AivRecordingSessionGuard recordingGuard;
+    recordingGuard.Start(reinterpret_cast<u64>(inputPtr), reinterpret_cast<u64>(outputPtr), /*recordOnly=*/true);
 
     int algNameRet = sprintf_s(param.algName, sizeof(param.algName), "%s", algName.c_str());
     CHK_PRT_RET(
@@ -450,12 +448,6 @@ HcclResult RecordAivOpArgsGraphMode(
     cclBufferSize = resCtxHost->cclMem.size;
 
     (void)ops_hccl::GetStuckDetectCounterInfo(comm, counter);
-
-    // 清除录制
-    ops_hccl::g_recordingQueue = nullptr;
-    ops_hccl::g_baseInputAddr = 0;
-    ops_hccl::g_baseOutputAddr = 0;
-    ops_hccl::g_recordOnlyMode = false;
 
     // 销毁录制期间创建的algTag context，避免相同tag重复注册导致already exist错误
     HcclEngineCtxDestroy(comm, param.algTag, CommEngine::COMM_ENGINE_CPU_TS);

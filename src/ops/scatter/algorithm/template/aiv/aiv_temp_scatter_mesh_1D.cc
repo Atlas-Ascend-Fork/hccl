@@ -134,6 +134,8 @@ HcclResult AivTempScatterMesh1D::KernelRun(
         = tempAlgParams.buffInfo.inBuffBaseOff + reinterpret_cast<u64>(tempAlgParams.buffInfo.inputPtr);
     aivScatterArgs.output
         = tempAlgParams.buffInfo.outBuffBaseOff + reinterpret_cast<u64>(tempAlgParams.buffInfo.outputPtr);
+    aivScatterArgs.inBuffType = tempAlgParams.buffInfo.inBuffType;
+    aivScatterArgs.outBuffType = tempAlgParams.buffInfo.outBuffType;
     aivScatterArgs.rank = u32(myRank_);
     aivScatterArgs.rankSize = tempRankSize_;
     aivScatterArgs.count = tempAlgParams.sliceSize / HCCL_SIZE_TABLE[dataType_];

@@ -61,6 +61,8 @@ struct AivOpArgs {
     u32 level0ChannelNumPerRank = 0;
     ExtraArgs extraArgs = {};
     ExtraArgsLarge extraArgsLarge;
+    BufferType inBuffType = BufferType::DEFAULT;
+    BufferType outBuffType = BufferType::DEFAULT;
 };
 
 namespace aiv_selector_test {

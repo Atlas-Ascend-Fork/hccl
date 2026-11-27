@@ -43,7 +43,7 @@ enum class HcclCMDType {
 };
 enum HcclDataType { HCCL_DATA_TYPE_FP32, HCCL_DATA_TYPE_FP16, HCCL_DATA_TYPE_HIF8 };
 enum class AlgoType { UNKNOWN, MESH, MESH_TWOSHOT };
-enum class BufferType { INPUT, OUTPUT, HCCL_BUFFER };
+enum class BufferType { INPUT, OUTPUT, HCCL_BUFFER, DEFAULT };
 enum class Level0Shape { MESH_1D, MESH_1D_CLOS };
 enum class CommTopo { COMM_TOPO_1DMESH, COMM_TOPO_CLOS };
 enum class EngineType { AIV, AICPU };
@@ -95,6 +95,8 @@ struct TemplateDataParams {
         void* outputPtr = nullptr;
         u64 inBuffBaseOff = 0;
         u64 outBuffBaseOff = 0;
+        BufferType inBuffType = BufferType::DEFAULT;
+        BufferType outBuffType = BufferType::DEFAULT;
         struct {
             u64 size = 0;
         } hcclBuff;

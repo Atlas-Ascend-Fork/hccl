@@ -64,6 +64,8 @@ protected:
     {
         args.input = tempAlgParams.buffInfo.inBuffBaseOff + reinterpret_cast<u64>(tempAlgParams.buffInfo.inputPtr);
         args.output = tempAlgParams.buffInfo.outBuffBaseOff + reinterpret_cast<u64>(tempAlgParams.buffInfo.outputPtr);
+        args.inBuffType = tempAlgParams.buffInfo.inBuffType;
+        args.outBuffType = tempAlgParams.buffInfo.outBuffType;
         args.rank = u32(myRank_);
         args.rankSize = tempRankSize_;
         args.count = tempAlgParams.sliceSize / HCCL_SIZE_TABLE[dataType_];
