@@ -74,6 +74,7 @@ namespace {
 
     TEST(NhrGuardTest, DpuKernelRunRefreshesMembersForValidRanks)
     {
+        ResetStubState();
         InsTempReduceScatterNhrDpu tpl;
         TemplateDataParams params = MakeStrideParams();
         const std::vector<std::vector<u32>> subCommRanks = {{0, 2, 4}};

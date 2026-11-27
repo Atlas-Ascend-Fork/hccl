@@ -126,10 +126,14 @@ static OpExecuteConfig GetOnlyModeDiagnoseEngine(OpExecuteConfig opExecuteConfig
     }
 }
 
-// costModel 按引擎分 tag 存储, Run(查找) 与 InitCostModel(创建) 共用
-static std::string MakeCostModelTag(OpExecuteConfig engine)
+// 按引擎和通信域 inline reduce 能力区分候选表，供创建和查询复用。
+static std::string MakeCostModelTag(OpExecuteConfig engine, bool allDpuSupportInlineReduce)
 {
-    return std::string(COST_MODEL_TAG) + "_" + ENGINE_STR_MAP.at(engine);
+    std::string tag = std::string(COST_MODEL_TAG) + "_" + ENGINE_STR_MAP.at(engine);
+    if (allDpuSupportInlineReduce) {
+        tag += "_inline_reduce";
+    }
+    return tag;
 }
 
 // 从全量算法构建并按 HCCL_ALGO 配置标注优先级的临时 costModel(调用方负责释放);
@@ -346,7 +350,7 @@ SelectorEngine::InitCostModel(HcclComm comm, TopoInfoWithNetLayerDetails* topoIn
     uint64_t flatSize = paramOffset + paramsBytes;
 
     void* ctxPtr = nullptr;
-    std::string costModelTag = MakeCostModelTag(param.opExecuteConfig);
+    std::string costModelTag = MakeCostModelTag(param.opExecuteConfig, topoInfo->allDpuSupportInlineReduce);
     CHK_RET(HcclEngineCtxCreate(comm, costModelTag.c_str(), CommEngine::COMM_ENGINE_CPU, flatSize, &ctxPtr));
 
     CostModel* storedCm = static_cast<CostModel*>(ctxPtr);
@@ -439,11 +443,11 @@ SelectorEngine::Run(HcclComm comm, OpParam& param, TopoInfoWithNetLayerDetails* 
         CHK_RET(HcclEngineCtxCreate(comm, TUNER_INIT_TAG, CommEngine::COMM_ENGINE_CPU, 1, &tunerCtxPtr));
     }
 
-    // step 1: 从通信域 ctx 获取或初始化 costModel（按引擎区分 tag，回退时引擎变更会命中不同副本）
+    // step 1: 从通信域 ctx 获取或初始化 costModel（按引擎和 inline reduce 能力区分 tag）
     CostModel* cm = nullptr;
     void* ctxPtr = nullptr;
     uint64_t ctxSize = 0;
-    std::string costModelTag = MakeCostModelTag(param.opExecuteConfig);
+    std::string costModelTag = MakeCostModelTag(param.opExecuteConfig, topoInfo->allDpuSupportInlineReduce);
     if (HcclEngineCtxGet(comm, costModelTag.c_str(), CommEngine::COMM_ENGINE_CPU, &ctxPtr, &ctxSize) == HCCL_SUCCESS) {
         cm = static_cast<CostModel*>(ctxPtr);
         HCCL_INFO("[SelectorEngine] costModel found in comm ctx, count=%d.", cm->count);

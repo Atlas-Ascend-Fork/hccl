@@ -173,6 +173,23 @@ namespace {
         }
     }
 
+    TEST_F(SelectorEngineTest, SelectsInlineAfterModelWasBuiltWithoutCapability)
+    {
+        auto topo = MakeTopo();
+        // 先用回退算法建模，模拟 Send/Recv 在读取全域能力前留下的缓存。
+        SetDomainCapability(topo, false);
+        ExpectSelection(MakeParam(), topo, false);
+
+        SetDomainCapability(topo, true);
+        for (auto op : OPS) {
+            SCOPED_TRACE(static_cast<int>(op));
+            ExpectSelection(MakeParam(op), topo, true);
+        }
+        SetDomainCapability(topo, false);
+        ExpectSelection(MakeParam(), topo, false);
+        EXPECT_EQ(CostModelCreationCount(nullptr), 2u);
+    }
+
     TEST_F(SelectorEngineTest, RejectsNonHostDpuDeviceAndInapplicableTopology)
     {
         for (auto op : OPS) {
