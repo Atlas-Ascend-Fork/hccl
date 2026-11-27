@@ -14,6 +14,7 @@
 #include <unordered_set>
 
 #include "alg_env_config.h"
+#include "hccl_common.h"
 #include "log.h"
 #include "aicpu_task_cache_utils.h"
 
@@ -30,6 +31,9 @@ HcclResult AicpuTaskCachePolicy::IsAicpuTaskCacheEnable(
     const OpParam& param, const AlgResourceCtxSerializable& resCtx, bool& isCacheEnable)
 {
     isCacheEnable = false;
+    HCCL_INFO(
+        "[AicpuTaskCachePolicy][IsAicpuTaskCacheEnable] check cache admission for opType[%s]",
+        GetHcclCMDTypeStr(param.opType));
     if (!param.aicpuCacheEnable) {
         HCCL_INFO("[AicpuTaskCachePolicy][IsAicpuTaskCacheEnable] AICPU task cache is disabled");
         return HCCL_SUCCESS;
@@ -55,7 +59,8 @@ HcclResult AicpuTaskCachePolicy::IsAicpuTaskCacheEnable(
 
     // 普通ACLGraph仍走OPBASE流程：捕获AICPU kernel启动任务，图回放时在kernel内执行
     // cache miss的Start/End或cache hit的Execute，由HCOMM刷新并下发任务，无需再次捕获SQE/WQE。
-    // 因此不因isCapture单独禁用cache；tag已包含isCapture，隔离捕获与非捕获调用。
+    // 非V类不因isCapture单独禁用cache；V类在IsAlltoallvCacheSupported中屏蔽ACLGraph捕获态。
+    // tag已包含isCapture，隔离捕获与非捕获调用。
 
     // 校验算子类型
     if (!IsOpTypeSupported(param)) {
@@ -168,7 +173,7 @@ HcclResult AicpuTaskCachePolicy::IsInplaceForCache(
         isInplace = false;
         HCCL_INFO(
             "[AicpuTaskCachePolicy][IsInplace] input==output[0x%016llx, 0x%016llx] for opType[%d] -> isInplace[%d]",
-            inputStart, inputEnd, param.opType, isInplace);
+            inputStart, outputStart, param.opType, isInplace);
         return HCCL_SUCCESS;
     }
 
@@ -260,9 +265,16 @@ HcclResult AicpuTaskCachePolicy::IsAlltoallvCacheSupported(
     const OpParam& param, const AlgResourceCtxSerializable& resCtx, bool& isSupported)
 {
     isSupported = false;
+    if (param.isCapture) {
+        HCCL_INFO("[AicpuTaskCachePolicy][IsAlltoallvCacheSupported] disable cache: ACLGraph capture is not supported");
+        return HCCL_SUCCESS;
+    }
     // V类算子的图模式和对称内存暂不支持cache。
     if (param.opMode == OpMode::OFFLOAD || param.supportSymmetricMemory) {
-        HCCL_INFO("[AicpuTaskCachePolicy][IsAlltoallvCacheSupported] graph or symmetric memory is not supported");
+        HCCL_INFO(
+            "[AicpuTaskCachePolicy][IsAlltoallvCacheSupported] disable cache: graph mode or symmetric memory "
+            "is not supported, opMode[%u] supportSymmetricMemory[%d]",
+            static_cast<uint32_t>(param.opMode), param.supportSymmetricMemory);
         return HCCL_SUCCESS;
     }
     if (param.isZeroCopy) {
@@ -308,9 +320,16 @@ HcclResult AicpuTaskCachePolicy::IsAlltoallvCacheSupported(
     const auto* sendCounts = static_cast<const uint64_t*>(param.all2AllVDataDes.sendCounts);
     const auto* recvCounts = static_cast<const uint64_t*>(param.all2AllVDataDes.recvCounts);
 
-    // 即使本轮只有self-copy，也需回放全peer预热缓存中的同步任务。
+    // V类仅允许全peer（含自身）收发均非零的调用使用cache，避免录制不完整的任务模板。
     uint64_t maxSendOrRecvCount = 0;
     for (uint32_t rank = 0; rank < rankSize; ++rank) {
+        if (sendCounts[rank] == 0 || recvCounts[rank] == 0) {
+            HCCL_INFO(
+                "[AicpuTaskCachePolicy][IsAlltoallvCacheSupported] disable cache: zero send or recv count, "
+                "rank[%u] sendCount[%llu] recvCount[%llu]",
+                rank, sendCounts[rank], recvCounts[rank]);
+            return HCCL_SUCCESS;
+        }
         maxSendOrRecvCount = std::max(maxSendOrRecvCount, sendCounts[rank]);
         maxSendOrRecvCount = std::max(maxSendOrRecvCount, recvCounts[rank]);
     }
@@ -339,7 +358,16 @@ HcclResult AicpuTaskCachePolicy::IsAlltoallvCacheSupported(
     const uint64_t dataTypeSize = DATATYPE_SIZE_TABLE[dataTypeValue];
     CHK_PRT_RET(dataTypeSize == 0, HCCL_INFO("[%s] dataTypeSize is zero", __func__), HCCL_SUCCESS);
     const uint64_t maxDataCountPerLoop = maxDataSizePerLoop / dataTypeSize;
-    if (maxDataCountPerLoop == 0 || maxSendOrRecvCount > maxDataCountPerLoop) {
+    if (maxDataCountPerLoop == 0) {
+        HCCL_INFO(
+            "[AicpuTaskCachePolicy][IsAlltoallvCacheSupported] disable cache: per-loop data capacity is zero, "
+            "cclMemSize[%llu] templateRankSize[%llu] scratchMultiple[%llu] maxDataSizePerLoop[%llu] "
+            "dataTypeSize[%llu] maxDataCountPerLoop[%llu]",
+            resCtx.cclMem.size, templateRankSize, scratchMultiple, maxDataSizePerLoop, dataTypeSize,
+            maxDataCountPerLoop);
+        return HCCL_SUCCESS;
+    }
+    if (maxSendOrRecvCount > maxDataCountPerLoop) {
         HCCL_INFO(
             "[AicpuTaskCachePolicy][IsAlltoallvCacheSupported] split case is not supported: "
             "maxSendOrRecvCount[%llu] maxDataCountPerLoop[%llu]",
