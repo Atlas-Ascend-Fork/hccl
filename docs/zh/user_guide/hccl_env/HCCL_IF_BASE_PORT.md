@@ -4,7 +4,7 @@
 
 当通信域的创建方式为“基于root节点信息创建”时，可以通过该环境变量指定Host网卡起始端口号。配置后，HCCL以“起始端口 + 物理设备ID”为基础计算各NPU使用的端口，该部分端口同时用于集群信息收集与控制面建链，实际占用端口数量与产品形态及单机NPU数量相关。
 
-当通信域的创建方式为“基于多root节点信息分组创建”时，可以通过该环境变量指定Host网卡起始端口号。配置后，HCCL以“起始端口 + 物理设备ID”和“起始端口 + 物理设备ID + 32”为基础计算各NPU使用的端口，前者用于集群信息收集与控制面建链，实际占用端口数量与产品形态及单机NPU数量相关，后者是通信域创建过程中root间mesh建链额外使用的端口，其中32为root间mesh端口相对组内服务端口的固定偏移量（用于错开两类端口区间，避免端口重叠）。“基于多root节点信息分组创建”的创建方式对应HcclGetRootInfoScalable与HcclCommInitRootInfoScalable接口，具体用法参见[HcclGetRootInfoScalable](https://gitcode.com/cann/hcomm/blob/master/docs/zh/api_ref/comm_mgr_c/HcclGetRootInfoScalable.md)。
+当通信域的创建方式为“基于多root节点信息分组创建”时，可以通过该环境变量指定Host网卡起始端口号。配置后，HCCL以“起始端口 + 物理设备ID”和“起始端口 + 物理设备ID + 32”为基础计算各NPU使用的端口，前者用于集群信息收集与控制面建链，实际占用端口数量与产品形态及单机NPU数量相关，后者是通信域创建过程中root间mesh建链额外使用的端口，其中32为root间mesh端口相对组内服务端口的固定偏移量（用于错开两类端口区间，避免端口重叠）。“基于多root节点信息分组创建”的创建方式对应HcclGetRootInfoScalable与HcclCommInitRootInfoScalable接口，具体用法参见[HcclGetRootInfoScalable](https://gitcode.com/cann/hcomm/blob/9.3.0-beta.2/docs/zh/api_ref/comm_mgr_c/HcclGetRootInfoScalable.md)。
 
 该环境变量需要配置为整数，取值范围为\[1024,65520\]，请确保分配的端口未被占用。多root场景下，还需保证“起始端口 + 物理设备ID + 32”不超过65535（即实际可用上限为65503 - 物理设备ID）。
 

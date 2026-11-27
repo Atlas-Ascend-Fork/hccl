@@ -13,7 +13,7 @@ English | [简体中文](./README.md)
 ## Documents
 
 - [Collective Communication Library User Guide](./en/user_guide/README.md): Introduces basic HCCL concepts, how to use HCCL APIs for collective communication development, how to develop communication operators, and fault handling with common configurations.
-- [Communication Operator Development Guide](https://gitcode.com/cann/hcomm/blob/master/docs/en/comm_op_dev_guide/README.md): Introduces how to develop communication operators based on the APIs provided by the HCOMM communication foundation library.
+- [Communication Operator Development Guide](https://gitcode.com/cann/hcomm/blob/9.3.0-beta.2/docs/en/comm_op_dev_guide/README.md): Introduces how to develop communication operators based on the APIs provided by the HCOMM communication foundation library.
 
 ## Technical Articles
 

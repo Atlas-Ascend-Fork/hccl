@@ -82,7 +82,7 @@
     - 每个通信域最多创建一份额外CCU实例。原实例和额外实例分别承载完整的算子资源需求，容量不叠加使用。
     - 后续HCCL算子在同一通信域内申请CCU资源时，会优先复用已有的额外实例；若额外实例容量不足，则不再扩容，也不再检查原实例的容量，而是按既有流程回退。
     - 支持单算子流程和图模式的资源申请，图回放不重复创建额外实例。
-    - 额外实例由HCCL管理，在调用[HcclCommDestroy](https://gitcode.com/cann/hcomm/blob/master/docs/zh/api_ref/comm_mgr_c/HcclCommDestroy.md)销毁通信域时通过回调释放，业务无需单独释放。
+    - 额外实例由HCCL管理，在调用[HcclCommDestroy](https://gitcode.com/cann/hcomm/blob/9.3.0-beta.2/docs/zh/api_ref/comm_mgr_c/HcclCommDestroy.md)销毁通信域时通过回调释放，业务无需单独释放。
     - 扩容需使用配套版本的HCOMM库。需要创建额外实例但HCOMM不支持所需销毁回调能力时，不创建额外实例，沿用回退流程。
 
     HCCL算子无法获得满足需求的CCU资源时，会自动回退到AI CPU展开模式下发。
