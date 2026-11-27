@@ -162,7 +162,8 @@ HcclResult LoadBinaryFromFile(
     aclError aclRet
         = aclrtBinaryLoadFromFile(realPath, &loadOptions, &binHandle); // ACL_RT_BINARY_LOAD_OPT_CPU_KERNEL_MODE
     CHK_PRT_RET(
-        aclRet != ACL_SUCCESS, HCCL_ERROR("[LoadBinaryFromFile]errNo[%d] load binary from file error.", aclRet),
+        aclRet != ACL_SUCCESS,
+        HCCL_ERROR("[LoadBinaryFromFile]file[%s]errNo[%d] load binary from file error.", realPath, aclRet),
         HCCL_E_OPEN_FILE_FAILURE);
 
     return HCCL_SUCCESS;
@@ -180,7 +181,7 @@ HcclResult haclrtMemcpy(void* dst, size_t destMax, const void* src, size_t count
     aclError ret = aclmdlRICaptureThreadExchangeMode(&mode);
     HCCL_DEBUG("[BeforeMemcpy] Call aclmdlRICaptureThreadExchangeMode mode before: %d, ret: %d", mode, ret);
     if (ret == ACL_ERROR_RT_FEATURE_NOT_SUPPORT) {
-        HCCL_WARNING("[haclrtMemcpy]aclmdlRICaptureThreadExchangeMode not support!");
+        HCCL_WARNING("[haclrtMemcpy]aclmdlRICaptureThreadExchangeMode is not supported!");
     } else {
         CHK_PRT_RET(
             ret != ACL_SUCCESS,
@@ -214,7 +215,7 @@ HcclResult haclrtMemcpy(void* dst, size_t destMax, const void* src, size_t count
     ret = aclmdlRICaptureThreadExchangeMode(&mode);
     HCCL_DEBUG("[AfterMemcpy] Call aclmdlRICaptureThreadExchangeMode mode before: %d, ret: %d", mode, ret);
     if (ret == ACL_ERROR_RT_FEATURE_NOT_SUPPORT) {
-        HCCL_WARNING("[haclrtMemcpy]aclmdlRICaptureThreadExchangeMode not support!");
+        HCCL_WARNING("[haclrtMemcpy]aclmdlRICaptureThreadExchangeMode is not supported!");
     } else {
         CHK_PRT_RET(
             ret != ACL_SUCCESS,
@@ -238,7 +239,7 @@ HcclResult haclrtMemset(void* dst, size_t destMax, int32_t value, size_t count)
     aclError ret = aclmdlRICaptureThreadExchangeMode(&mode);
     HCCL_DEBUG("Call aclmdlRICaptureThreadExchangeMode mode before: %d, ret: %d", mode, ret);
     if (ret == ACL_ERROR_RT_FEATURE_NOT_SUPPORT) {
-        HCCL_WARNING("[haclrtMemset]aclmdlRICaptureThreadExchangeMode not support!");
+        HCCL_WARNING("[haclrtMemset]aclmdlRICaptureThreadExchangeMode is not supported!");
     } else {
         CHK_PRT_RET(
             ret != ACL_SUCCESS,
@@ -269,7 +270,7 @@ HcclResult haclrtMemset(void* dst, size_t destMax, int32_t value, size_t count)
     ret = aclmdlRICaptureThreadExchangeMode(&mode);
     HCCL_DEBUG("Call aclmdlRICaptureThreadExchangeMode mode before: %d, ret: %d", mode, ret);
     if (ret == ACL_ERROR_RT_FEATURE_NOT_SUPPORT) {
-        HCCL_WARNING("[haclrtMemset]aclmdlRICaptureThreadExchangeMode not support!");
+        HCCL_WARNING("[haclrtMemset]aclmdlRICaptureThreadExchangeMode is not supported!");
     } else {
         CHK_PRT_RET(
             ret != ACL_SUCCESS,

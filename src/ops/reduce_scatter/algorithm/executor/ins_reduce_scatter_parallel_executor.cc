@@ -466,8 +466,9 @@ HcclResult InsReduceScatterParallelExecutor<AlgTopoMatch, InsAlgTemplate0, InsAl
     u64 interThreadsNum = tempAlgInter.GetThreadNum();
     if (threads_.size() < intraThreadsNum + interThreadsNum + 1) {
         HCCL_ERROR(
-            "[InsReduceScatterParallelExecutor][PrepareResForTemplate] threads size is %zu, but intraThreadsNum is %d, "
-            "interThreadsNum is %d",
+            "[InsReduceScatterParallelExecutor][PrepareResForTemplate] threads size is %zu, but intraThreadsNum is "
+            "%llu, "
+            "interThreadsNum is %llu",
             threads_.size(), intraThreadsNum, interThreadsNum);
         return HCCL_E_PARA;
     }
@@ -733,7 +734,7 @@ HcclResult InsReduceScatterParallelExecutor<AlgTopoMatch, InsAlgTemplate0, InsAl
         return HCCL_SUCCESS;
     }
     HCCL_INFO(
-        "[InsReduceScatterParallelExecutor][HcclEngineCtxCreate] threadNum[%llu], ccuKernelNum[%llu]", threadNum,
+        "[InsReduceScatterParallelExecutor][HcclEngineCtxCreate] threadNum[%u], ccuKernelNum[%u]", threadNum,
         ccuKernelNum);
 
     std::vector<u32> ccuKernelNumList

@@ -113,7 +113,7 @@ SelectorStatus BroadcastAutoSelector::SelectCcuScheduleAlgo(
                 || (dataSize / topoInfo->userRankSize > CCU_SCHEDULE_2LEVEL_MAX_PER_RANK_DATA_SIZE
                     && topoInfo->userRankSize >= ccuSize)) {
                 HCCL_INFO(
-                    "[BroadcastAutoSelector] 2 level topo perRankDataSize[%llu] exceeds limit, "
+                    "[BroadcastAutoSelector] 2 level topo perRankDataSize[%llu bytes] exceeds limit, "
                     "fallback to aicpu.",
                     topoInfo->userRankSize == 0 ? dataSize : dataSize / topoInfo->userRankSize);
                 return SelectorStatus::NOT_MATCH;

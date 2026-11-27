@@ -483,7 +483,7 @@ SelectorStatus AllGatherAutoSelector::SelectAivAlgo(
     if (totalSize > cclBufferSize * AIV_MAX_CCL_LOOP_NUM) {
         HCCL_AIV_NOT_MATCH_LOG(
             opParam, HCCL_DEBUG,
-            "[AllGatherAutoSelector][%s] totalSize[%llu] too large for cclBufferSize[%llu], maxSupportSize[%llu]",
+            "[AllGatherAutoSelector][%s] totalSize[%llu bytes] too large for cclBufferSize[%llu], maxSupportSize[%llu]",
             __func__, totalSize, cclBufferSize, cclBufferSize * AIV_MAX_CCL_LOOP_NUM);
         return SelectorStatus::NOT_MATCH;
     }

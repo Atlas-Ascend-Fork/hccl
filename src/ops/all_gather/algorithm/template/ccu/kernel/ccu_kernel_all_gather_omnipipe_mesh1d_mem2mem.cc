@@ -186,7 +186,7 @@ static CcuResult DoRepeatAllGather(AllGatherOmniPipeMesh1DMem2MemContext& ctx)
     // 本地拷贝
     CCU_IF(ctx.localCopyFlag == 1)
     {
-        HCCL_INFO("[%s] rankIdx[%u] userRank[%u] localcopy begin", __func__, arg->rankId, arg->userRank);
+        HCCL_INFO("[%s] rankIdx[%u] userRank[%u] local copy begin", __func__, arg->rankId, arg->userRank);
         ccu::LocalAddr myOutput;
         ccu::LocalAddr myInput;
 
@@ -204,7 +204,7 @@ static CcuResult DoRepeatAllGather(AllGatherOmniPipeMesh1DMem2MemContext& ctx)
 
         uint16_t mask = 1 << arg->rankId;
         CCU_IF(ctx.sliceSize != 0) { CCU_CHK_RET(GroupCopy(ctx, myOutput, myInput, ctx.groupOpSize, GetCcuVersion())); }
-        HCCL_INFO("[%s] rankId[%u] userRank[%u] localcopy end", __func__, arg->rankId, arg->userRank);
+        HCCL_INFO("[%s] rankId[%u] userRank[%u] local copy end", __func__, arg->rankId, arg->userRank);
     }
 
     CCU_IF(ctx.localCopyFlag == 0) { CCU_CHK_RET(DoAllGather(ctx)); }

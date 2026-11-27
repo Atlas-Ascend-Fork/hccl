@@ -530,8 +530,8 @@ HcclResult InsV2BroadcastOmniPipe2dExecutor<
     endpointAttrBwAvgAG = {eqBwLevel0AG, eqBwLevel1AG, 1.0};
 
     HCCL_INFO(
-        "[%s] eqBwLevel0SC:%f, eqBwLevel1SC:%f, eqBwLevel0AG:%f, eqBwLevel1AG:%f", __func__, eqBwLevel0SC, eqBwLevel1SC,
-        eqBwLevel0AG, eqBwLevel1AG);
+        "[%s] eqBwLevel0SC:%f GB/s, eqBwLevel1SC:%f GB/s, eqBwLevel0AG:%f GB/s, eqBwLevel1AG:%f GB/s", __func__,
+        eqBwLevel0SC, eqBwLevel1SC, eqBwLevel0AG, eqBwLevel1AG);
     return HCCL_SUCCESS;
 }
 

@@ -138,7 +138,7 @@ bool InsV2BatchSendRecvExecutor::SortSelfItems(const HcclSendRecvItem* a, const 
 
 HcclResult InsV2BatchSendRecvExecutor::GetPairWiseList(const HcclSendRecvItem* sendRecvInfo, u32 itemNum)
 {
-    HCCL_INFO("[InsV2BatchSendRecvExecutor][GetPairWiseList] Start sort the batchSendRecv tasklist.");
+    HCCL_INFO("[InsV2BatchSendRecvExecutor][GetPairWiseList] Start sorting the batchSendRecv tasklist.");
     CHK_PTR_NULL(sendRecvInfo);
 
     for (u32 i = 0; i < itemNum; i++) {
@@ -200,11 +200,11 @@ HcclResult InsV2BatchSendRecvExecutor::GetPairWiseList(const HcclSendRecvItem* s
     // 如果自发自收任务没有完全匹配
     if ((!sendDeque_.empty() && sendDeque_.front()->remoteRank == static_cast<uint32_t>(myRank_))
         || (!recvDeque_.empty() && recvDeque_.front()->remoteRank == static_cast<uint32_t>(myRank_))) {
-        HCCL_ERROR("[InsV2BatchSendRecvExecutor] SendTask and Recv Task to rank itself do not match,"
+        HCCL_ERROR("[InsV2BatchSendRecvExecutor] SendTask and Recv Task to rank itself do not match, "
                    "please check the task list.");
         return HCCL_E_PARA;
     }
-    HCCL_INFO("[InsV2BatchSendRecvExecutor][GetPairWiseList] End sort the batchSendRecv tasklist.");
+    HCCL_INFO("[InsV2BatchSendRecvExecutor][GetPairWiseList] Finish sorting the batchSendRecv tasklist.");
     return HCCL_SUCCESS;
 }
 

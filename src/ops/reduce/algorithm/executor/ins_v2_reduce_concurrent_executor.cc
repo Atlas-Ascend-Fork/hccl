@@ -85,7 +85,7 @@ InsV2ReduceConcurrentExecutor<AlgTopoMatch, InsAlgTemplate0, InsAlgTemplate1>::C
     HCCL_INFO(
         "[InsV2ReduceConcurrentExecutor][CalcCostCoeff] rankSize=%d, portNumLevel0=%d, portNumLevel1=%d, "
         "netTypeLevel0=%d, netTypeLevel1=%d",
-        rankSize, portNumLevel0, portNumLevel1, static_cast<int>(netTypeLevel0), static_cast<int>(netTypeLevel1));
+        rankSize, portNumLevel0[0], portNumLevel1[0], static_cast<int>(netTypeLevel0), static_cast<int>(netTypeLevel1));
     // 编译期判断引擎类型,构造 param 复用 GetParallelDataSplit
     OpParam localParam;
     SetCostModelExecuteConfig<std::is_base_of<CcuAlgTemplateBase, InsAlgTemplate0>::value>(localParam, algName);

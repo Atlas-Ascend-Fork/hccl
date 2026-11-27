@@ -115,7 +115,7 @@ HcclResult CcuTempScatterNHR1DMem2Mem::GetDieNumFromChannelDescs(HcclComm comm, 
         return HcclResult::HCCL_SUCCESS;
     } else {
         HCCL_ERROR(
-            "[CcuTempScatterNHR1DMem2Mem::CalcRes] get channelDescs fail: there are [] link to rank []",
+            "[CcuTempScatterNHR1DMem2Mem::CalcRes] get channelDescs fail: there are [%zu] links to rank [%u]",
             firstVector.size(), firstElement->first);
         return HcclResult::HCCL_E_INTERNAL;
     }
@@ -469,7 +469,7 @@ HcclResult CcuTempScatterNHR1DMem2Mem::KernelRun(
     tempArgs.kernelNum = templateResource.ccuKernels.size();
 
     if (templateDataParams.sliceSize == 0 && templateDataParams.tailSize == 0) {
-        HCCL_INFO("[CcuTempScatterNHR1DMem2Mem] sliceSize is 0, no need do, just success.");
+        HCCL_INFO("[CcuTempScatterNHR1DMem2Mem] sliceSize is 0, no need to do, just return success.");
         return HCCL_SUCCESS;
     }
     if (templateResource.dieSplitRatio > 0.0) {
@@ -488,8 +488,8 @@ HcclResult CcuTempScatterNHR1DMem2Mem::KernelRun(
     HCCL_INFO(
         "[CcuTempScatterNHR1DMem2Mem] dimSize[%llu], inputAddr[%llu], outputAddr[%llu], scratchAddr[%llu],"
         "sliceSize[%llu], die0Size[%llu], die1Size[%llu], inputSliceStride[%llu], outputSliceStride[%llu],"
-        "inputRepeatStride[%llu], outputRepeatStride[%llu], repeatNum[%llu], isOutputScratch[%llu], die0TailSize[%llu],"
-        "die1TailSize[%llu]",
+        "inputRepeatStride[%llu], outputRepeatStride[%llu], repeatNum[%llu], isOutputScratch[%llu], "
+        "isInputOutputEqual[%llu], die0TailSize[%llu], die1TailSize[%llu]",
         templateRankSize_, tempArgs.inputAddr, tempArgs.outputAddr, tempArgs.scratchAddr, tempArgs.sliceSize,
         tempArgs.die0Size, tempArgs.die1Size, tempArgs.inputSliceStride, tempArgs.outputSliceStride,
         tempArgs.inputRepeatStride, tempArgs.outputRepeatStride, tempArgs.repeatNum, tempArgs.isOutputScratch,

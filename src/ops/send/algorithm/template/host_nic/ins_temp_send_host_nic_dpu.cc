@@ -84,7 +84,7 @@ HcclResult InsTempSendHostNicDpu::KernelRun(
         // 转换成eager-mode，保障AICPU指令下发执行完成
         if (HcommBatchModeEnd(param.algTag) != HCCL_SUCCESS) {
             HCCL_ERROR(
-                "[InsTempSendHostNicDpu] InsTempSendHostNicDpu::KernelRun failed set eager mode, tag is %s.",
+                "[InsTempSendHostNicDpu] InsTempSendHostNicDpu::KernelRun failed to set eager mode, tag is %s.",
                 param.algTag);
             return HCCL_E_INTERNAL;
         }
@@ -123,7 +123,8 @@ HcclResult InsTempSendHostNicDpu::KernelRun(
 
         // 将执行模式转换回到batch
         if (HcommBatchModeStart(param.algTag) != HCCL_SUCCESS) {
-            HCCL_ERROR("[InsTempSendHostNicDpu] InsTempSendHostNicDpu failed set batch mode, tag is %s.", param.algTag);
+            HCCL_ERROR(
+                "[InsTempSendHostNicDpu] InsTempSendHostNicDpu failed to set batch mode, tag is %s.", param.algTag);
             return HCCL_E_INTERNAL;
         }
         HCCL_INFO("[InsTempSendHostNicDpu] InsTempSendHostNicDpu HcommWaitResponse run over, recvMsgId[%u]", recvMsgId);
@@ -185,14 +186,15 @@ HcclResult InsTempSendHostNicDpu::RunDpuTransfer(
             if (aclrtMemcpy(cclInput, sizePerRound, input + offset, sizePerRound, ACL_MEMCPY_DEVICE_TO_DEVICE)
                 != ACL_SUCCESS) {
                 HCCL_ERROR(
-                    "[InsTempSendHostNicDpu] aclrtMemcpy failed, rankId[%u] offset[%llu] sizePerRound[%llu].", rankId,
-                    offset, sizePerRound);
+                    "[InsTempSendHostNicDpu] aclrtMemcpy failed, rankId[%u] offset[%llu bytes] sizePerRound[%llu "
+                    "bytes].",
+                    rankId, offset, sizePerRound);
                 return HCCL_E_INTERNAL;
             }
 #endif
             void* src = cclInput;
             void* dst = static_cast<void*>(static_cast<s8*>(channels.at(rankId)[0].remoteCclMem.addr) + offset);
-            HCCL_DEBUG("tx async inputmem's offset[%llu], size[%llu]", offset, sizePerRound);
+            HCCL_DEBUG("tx async inputmem's offset[%llu bytes], size[%llu bytes]", offset, sizePerRound);
             CHK_RET(static_cast<HcclResult>(
                 HcommWriteWithNotifyNbiOnThread(thread, channels.at(rankId)[0].handle, dst, src, sizePerRound, 1)));
 

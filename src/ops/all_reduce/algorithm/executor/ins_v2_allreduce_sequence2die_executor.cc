@@ -41,7 +41,7 @@ InsV2AllReduceSequence2DieExecutor<AlgTopoMatch, InsAlgTemplate0, InsAlgTemplate
     HCCL_INFO(
         "[InsV2AllReduceSequence2DieExecutor][CalcCostCoeff] rankSize=%d, rankSizeLevel0=%d, portNumLevel0=%d, "
         "netTypeLevel0=%d",
-        rankSize, rankSizeLevel0, portNumLevel0, static_cast<int>(netTypeLevel0));
+        rankSize, rankSizeLevel0, portNumLevel0[0], static_cast<int>(netTypeLevel0));
     std::vector<CostModelParam> params = [rankSize, rankSizeLevel0, portNumLevel0, netTypeLevel0, isPod] {
         std::vector<CostModelParam> v;
         auto p0 = InsAlgTemplate0::CalcCostCoeff(CalcCostCoeffParam{
@@ -321,7 +321,7 @@ HcclResult InsV2AllReduceSequence2DieExecutor<AlgTopoMatch, InsAlgTemplate0, Ins
 
         processedDataCount += currDataCount;
         HCCL_DEBUG(
-            "[InsV2AllReduceSequence2DieExecutor] testargs fortemplate0 tempAlgParams0.buffInfo.inBuffBaseOff[%llu], "
+            "[InsV2AllReduceSequence2DieExecutor] testargs for template0 tempAlgParams0.buffInfo.inBuffBaseOff[%llu], "
             "tempAlgParams0.buffInfo.outBuffBaseOff[%llu], tempAlgParams0.sliceSize[%llu],"
             "tempAlgParams0.tailSize[%llu], tempAlgParams0.inputSliceStride[%llu], tempAlgParams0.outputSliceStride"
             "[%llu].",
@@ -329,8 +329,8 @@ HcclResult InsV2AllReduceSequence2DieExecutor<AlgTopoMatch, InsAlgTemplate0, Ins
             tempAlgParams0.tailSize, tempAlgParams0.inputSliceStride, tempAlgParams0.outputSliceStride);
 
         HCCL_DEBUG(
-            "[InsV2AllReduceSequence2DieExecutor] testargs fortemplate1 tempAlgParams1.buffInfo.inBuffBaseOff[%llu], "
-            "tempAlgParams0.buffInfo.outBuffBaseOff[%llu], tempAlgParams0.sliceSize[%llu],"
+            "[InsV2AllReduceSequence2DieExecutor] testargs for template1 tempAlgParams1.buffInfo.inBuffBaseOff[%llu], "
+            "tempAlgParams1.buffInfo.outBuffBaseOff[%llu], tempAlgParams1.sliceSize[%llu],"
             "tempAlgParams1.tailSize[%llu], tempAlgParams1.inputSliceStride[%llu], tempAlgParams1.outputSliceStride"
             "[%llu].",
             tempAlgParams1.buffInfo.inBuffBaseOff, tempAlgParams1.buffInfo.outBuffBaseOff, tempAlgParams1.sliceSize,

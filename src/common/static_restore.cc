@@ -227,7 +227,7 @@ static int safe_open_dir_chain(const char* path)
     }
     dirfd = open("/", O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC);
     if (dirfd < 0) {
-        HCCL_ERROR("open root failed: %s", strerror(errno));
+        HCCL_ERROR("open root dir[%s] failed: %s", path, strerror(errno));
         return -1;
     }
     for (char* comp = strtok_r(buf, "/", &saveptr); comp != NULL; comp = strtok_r(NULL, "/", &saveptr)) {
@@ -532,7 +532,8 @@ static int check_file_integrity(
     /* 检查文件大小 */
     if ((size_t)st.st_size != expected_size) {
         HCCL_WARNING(
-            "Existing file size (%ld) differs from embedded (%zu), will overwrite", (long)st.st_size, expected_size);
+            "Existing file size (%ld bytes) differs from embedded (%zu), will overwrite", (long)st.st_size,
+            expected_size);
         return 0;
     }
 
@@ -624,7 +625,7 @@ static int write_and_verify_tar(
 
     size_t written = fwrite(data, 1, size, fp);
     if (written != size) {
-        HCCL_ERROR("Failed to write tar file: expected %zu bytes, wrote %zu", size, written);
+        HCCL_ERROR("Failed to write tar file[%s]: expected %zu bytes, wrote %zu", target_path, size, written);
         unlock_and_close(fp);
         remove_incomplete_file(target_path);
         return -1;

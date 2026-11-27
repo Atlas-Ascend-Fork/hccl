@@ -177,12 +177,12 @@ template <typename AlgTopoMatch, typename InsAlgTemplate>
 HcclResult InsV2BatchSendRecvSoleExecutor<AlgTopoMatch, InsAlgTemplate>::GetPairWiseList(
     const HcclSendRecvItem* sendRecvInfo, u32 itemNum)
 {
-    HCCL_INFO("[InsV2BatchSendRecvSoleExecutor][GetPairWiseList] Start sort the batchSendRecv tasklist.");
+    HCCL_INFO("[InsV2BatchSendRecvSoleExecutor][GetPairWiseList] Start sorting the batchSendRecv tasklist.");
     CHK_PTR_NULL(sendRecvInfo);
 
     for (u32 i = 0; i < itemNum; i++) {
         HCCL_INFO(
-            "[InsV2BatchSendRecvSoleExecutor][GetPairWiseList] index is %u, itemNum is %u,"
+            "[InsV2BatchSendRecvSoleExecutor][GetPairWiseList] index is %u, itemNum is %u, "
             "localRankID is %d, remoteRank is %u, dataCount is %llu, sendRecvType is %u, rankSize is %u.",
             i, itemNum, myRank_, sendRecvInfo->remoteRank, sendRecvInfo->count,
             static_cast<u32>(sendRecvInfo->sendRecvType), rankSize_);
@@ -239,11 +239,11 @@ HcclResult InsV2BatchSendRecvSoleExecutor<AlgTopoMatch, InsAlgTemplate>::GetPair
     // 如果自发自收任务没有完全匹配
     if ((!sendDeque_.empty() && sendDeque_.front()->remoteRank == static_cast<uint32_t>(myRank_))
         || (!recvDeque_.empty() && recvDeque_.front()->remoteRank == static_cast<uint32_t>(myRank_))) {
-        HCCL_ERROR("[InsV2BatchSendRecvSoleExecutor] SendTask and Recv Task to rank itself do not match,"
+        HCCL_ERROR("[InsV2BatchSendRecvSoleExecutor] SendTask and Recv Task to rank itself do not match, "
                    "please check the task list.");
         return HCCL_E_PARA;
     }
-    HCCL_INFO("[InsV2BatchSendRecvSoleExecutor][GetPairWiseList] End sort the batchSendRecv tasklist.");
+    HCCL_INFO("[InsV2BatchSendRecvSoleExecutor][GetPairWiseList] Finish sorting the batchSendRecv tasklist.");
     return HCCL_SUCCESS;
 }
 
@@ -253,7 +253,7 @@ HcclResult InsV2BatchSendRecvSoleExecutor<AlgTopoMatch, InsAlgTemplate>::CalcSen
     while (!sendDeque_.empty()) {
         const HcclSendRecvItem* sendItem = sendDeque_.front();
         HCCL_INFO(
-            "[InsV2BatchSendRecvSoleExecutor][CalcSendSlices] remoteRank[%u], buf[%p], count[%llu],"
+            "[InsV2BatchSendRecvSoleExecutor][CalcSendSlices] remoteRank[%u], buf[%p], count[%llu], "
             "dataType[%u], sendRecvType[%d].",
             sendItem->remoteRank, sendItem->buf, sendItem->count, sendItem->dataType, sendItem->sendRecvType);
         // 计算每轮搬运的最大数据量
@@ -288,7 +288,7 @@ HcclResult InsV2BatchSendRecvSoleExecutor<AlgTopoMatch, InsAlgTemplate>::CalcRec
     while (!recvDeque_.empty()) {
         const HcclSendRecvItem* recvItem = recvDeque_.front();
         HCCL_INFO(
-            "[InsV2BatchSendRecvSoleExecutor][CalcRecvSlices] remoteRank[%u], buf[%p], count[%llu],"
+            "[InsV2BatchSendRecvSoleExecutor][CalcRecvSlices] remoteRank[%u], buf[%p], count[%llu], "
             "dataType[%u], sendRecvType[%d].",
             recvItem->remoteRank, recvItem->buf, recvItem->count, recvItem->dataType, recvItem->sendRecvType);
         // 计算每轮搬运的最大数据量

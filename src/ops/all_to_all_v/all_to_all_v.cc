@@ -25,7 +25,7 @@ HcclResult HcclAlltoAll(
     const void* sendBuf, uint64_t sendCount, HcclDataType sendType, const void* recvBuf, uint64_t recvCount,
     HcclDataType recvType, HcclComm comm, aclrtStream stream)
 {
-    HCCL_INFO("Start to run execute HcclAlltoAll");
+    HCCL_INFO("Start to run HcclAlltoAll");
     if (GetHcommVersion() < CANN_VERSION(9, 0, 0)) { // compat handle
         return HcclAlltoAllInner(sendBuf, sendCount, sendType, recvBuf, recvCount, recvType, comm, stream);
     }
@@ -86,7 +86,7 @@ HcclResult HcclAlltoAllV(
     const void* sendBuf, const void* sendCounts, const void* sdispls, HcclDataType sendType, const void* recvBuf,
     const void* recvCounts, const void* rdispls, HcclDataType recvType, HcclComm comm, aclrtStream stream)
 {
-    HCCL_INFO("Start to run execute HcclAlltoAllV");
+    HCCL_INFO("Start to run HcclAlltoAllV");
     if (GetHcommVersion() < CANN_VERSION(9, 0, 0)) { // compat handle
         return HcclAlltoAllVInner(
             sendBuf, sendCounts, sdispls, sendType, recvBuf, recvCounts, rdispls, recvType, comm, stream);
@@ -154,7 +154,7 @@ HcclResult HcclAlltoAllVC(
     const void* sendBuf, const void* sendCountMatrix, HcclDataType sendType, const void* recvBuf, HcclDataType recvType,
     HcclComm comm, aclrtStream stream)
 {
-    HCCL_INFO("Start to run execute HcclAlltoAllVC");
+    HCCL_INFO("Start to run HcclAlltoAllVC");
 
     bool isOutPlace = false;
     CHK_RET(IsOutPlaceDevice(isOutPlace));
@@ -215,7 +215,7 @@ HcclResult HcclAlltoAllGraphMode(
     HcclDataType recvType, const char* group, aclrtStream stream, const char* tag, void** streams, size_t streamCount,
     void* scratchMemAddr, uint64_t scratchMemSize)
 {
-    HCCL_INFO("Start to run execute HcclAlltoAllGraphMode");
+    HCCL_INFO("Start to run HcclAlltoAllGraphMode");
     // 根据group获取通信域
     CHK_PTR_NULL(group);
     HcclComm comm = nullptr;
@@ -274,7 +274,7 @@ HcclResult HcclAlltoAllVGraphMode(
     const void* recvCounts, const void* rdispls, HcclDataType recvType, const char* group, aclrtStream stream,
     const char* tag, void** streams, size_t streamCount, void* scratchMemAddr, uint64_t scratchMemSize)
 {
-    HCCL_INFO("Start to run execute HcclAlltoAllVGraphMode");
+    HCCL_INFO("Start to run HcclAlltoAllVGraphMode");
     // 根据group获取通信域
     CHK_PTR_NULL(group);
     HcclComm comm = nullptr;
@@ -333,7 +333,7 @@ HcclResult HcclAlltoAllVCGraphMode(
     const char* group, aclrtStream stream, const char* tag, void** streams, size_t streamCount, void* scratchMemAddr,
     uint64_t scratchMemSize)
 {
-    HCCL_INFO("Start to run execute HcclAlltoAllVCGraphMode");
+    HCCL_INFO("Start to run HcclAlltoAllVCGraphMode");
     // 根据group获取通信域
     CHK_PTR_NULL(group);
     HcclComm comm = nullptr;

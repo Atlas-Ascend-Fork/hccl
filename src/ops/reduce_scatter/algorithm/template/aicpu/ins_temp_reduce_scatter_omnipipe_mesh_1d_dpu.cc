@@ -81,12 +81,12 @@ HcclResult InsTempReduceScatterOmniPipeMesh1dDpu::DoLocalCopy(
 {
     HCCL_INFO("[InsTempReduceScatterOmniPipeMesh1dDpu][DoLocalCopy] DoLocalCopy myRank_ = [%u]", myRank_);
     if (tempAlgParams.sliceSize == 0) {
-        HCCL_INFO("Rank [%d], get slicesize zero. skip localcopy", myRank_);
+        HCCL_INFO("Rank [%d], get slicesize zero. skip local copy", myRank_);
         return HcclResult::HCCL_SUCCESS;
     }
     auto iter = std::find(subCommRanks_[0].begin(), subCommRanks_[0].end(), myRank_);
     if (iter == subCommRanks_[0].end()) {
-        HCCL_ERROR("[%s]subCommRanks_ or myRank_ is error.", __func__);
+        HCCL_ERROR("[%s]subCommRanks_ or myRank_ is invalid.", __func__);
         return HCCL_E_INTERNAL;
     }
 
@@ -158,7 +158,7 @@ HcclResult InsTempReduceScatterOmniPipeMesh1dDpu::KernelRun(
     } else {
         // 转换成eager-mode，保障AICPU指令下发执行完成
         if (HcommBatchModeEnd(param.algTag) != HCCL_SUCCESS) {
-            HCCL_ERROR("[InsTempReduceScatterOmniPipeMesh1dDpu] failed set eager mode, tag is %s.", param.algTag);
+            HCCL_ERROR("[InsTempReduceScatterOmniPipeMesh1dDpu] failed to set eager mode, tag is %s.", param.algTag);
             return HCCL_E_INTERNAL;
         }
 
@@ -198,7 +198,7 @@ HcclResult InsTempReduceScatterOmniPipeMesh1dDpu::KernelRun(
 
         // 将执行模式转换回到batch
         if (HcommBatchModeStart(param.algTag) != HCCL_SUCCESS) {
-            HCCL_ERROR("[InsTempReduceScatterOmniPipeMesh1dDpu] failed set batch mode, tag is %s.", param.algTag);
+            HCCL_ERROR("[InsTempReduceScatterOmniPipeMesh1dDpu] failed to set batch mode, tag is %s.", param.algTag);
             return HCCL_E_INTERNAL;
         }
         HCCL_INFO("[InsTempReduceScatterOmniPipeMesh1dDpu] HcommWaitResponse run over, recvMsgId[%u]", recvMsgId);
@@ -226,12 +226,12 @@ HcclResult InsTempReduceScatterOmniPipeMesh1dDpu::PostReduce(
     if (iter != subCommRanks_[0].end()) {
         rankIdx = std::distance(subCommRanks_[0].begin(), iter);
     } else {
-        HCCL_ERROR("[InsTempReduceScatterOmniPipeMesh1dDpu][RunReduceScatter] subCommRanks_ or myRank_ is error.");
+        HCCL_ERROR("[InsTempReduceScatterOmniPipeMesh1dDpu][RunReduceScatter] subCommRanks_ or myRank_ is invalid.");
         return HCCL_E_INTERNAL;
     }
 
     HCCL_INFO("[InsTempReduceScatterOmniPipeMesh1dDpu][PostReduce], copy from cclBuffer to cclBuffer");
-    // 本卡的数据在executor中，loop刚开始时就完成了localcopy
+    // 本卡的数据在executor中，loop刚开始时就完成了local copy
     // 地址指针全用ccl的
     void* cclBuffAddr = tempAlgParams.buffInfo.hcclBuff.addr;
     // 第一片数据往out做reduce
@@ -273,7 +273,7 @@ HcclResult InsTempReduceScatterOmniPipeMesh1dDpu::RunDpuTransfer(
     if (iter != subCommRanks_[0].end()) {
         myAlgRank = std::distance(subCommRanks_[0].begin(), iter);
     } else {
-        HCCL_ERROR("[InsTempReduceScatterOmniPipeMesh1dDpu][RunReduceScatter] subCommRanks_ or myRank is error.");
+        HCCL_ERROR("[InsTempReduceScatterOmniPipeMesh1dDpu][RunReduceScatter] subCommRanks_ or myRank is invalid.");
         return HCCL_E_INTERNAL;
     }
     std::vector<u32> rankIds = subCommRanks_[0];

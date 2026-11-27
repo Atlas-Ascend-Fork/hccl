@@ -251,7 +251,7 @@ ReduceNHR::KernelRun(const OpParam& param, const TemplateDataParams& tempAlgPara
  */
 HcclResult ReduceNHR::CalcSlice(u64 dataSize)
 {
-    HCCL_INFO("[ReduceNHR] rank[%d] CalcSlice start", dataSize);
+    HCCL_INFO("[ReduceNHR] dataSize[%llu] CalcSlice start", dataSize);
     // 按 rank 切分数据（与 AllReduceNHR 保持一致）
     sliceInfoVec_ = RankSliceInfo(templateRankSize_);
 
@@ -263,7 +263,7 @@ HcclResult ReduceNHR::CalcSlice(u64 dataSize)
         u64 currChunkSize = std::min<u64>(dataSize - accumOff, chunkSize);
         sliceInfoVec_[rankIdx].emplace_back(SliceInfo{accumOff, currChunkSize});
         HCCL_DEBUG(
-            "[ReduceNHR] rankIdx [%d] CalcSlice accumOff[%u], currChunkSize[%u]", rankIdx, accumOff, currChunkSize);
+            "[ReduceNHR] rankIdx [%d] CalcSlice accumOff[%llu], currChunkSize[%llu]", rankIdx, accumOff, currChunkSize);
         accumOff += currChunkSize;
     }
 
@@ -421,8 +421,8 @@ HcclResult ReduceNHR::RunGather(
         CHK_PRT_RET(
             stepInfo.fromRank >= templateRankSize_ || stepInfo.toRank >= templateRankSize_,
             HCCL_ERROR(
-                "[ReduceNHR][RunGather] step[%u], stepInfo.fromRank[%u], stepInfo.toRank[%u], templateRankSize_", step,
-                stepInfo.fromRank, stepInfo.toRank, templateRankSize_),
+                "[ReduceNHR][RunGather] step[%u], stepInfo.fromRank[%u], stepInfo.toRank[%u], templateRankSize_[%u]",
+                step, stepInfo.fromRank, stepInfo.toRank, templateRankSize_),
             HcclResult::HCCL_E_INTERNAL);
 
         const std::vector<ChannelInfo>& recvChannels = channels.at(subCommRanks_.at(0).at(stepInfo.fromRank));

@@ -547,7 +547,7 @@ HcclResult CalcChannelRequestMesh1DFullMesh(
         CHK_RET(HcclRankGraphGetLinks(comm, curNetLayer, myRank, rank, &linkList, &listSize));
         CHK_PRT_RET(
             (listSize == 0),
-            HCCL_ERROR("[CalcChannelRequestMesh1D] These is no link between myRank=%u, dstRank=%u.", myRank, rank),
+            HCCL_ERROR("[CalcChannelRequestMesh1D] There is no link between myRank=%u, dstRank=%u.", myRank, rank),
             HcclResult::HCCL_E_INTERNAL);
         std::vector<CommLink> links(linkList, linkList + listSize);
         bool protocolFound = false;
@@ -727,7 +727,8 @@ HcclResult CalcChannelRequestMesh2D(
         CHK_PRT_RET(
             !protocolExists,
             HCCL_ERROR(
-                "[%s] protocol[%u] not exists between %zu and %zu", __func__, protocol, myRank, channelDesc.remoteRank),
+                "[%s] protocol[%u] does not exist between %zu and %zu", __func__, protocol, myRank,
+                channelDesc.remoteRank),
             HCCL_E_NOT_FOUND);
         channelDesc.channelProtocol = protocol;
         channelDesc.notifyNum = NORMAL_NOTIFY_NUM;

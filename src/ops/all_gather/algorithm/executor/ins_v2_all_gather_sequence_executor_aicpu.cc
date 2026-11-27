@@ -104,7 +104,7 @@ InsV2AllGatherSequenceExecutorAicpu<AlgTopoMatch, InsAlgTemplate0, InsAlgTemplat
         "[InsV2AllGatherSequenceExecutorAicpu][CalcCostCoeff] rankSize=%d, rankSizeLevel0=%d, rankSizeLevel1=%d, "
         "portNumLevel0=%d, portNumLevel1=%d, "
         "netTypeLevel0=%d, netTypeLevel1=%d",
-        rankSize, rankSizeLevel0, rankSizeLevel1, portNumLevel0, portNumLevel1, static_cast<int>(netTypeLevel0),
+        rankSize, rankSizeLevel0, rankSizeLevel1, portNumLevel0[0], portNumLevel1[0], static_cast<int>(netTypeLevel0),
         static_cast<int>(netTypeLevel1));
     std::vector<CostModelParam> params
         = [rankSizeLevel0, rankSizeLevel1, portNumLevel0, portNumLevel1, netTypeLevel0, netTypeLevel1, isPod, algName,
@@ -374,7 +374,7 @@ HcclResult InsV2AllGatherSequenceExecutorAicpu<AlgTopoMatch, InsAlgTemplate0, In
     algTemplate.GetRes(req);
     if (channelLevelIdx >= remoteRankToChannelInfo_.size()) {
         HCCL_ERROR(
-            "[InsV2AllGatherSequenceExecutorAicpu][GenTempResource] channelLevelIdx[%u] should be lower"
+            "[InsV2AllGatherSequenceExecutorAicpu][GenTempResource] channelLevelIdx[%u] should be lower "
             "than remoteRankToChannelInfo_.size()[%zu]",
             channelLevelIdx, remoteRankToChannelInfo_.size());
         return HCCL_E_INTERNAL;
@@ -524,7 +524,7 @@ HcclResult InsV2AllGatherSequenceExecutorAicpu<AlgTopoMatch, InsAlgTemplate0, In
         return HCCL_SUCCESS;
     }
     HCCL_INFO(
-        "[InsV2AllGatherSequenceExecutorAicpu][FastLaunchSaveCtx] threadNum[%llu], ccuKernelNum[%llu]", threadNum,
+        "[InsV2AllGatherSequenceExecutorAicpu][FastLaunchSaveCtx] threadNum[%u], ccuKernelNum[%u]", threadNum,
         ccuKernelNum);
 
     // sequence执行: 先inter再intra, ccuKernelNumList = {inter, intra}

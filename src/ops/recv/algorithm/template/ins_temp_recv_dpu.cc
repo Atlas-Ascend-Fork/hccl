@@ -85,7 +85,7 @@ HcclResult InsTempRecvDpu::KernelRun(
         } else {
             // 转换成eager-mode，保障AICPU指令下发执行完成
             if (HcommBatchModeEnd(param.algTag) != HCCL_SUCCESS) {
-                HCCL_ERROR("[InsTempRecvDpu] failed set eager mode, tag is %s.", param.algTag);
+                HCCL_ERROR("[InsTempRecvDpu] failed to set eager mode, tag is %s.", param.algTag);
                 return HCCL_E_INTERNAL;
             }
             if (HcommThreadSynchronize(thread_) != 0) {
@@ -121,7 +121,7 @@ HcclResult InsTempRecvDpu::KernelRun(
 
             // 将执行模式转换回到batch
             if (HcommBatchModeStart(param.algTag) != HCCL_SUCCESS) {
-                HCCL_ERROR("[InsTempRecvDpu] failed set batch mode, tag is %s.", param.algTag);
+                HCCL_ERROR("[InsTempRecvDpu] failed to set batch mode, tag is %s.", param.algTag);
                 return HCCL_E_INTERNAL;
             }
             HCCL_INFO("[InsTempRecvDpu] HcommWaitResponse run over, recvMsgId[%u]", recvMsgId);
@@ -131,7 +131,7 @@ HcclResult InsTempRecvDpu::KernelRun(
                 return HCCL_E_INTERNAL;
             }
         }
-        // aicpu把cclbuffer的内容localcopy给outputbuffer
+        // aicpu把cclbuffer的内容local copy给outputbuffer
         DataSlice localCclBuffer(
             tempAlgParams.buffInfo.hcclBuff.addr, 0, processSize_, count_); // cclbuffer不需要offset
         DataSlice outputBuffer(
@@ -151,7 +151,7 @@ HcclResult InsTempRecvDpu::KernelRun(
         CHK_PRT_RET(
             RecvWrite(recvInfo, thread_), HCCL_ERROR("[InsTempRecvDpu][KernelRun]Aicpu Run Recv failed"),
             HcclResult::HCCL_E_INTERNAL);
-        // 把cclbuffer的内容localcopy给outputbuffer
+        // 把cclbuffer的内容local copy给outputbuffer
         DataSlice outputBuffer(
             tempAlgParams.buffInfo.outputPtr, tempAlgParams.buffInfo.outBuffBaseOff, processSize_, count_);
         CHK_PRT_RET(

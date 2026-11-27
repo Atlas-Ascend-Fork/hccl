@@ -71,7 +71,7 @@ HcclResult InsTempBatchSendRecvDpu::KernelRun(
     // 跨框流程要走dpu
     if (sendRecvChannel_.locationType == EndpointLocType::ENDPOINT_LOC_TYPE_HOST) {
         if (tempAlgParams.opType == BatchSendRecvOpType::SEND) {
-            // aicpu先把inputbuffer的内容localcopy给cclbuffer
+            // aicpu先把inputbuffer的内容local copy给cclbuffer
             DataSlice inputBuffer(
                 tempAlgParams.buffInfo.inputPtr, tempAlgParams.buffInfo.inBuffBaseOff, processSize_, count_);
             DataSlice localCclBuffer(
@@ -84,7 +84,7 @@ HcclResult InsTempBatchSendRecvDpu::KernelRun(
         CHK_RET(RunDpuTransfer(param, tempAlgParams, templateResource));
 
         if (tempAlgParams.opType == BatchSendRecvOpType::RECV) {
-            // aicpu把cclbuffer的内容localcopy给outputbuffer
+            // aicpu把cclbuffer的内容local copy给outputbuffer
             DataSlice localCclBuffer(
                 tempAlgParams.buffInfo.hcclBuff.addr,
                 tempAlgParams.buffInfo.hcclBuffBaseOff + recvRank_ * hcclbuffBlockMemSize_, processSize_,
@@ -132,7 +132,7 @@ HcclResult InsTempBatchSendRecvDpu::KernelRun(
             CHK_PRT_RET(
                 RecvWrite(recvInfo, subThread_),
                 HCCL_ERROR("[InsTempBatchSendRecvDpu][KernelRun] AICPU RecvWrite failed"), HcclResult::HCCL_E_INTERNAL);
-            // 把cclbuffer的内容localcopy给outputbuffer
+            // 把cclbuffer的内容local copy给outputbuffer
             DataSlice outputBuffer(
                 tempAlgParams.buffInfo.outputPtr, tempAlgParams.buffInfo.outBuffBaseOff, processSize_, count_);
             CHK_PRT_RET(
@@ -175,7 +175,7 @@ HcclResult InsTempBatchSendRecvDpu::RunDpuTransfer(
 
     // 转换成eager-mode，保障AICPU指令下发执行完成
     if (HcommBatchModeEnd(param.algTag) != HCCL_SUCCESS) {
-        HCCL_ERROR("failed set eager mode, tag is %s.", param.algTag);
+        HCCL_ERROR("failed to set eager mode, tag is %s.", param.algTag);
         return HCCL_E_INTERNAL;
     }
     if (HcommThreadSynchronize(thread_) != 0) {
@@ -212,7 +212,7 @@ HcclResult InsTempBatchSendRecvDpu::RunDpuTransfer(
 
     // 将执行模式转换回到batch
     if (HcommBatchModeStart(param.algTag) != HCCL_SUCCESS) {
-        HCCL_ERROR("[InsTempBatchSendRecvDpu] failed set batch mode, tag is %s.", param.algTag);
+        HCCL_ERROR("[InsTempBatchSendRecvDpu] failed to set batch mode, tag is %s.", param.algTag);
         return HCCL_E_INTERNAL;
     }
     HCCL_INFO("[InsTempBatchSendRecvDpu] HcommWaitResponse run over, recvMsgId[%u]", recvMsgId);

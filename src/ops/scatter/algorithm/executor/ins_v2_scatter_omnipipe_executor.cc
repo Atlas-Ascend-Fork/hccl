@@ -437,7 +437,9 @@ InsV2ScatterOmniPipeExecutor<AlgTopoMatch, InsAlgTemplate0, InsAlgTemplate1, Ins
 
     eqBw1 = rankSizeLevel1_ > 1 ? eqBw1 / (rankSizeLevel1_ - 1) : eqBw1;
     eqBw2 = rankSizeLevel2_ > 1 ? eqBw2 / (rankSizeLevel2_ - 1) : eqBw2;
-    HCCL_DEBUG("[InsV2ScatterOmniPipeExecutor][OrchestrateLoop] eqBw0[%f] eqBw1[%f] eqBw2[%f]", eqBw0, eqBw1, eqBw2);
+    HCCL_DEBUG(
+        "[InsV2ScatterOmniPipeExecutor][OrchestrateLoop] eqBw0[%f GB/s] eqBw1[%f GB/s] eqBw2[%f GB/s]", eqBw0, eqBw1,
+        eqBw2);
 
     std::vector<double> endpointAttrBwNew{eqBw0, eqBw1, eqBw2};
 
@@ -446,19 +448,20 @@ InsV2ScatterOmniPipeExecutor<AlgTopoMatch, InsAlgTemplate0, InsAlgTemplate1, Ins
     u64 transportBoundDataSize = UB_MAX_DATA_SIZE;
     u64 scatterDataSize = maxTmpMemSize / rankSize_;
     HCCL_DEBUG(
-        "[InsV2ScatterOmniPipeExecutor][%s] myRank[%u] maxTmpMemSize[%u] transportBoundDataSize[%u]", __func__, myRank_,
-        maxTmpMemSize, transportBoundDataSize);
+        "[InsV2ScatterOmniPipeExecutor][%s] myRank[%u] maxTmpMemSize[%llu bytes] transportBoundDataSize[%llu bytes]",
+        __func__, myRank_, maxTmpMemSize, transportBoundDataSize);
     u64 maxCountPerLoop = std::min(scatterDataSize, transportBoundDataSize) / HCCL_MIN_SLICE_ALIGN
                           * HCCL_MIN_SLICE_ALIGN / dataTypeSize_;
     CHK_PRT_RET(
         maxCountPerLoop == 0, HCCL_ERROR("[InsV2ScatterOmniPipeExecutor][%s] maxCountPerLoop is 0", __func__),
         HCCL_E_INTERNAL);
-    HCCL_DEBUG("[InsV2ScatterOmniPipeExecutor][%s] myRank[%u] maxCountPerLoop[%u]", __func__, myRank_, maxCountPerLoop);
+    HCCL_DEBUG(
+        "[InsV2ScatterOmniPipeExecutor][%s] myRank[%u] maxCountPerLoop[%llu]", __func__, myRank_, maxCountPerLoop);
     u32 loopTimes = dataCount_ / maxCountPerLoop + ((dataCount_ % maxCountPerLoop == 0) ? 0 : 1);
     HCCL_DEBUG("[InsV2ScatterOmniPipeExecutor][%s] myRank[%u] loopTimes[%u]", __func__, myRank_, loopTimes);
     u64 perLoopSize = maxCountPerLoop * dataTypeSize_;
     perLoopSize = dataSize_ > perLoopSize ? perLoopSize : dataSize_;
-    HCCL_DEBUG("[InsV2ScatterOmniPipeExecutor][%s] perLoopSize[%u]", __func__, perLoopSize);
+    HCCL_DEBUG("[InsV2ScatterOmniPipeExecutor][%s] perLoopSize[%llu bytes]", __func__, perLoopSize);
 
     // 3、计算n-1次loop的slice信息
     OmniPipeSliceParam sliceParam;
@@ -638,7 +641,7 @@ InsV2ScatterOmniPipeExecutor<AlgTopoMatch, InsAlgTemplate0, InsAlgTemplate1, Ins
                 HCCL_DEBUG("PostSyncInterThreads z success.");
             }
         }
-        // localcopy前同步
+        // local copy前同步
         CHK_RET(PreSyncInterThreads(controlThread_, tempMainThreadsLevel01_, notifyIdxCtrlToTempLevel01_));
         // 5.4 将当前这个loop在ccl中的数据一次性拷贝到userout中
         TemplateDataParams tempAlgParamsLocalCopy;
@@ -673,7 +676,7 @@ InsV2ScatterOmniPipeExecutor<AlgTopoMatch, InsAlgTemplate0, InsAlgTemplate1, Ins
         } else if (rankSizeLevel1_ > 1) {
             CHK_RET(tempLevel1_->DoLocalCopy(tempAlgParamsLocalCopy, tempResMap[OMNIPIPE_LEVEL1].threads));
         }
-        // localcopy后同步
+        // local copy后同步
         CHK_RET(PostSyncInterThreads(controlThread_, tempMainThreadsLevel01_, notifyIdxTempToCtrlLevel01_));
         processedDataCount += currDataCount;
         if (rankSizeLevel2_ > 1) {

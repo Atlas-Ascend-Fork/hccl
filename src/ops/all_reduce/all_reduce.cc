@@ -24,7 +24,7 @@ HcclResult HcclAllReduce(
     void* sendBuf, void* recvBuf, uint64_t count, HcclDataType dataType, HcclReduceOp op, HcclComm comm,
     aclrtStream stream)
 {
-    HCCL_INFO("Start to run execute HcclAllReduce");
+    HCCL_INFO("Start to run HcclAllReduce");
     if (GetHcommVersion() < CANN_VERSION(9, 0, 0)) { // compat handle
         return HcclAllReduceInner(sendBuf, recvBuf, count, dataType, op, comm, stream);
     }
@@ -60,7 +60,7 @@ HcclResult HcclAllReduceGraphMode(
     aclrtStream stream, const char* tag, void** streams, size_t streamCount, void* scratchMemAddr,
     uint64_t scratchMemSize)
 {
-    HCCL_INFO("Start to run execute HcclAllReduceGraphMode");
+    HCCL_INFO("Start to run HcclAllReduceGraphMode");
     // 根据group获取通信域
     CHK_PTR_NULL(group);
     HcclComm comm = nullptr;

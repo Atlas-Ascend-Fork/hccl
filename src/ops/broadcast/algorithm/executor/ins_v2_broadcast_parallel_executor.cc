@@ -353,7 +353,7 @@ InsBroadcastParallelExecutor<AlgTopoMatch, InsAlgTemplate0, InsAlgTemplate1, Ins
         "isPod=%d netTypeLevel0=%d "
         "netTypeLevel1=%d portNumLevel0=%d portNumLevel1=%d",
         algName, rankSize, rankSizeLevel0, rankSizeLevel1, isPod, static_cast<int>(netTypeLevel0),
-        static_cast<int>(netTypeLevel1), portNumLevel0, portNumLevel1);
+        static_cast<int>(netTypeLevel1), portNumLevel0[0], portNumLevel1[0]);
     std::vector<CostModelParam> params;
     // Step1: Scatter L0(MESH) part0 ‖ Scatter L1(CLOS) part1（INPUT→HCCL_BUFFER，root发送）
     // L0首次scatter part0=ratio*D，R0子组内每peer发ratio*D/R0 → n=ratio/R0
@@ -1050,8 +1050,7 @@ InsBroadcastParallelExecutor<AlgTopoMatch, InsAlgTemplate0, InsAlgTemplate1, Ins
         return HCCL_SUCCESS;
     }
     HCCL_INFO(
-        "[InsBroadcastParallelExecutor][FastLaunchSaveCtx] threadNum[%llu], ccuKernelNum[%llu]", threadNum,
-        ccuKernelNum);
+        "[InsBroadcastParallelExecutor][FastLaunchSaveCtx] threadNum[%u], ccuKernelNum[%u]", threadNum, ccuKernelNum);
 
     u64 size = CcuFastLaunchCtx::GetCtxSize(threadNum, ccuKernelNum);
     // 申请ctx

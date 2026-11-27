@@ -188,7 +188,7 @@ HcclResult ReduceSoleExecutor<AlgTopoMatch, AlgTemplate>::OrchestrateLoop(
     u64 maxDataSizePerLoop = 0;
     maxTmpMemSize_ = tempAlgParams.buffInfo.hcclBuff.size;
     u64 transportBoundDataSize = UB_MAX_DATA_SIZE;
-    HCCL_INFO("[ReduceSoleExecutor]maxTmpMemSize_ [%llu]", maxTmpMemSize_);
+    HCCL_INFO("[ReduceSoleExecutor]maxTmpMemSize_ [%llu bytes]", maxTmpMemSize_);
     HCCL_INFO("[ReduceSoleExecutor]templateScratchMultiplier [%u]", templateScratchMultiplier);
     if (templateScratchMultiplier != 0) {
         u64 scratchBoundDataSize
@@ -200,8 +200,8 @@ HcclResult ReduceSoleExecutor<AlgTopoMatch, AlgTemplate>::OrchestrateLoop(
     // 单次循环处理的数据量大小
     u64 maxDataCountPerLoop = maxDataSizePerLoop / dataTypeSize_;
     HCCL_INFO(
-        "[ReduceSoleExecutor][OrchestrateOpbase] maxDataCountPerLoop[%llu], maxDataSizePerLoop[%llu], "
-        "transportBoundDataSize[%llu], templateScratchMultiplier[%llu]",
+        "[ReduceSoleExecutor][OrchestrateOpbase] maxDataCountPerLoop[%llu], maxDataSizePerLoop[%llu bytes], "
+        "transportBoundDataSize[%llu bytes], templateScratchMultiplier[%llu]",
         maxDataCountPerLoop, maxDataSizePerLoop, transportBoundDataSize, templateScratchMultiplier);
     CHK_PRT_RET(
         maxDataCountPerLoop == 0, HCCL_ERROR("[ReduceSoleExecutor][OrchestrateOpbase] maxDataCountPerLoop is 0"),
@@ -265,7 +265,7 @@ HcclResult ReduceSoleExecutor<AlgTopoMatch, InsAlgTemplate>::FastLaunchSaveCtx(
     u64 size = CcuFastLaunchCtx::GetCtxSize(threadNum, ccuKernelNum);
     // 申请ctx
     void* ctxPtr = nullptr;
-    HCCL_INFO("[ReduceSoleExecutor][HcclEngineCtxCreate] Tag[%s], size[%llu]", param.fastLaunchTag, size);
+    HCCL_INFO("[ReduceSoleExecutor][HcclEngineCtxCreate] Tag[%s], size[%llu bytes]", param.fastLaunchTag, size);
     CHK_RET(HcclEngineCtxCreate(param.hcclComm, param.fastLaunchTag, CommEngine::COMM_ENGINE_CCU, size, &ctxPtr));
 
     CcuFastLaunchCtx* ccuFastLaunchCtx = reinterpret_cast<CcuFastLaunchCtx*>(ctxPtr);

@@ -372,7 +372,7 @@ HcclResult InsV2AllToAllConcurrentExecutor<AlgTopoMatch, InsAlgTemplate0, InsAlg
     // 从varData把值取出来
     const u64* data = reinterpret_cast<const u64*>(param.varData);
     for (u64 i = 0; i < ALL_TO_ALL_V_VECTOR_NUM * rankSize_; i++) {
-        HCCL_INFO("OrchestrateLoop, param.varData[%u] is [%u]", i, data[i]);
+        HCCL_INFO("OrchestrateLoop, param.varData[%llu] is [%llu]", i, data[i]);
     }
     for (u64 i = 0; i < ALL_TO_ALL_V_VECTOR_NUM * rankSize_; i++) {
         u64 val = i / rankSize_;
@@ -687,11 +687,11 @@ HcclResult InsV2AllToAllConcurrentExecutor<AlgTopoMatch, InsAlgTemplate0, InsAlg
     }
 
     HCCL_INFO(
-        "[InsV2AllToAllConcurrentExecutor] loop = %u, tempAlgParams.buffInfo.inBuffBaseOff = %u,"
-        "tempAlgParams.buffInfo.outBuffBaseOff = %u, tempAlgParams.inputSliceStride = %u,"
-        "tempAlgParams.outputSliceStride = %u, tempAlgParams.sliceSize = %u",
-        loop, tempAlgParams.inputSliceStride, tempAlgParams.outputSliceStride, tempAlgParams.sliceSize,
-        tempAlgParams.buffInfo.inBuffBaseOff, tempAlgParams.buffInfo.outBuffBaseOff);
+        "[InsV2AllToAllConcurrentExecutor] loop = %u, tempAlgParams.buffInfo.inBuffBaseOff = %llu,"
+        "tempAlgParams.buffInfo.outBuffBaseOff = %llu, tempAlgParams.inputSliceStride = %llu,"
+        "tempAlgParams.outputSliceStride = %llu, tempAlgParams.sliceSize = %llu",
+        loop, tempAlgParams.buffInfo.inBuffBaseOff, tempAlgParams.buffInfo.outBuffBaseOff,
+        tempAlgParams.inputSliceStride, tempAlgParams.outputSliceStride, tempAlgParams.sliceSize);
 
     // 不需要重复
     tempAlgParams.repeatNum = 1;

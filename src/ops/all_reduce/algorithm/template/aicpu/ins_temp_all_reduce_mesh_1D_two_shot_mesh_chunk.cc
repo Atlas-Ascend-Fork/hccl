@@ -76,7 +76,7 @@ HcclResult InsTempAllReduceMesh1DTwoShotMeshChunk::CalcRes(
     resourceRequest.channels.push_back(level0Channels);
     HCCL_WARNING("Resource calculation is temporarily not performed in the template.");
     HCCL_INFO(
-        "[InsTempAllReduceMesh1DTwoShotMeshChunk] Calculate resource finished."
+        "[InsTempAllReduceMesh1DTwoShotMeshChunk] Calculate resource finished. "
         "resource request: threadNum[%u], main thread notifyNum[%u], channelNum[%zu]",
         resourceRequest.slaveThreadNum + 1, resourceRequest.notifyNumOnMainThread,
         resourceRequest.channels.at(0).size());
@@ -128,7 +128,9 @@ HcclResult InsTempAllReduceMesh1DTwoShotMeshChunk::KernelRun(
         HcclResult::HCCL_E_INTERNAL);
     CHK_PRT_RET(
         subCommRanks_[0].size() != templateRankSize_,
-        HCCL_ERROR("[InsTempAllReduceMesh1DTwoShotMeshChunk][KernelRun] rank count is invalid in rank list.", myRank_),
+        HCCL_ERROR(
+            "[InsTempAllReduceMesh1DTwoShotMeshChunk][KernelRun] rank count is invalid in rank list, myRank[%u].",
+            myRank_),
         HcclResult::HCCL_E_INTERNAL);
 
     // 获取当前rank在rank列表中的序号

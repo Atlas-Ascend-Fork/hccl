@@ -33,7 +33,7 @@ HcclResult CollAlgExecRegistryV2::Register(
 std::unique_ptr<InsCollAlgBase> CollAlgExecRegistryV2::GetAlgExec(const HcclCMDType type, const std::string& tag)
 {
     if (execCreators_.count(type) == 0 || execCreators_[type].count(tag) == 0) {
-        HCCL_DEBUG("[CollAlgExecRegistryV2]Creator for executor tag[%s] has not registered.", tag.c_str());
+        HCCL_DEBUG("[CollAlgExecRegistryV2]Creator for executor tag[%s] has not been registered.", tag.c_str());
         return nullptr;
     }
     HCCL_DEBUG("[CollAlgExecRegistryV2][GetAlgExec]get executor by algName[%s].", tag.c_str());

@@ -94,7 +94,7 @@ HcclResult CcuTempBroadcastNHR1DMem2Mem::GetDieNumFromChannelDescs(HcclComm comm
         return HCCL_SUCCESS;
     } else {
         HCCL_ERROR(
-            "[CcuTempBroadcastNHR1DMem2Mem::CalcRes] get channelDescs fail: there are [] link to rank []",
+            "[CcuTempBroadcastNHR1DMem2Mem::CalcRes] get channelDescs fail: there are [%zu] links to rank [%u]",
             firstVector.size(), firstElement->first);
         return HCCL_E_INTERNAL;
     }
@@ -346,7 +346,7 @@ HcclResult CcuTempBroadcastNHR1DMem2Mem::KernelRun(
     u32 kernelNum = templateResource.ccuKernels.size();
 
     if (templateDataParams.sliceSize == 0) {
-        HCCL_INFO("[CcuTempBroadcastNHR1DMem2Mem] sliceSize is 0, no need do, just success.");
+        HCCL_INFO("[CcuTempBroadcastNHR1DMem2Mem] sliceSize is 0, no need to do, just return success.");
         return HCCL_SUCCESS;
     }
     if (templateResource.dieSplitRatio > 0.0) {
@@ -369,9 +369,9 @@ HcclResult CcuTempBroadcastNHR1DMem2Mem::KernelRun(
     uint64_t die1SliceSize = die1Size / templateRankSize_;
     uint64_t die1LastSliceSize = die1Size % templateRankSize_ + die1SliceSize;
     HCCL_INFO(
-        "[CcuTempBroadcastNHR1DMem2Mem] die0Size[%llu], die1Size[%llu], inputAddr[%llu],"
-        "outputAddr[%llu], die0SliceSize[%llu], die0LastSliceSize[%llu], die1SliceSize[%llu],"
-        "die1LastSliceSize[%llu]",
+        "[CcuTempBroadcastNHR1DMem2Mem] die0Size[%llu bytes], die1Size[%llu bytes], inputAddr[%llu],"
+        "outputAddr[%llu], die0SliceSize[%llu bytes], die0LastSliceSize[%llu bytes], die1SliceSize[%llu bytes],"
+        "die1LastSliceSize[%llu bytes]",
         die0Size, die1Size, inputAddr, outputAddr, die0SliceSize, die0LastSliceSize, die1SliceSize, die1LastSliceSize);
 
     // 前流同步

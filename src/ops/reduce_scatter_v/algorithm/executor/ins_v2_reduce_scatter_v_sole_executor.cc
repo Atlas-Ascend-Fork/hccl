@@ -130,7 +130,7 @@ HcclResult InsV2ReduceScatterVSoleExecutor<AlgTopoMatch, InsAlgTemplate>::Orches
     u64 maxDataSizePerLoop = 0;
     maxTmpMemSize_ = tempAlgParams.buffInfo.hcclBuff.size;
     u64 transportBoundDataSize = UB_MAX_DATA_SIZE;
-    HCCL_INFO("[InsV2ReduceScatterVSoleExecutor]maxTmpMemSize_ [%llu]", maxTmpMemSize_);
+    HCCL_INFO("[InsV2ReduceScatterVSoleExecutor]maxTmpMemSize_ [%llu bytes]", maxTmpMemSize_);
     if (templateScratchMultiplier != 0) {
         u64 scratchBoundDataSize
             = maxTmpMemSize_ / templateScratchMultiplier / HCCL_MIN_SLICE_ALIGN * HCCL_MIN_SLICE_ALIGN;
@@ -141,8 +141,9 @@ HcclResult InsV2ReduceScatterVSoleExecutor<AlgTopoMatch, InsAlgTemplate>::Orches
     // 单次循环处理的数据量大小
     u64 maxDataCountPerLoop = maxDataSizePerLoop / dataTypeSize_;
     HCCL_INFO(
-        "[InsV2ReduceScatterVSoleExecutor][OrchestrateOpbase] maxDataCountPerLoop[%llu], maxDataSizePerLoop[%llu], "
-        "transportBoundDataSize[%llu], templateScratchMultiplier[%u]",
+        "[InsV2ReduceScatterVSoleExecutor][OrchestrateOpbase] maxDataCountPerLoop[%llu], maxDataSizePerLoop[%llu "
+        "bytes], "
+        "transportBoundDataSize[%llu bytes], templateScratchMultiplier[%u]",
         maxDataCountPerLoop, maxDataSizePerLoop, transportBoundDataSize, templateScratchMultiplier);
     CHK_PRT_RET(
         maxDataCountPerLoop == 0,
@@ -184,7 +185,7 @@ HcclResult InsV2ReduceScatterVSoleExecutor<AlgTopoMatch, InsAlgTemplate>::Orches
                                                      0)
                                                 * dataTypeSize_;
             HCCL_INFO(
-                "[InsTempReduceScatterVMesh1D] tempAlgParams.allRankSliceSize[i] %u",
+                "[InsTempReduceScatterVMesh1D] tempAlgParams.allRankSliceSize[i] %u bytes",
                 tempAlgParams.allRankSliceSize[i]);
         }
         tempAlgParams.buffInfo.inBuffBaseOff = processedDataCount * dataTypeSize_;
@@ -197,8 +198,8 @@ HcclResult InsV2ReduceScatterVSoleExecutor<AlgTopoMatch, InsAlgTemplate>::Orches
             = maxDataCountPerLoop * dataTypeSize_; // 单轮CCL块大小，DPU模板按此切CCL_IN/CCL_OUT
 
         HCCL_INFO(
-            "[InsV2ReduceScatterVSoleExecutor] loop [%u] tempAlgParams.buffInfo.inBuffBaseOff [%u],"
-            "tempAlgParams.buffInfo.outBuffBaseOff [%u]",
+            "[InsV2ReduceScatterVSoleExecutor] loop [%llu] tempAlgParams.buffInfo.inBuffBaseOff [%llu],"
+            "tempAlgParams.buffInfo.outBuffBaseOff [%llu]",
             loop, tempAlgParams.buffInfo.inBuffBaseOff, tempAlgParams.buffInfo.outBuffBaseOff);
 
         // 因为只考虑执行0级算法，所以传进template里面的channels就是channels_的第一个vector

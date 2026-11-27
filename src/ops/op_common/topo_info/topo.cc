@@ -94,7 +94,7 @@ HcclResult CalcGeneralTopoInfoForA3(const HcclComm comm, const TopoInfo* topoInf
     algHierarchyInfo.infos[COMM_LEVEL2].localRankSize = topoInfo->superPodNum;
     HCCL_INFO(
         "[CalcGeneralTopoInfoForA3] userRank[%u] serverIdx[%u] superPodIdx[%u] l0Rank[%u] l1Rank[%u] l2Rank[%u] "
-        "deviceNumPerModule[%u] serverNumPerSuperPod[%u] superPodNum[%u]"
+        "deviceNumPerModule[%u] serverNumPerSuperPod[%u] superPodNum[%u] "
         "l0RankSize[%u] l1RankSize[%u] l2RankSize[%u]",
         topoInfo->userRank, topoInfo->serverIdx, topoInfo->superPodIdx, algHierarchyInfo.infos[COMM_LEVEL0].localRank,
         algHierarchyInfo.infos[COMM_LEVEL1].localRank, algHierarchyInfo.infos[COMM_LEVEL2].localRank,

@@ -184,7 +184,7 @@ HcclResult CcuTempReduceScatterNhrMultiJettyMem2Mem1D::KernelRun(
     uint64_t argSize = 11;
 
     HCCL_INFO(
-        "[CcuTempReduceScatterNhrMultiJettyMem2Mem1D::KernelRun] inputAddr[%llx], outputAddr[%llx], sliceSize[%u]"
+        "[CcuTempReduceScatterNhrMultiJettyMem2Mem1D::KernelRun] inputAddr[%llx], outputAddr[%llx], sliceSize[%u] "
         "sliceOneJettySize[%u], repeatNum[%llu], inputRepeatStride[%u], outputRepeatStride[%u]",
         inputAddr, outputAddr, sliceSize, sliceOneJettySize, repeatNum, inputRepeatStride, outputRepeatStride);
     if (sliceSize == 0) {

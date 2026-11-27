@@ -107,8 +107,8 @@ InsV2ScatterOmniPipe2DExecutor<AlgTopoMatch, InsAlgTempLevel0, InsAlgTempLevel1>
     costParam.C = 2.0f * static_cast<float>(stepNum) * std::max(meshLatency, nhrLatency);
 
     HCCL_INFO(
-        "[%s] algName[%s] axes[%llu,%llu] step[%llu] maxStep[%d] sched2dCost[%d] planBandwidth[%f,%f] "
-        "costBandwidth[%f,%f] Bxy[%f] transferCoeff[%e] Ufixed[%f] A[%e] B[%e] C[%e].",
+        "[%s] algName[%s] axes[%llu,%llu] step[%llu] maxStep[%d] sched2dCost[%d] planBandwidth[%f,%f GB/s] "
+        "costBandwidth[%f,%f GB/s] Bxy[%f GB/s] transferCoeff[%e] Ufixed[%f] A[%e] B[%e] C[%e].",
         __func__, algName, meshRankSize, closRankSize, stepNum, stepNum == maxStepNum, useSched2dCost,
         meshPlanBandwidth * OMNIPIPE_FIXED_UB_UTILIZATION, closPlanBandwidthPerRank * OMNIPIPE_FIXED_UB_UTILIZATION,
         meshCostBandwidth * OMNIPIPE_FIXED_UB_UTILIZATION, closCostBandwidthPerRank * OMNIPIPE_FIXED_UB_UTILIZATION,
@@ -490,7 +490,7 @@ HcclResult InsV2ScatterOmniPipe2DExecutor<AlgTopoMatch, InsAlgTempLevel0, InsAlg
     eqBwLevel1 = rankSizeLevel1_ > 1 ? eqBwLevel1 / (rankSizeLevel1_ - 1) : eqBwLevel1;
     std::vector<double> endpointAttrBwAvg = {eqBwLevel0, eqBwLevel1, 1.0};
     HCCL_DEBUG(
-        "[%s] myRank[%u] endpointAttrBwAvg[%.3f, %.3f, %.3f]", __func__, myRank_, endpointAttrBwAvg[0],
+        "[%s] myRank[%u] endpointAttrBwAvg[%.3f, %.3f, %.3f GB/s]", __func__, myRank_, endpointAttrBwAvg[0],
         endpointAttrBwAvg[1], endpointAttrBwAvg[2]);
 
     // 2.计算loop相关信息
@@ -498,8 +498,8 @@ HcclResult InsV2ScatterOmniPipe2DExecutor<AlgTopoMatch, InsAlgTempLevel0, InsAlg
     u64 transportBoundDataSize = UB_MAX_DATA_SIZE;
     u64 scatterDataSize = maxTmpMemSize / rankSize_;
     HCCL_DEBUG(
-        "[InsV2ScatterOmniPipe2DExecutor][%s] myRank[%u] maxTmpMemSize[%llu] transportBoundDataSize[%llu]", __func__,
-        myRank_, maxTmpMemSize, transportBoundDataSize);
+        "[InsV2ScatterOmniPipe2DExecutor][%s] myRank[%u] maxTmpMemSize[%llu bytes] transportBoundDataSize[%llu bytes]",
+        __func__, myRank_, maxTmpMemSize, transportBoundDataSize);
     u64 maxCountPerLoop = std::min(scatterDataSize, transportBoundDataSize) / HCCL_MIN_SLICE_ALIGN
                           * HCCL_MIN_SLICE_ALIGN / dataTypeSize_;
     CHK_PRT_RET(
@@ -511,7 +511,7 @@ HcclResult InsV2ScatterOmniPipe2DExecutor<AlgTopoMatch, InsAlgTempLevel0, InsAlg
     HCCL_DEBUG("[InsV2ScatterOmniPipe2DExecutor][%s] myRank[%u] loopTimes[%u]", __func__, myRank_, loopTimes);
     u64 perLoopSize = maxCountPerLoop * dataTypeSize_;
     perLoopSize = dataSize_ > perLoopSize ? perLoopSize : dataSize_;
-    HCCL_DEBUG("[InsV2ScatterOmniPipe2DExecutor][%s] perLoopSize[%llu]", __func__, perLoopSize);
+    HCCL_DEBUG("[InsV2ScatterOmniPipe2DExecutor][%s] perLoopSize[%llu bytes]", __func__, perLoopSize);
 
     // 3.计算对齐数据的切片信息
     OmniPipeSliceInfo alignSliceInfo;

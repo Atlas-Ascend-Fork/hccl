@@ -67,7 +67,7 @@ HcclResult InsTempSendDpu::KernelRun(
     dataType_ = param.DataDes.dataType;
     // 跨框流程要走dpu
     if (sendChannel_.locationType == EndpointLocType::ENDPOINT_LOC_TYPE_HOST) {
-        // aicpu先把inputbuffer的内容localcopy给cclbuffer
+        // aicpu先把inputbuffer的内容local copy给cclbuffer
         DataSlice inputBuffer(
             tempAlgParams.buffInfo.inputPtr, tempAlgParams.buffInfo.inBuffBaseOff, processSize_, count_);
         DataSlice localCclBuffer(
@@ -93,7 +93,7 @@ HcclResult InsTempSendDpu::KernelRun(
         } else {
             // 转换成eager-mode，保障AICPU指令下发执行完成
             if (HcommBatchModeEnd(param.algTag) != HCCL_SUCCESS) {
-                HCCL_ERROR("[InsTempSendDpu] failed set eager mode, tag is %s.", param.algTag);
+                HCCL_ERROR("[InsTempSendDpu] failed to set eager mode, tag is %s.", param.algTag);
                 return HCCL_E_INTERNAL;
             }
             if (HcommThreadSynchronize(thread_) != 0) {
@@ -129,7 +129,7 @@ HcclResult InsTempSendDpu::KernelRun(
 
             // 将执行模式转换回到batch
             if (HcommBatchModeStart(param.algTag) != HCCL_SUCCESS) {
-                HCCL_ERROR("[InsTempSendDpu] failed set batch mode, tag is %s.", param.algTag);
+                HCCL_ERROR("[InsTempSendDpu] failed to set batch mode, tag is %s.", param.algTag);
                 return HCCL_E_INTERNAL;
             }
             HCCL_INFO("[InsTempSendDpu] HcommWaitResponse run over, recvMsgId[%u]", recvMsgId);

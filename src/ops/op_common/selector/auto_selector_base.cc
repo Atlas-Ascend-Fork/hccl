@@ -350,7 +350,7 @@ bool AutoSelectorBase::IsInputOutputOverlap(const OpParam& opParam) const
 {
     CHK_PRT_RET(
         opParam.inputPtr == nullptr || opParam.outputPtr == nullptr,
-        HCCL_INFO("[Algo][AutoSelectorBase][IsInputOutputOverlap] The input or output buffer is null. Not overlap."),
+        HCCL_INFO("[Algo][AutoSelectorBase][IsInputOutputOverlap] The input or output buffer is null. No overlap."),
         false);
 
     u64 inputDataSize = opParam.inputSize;
@@ -359,7 +359,7 @@ bool AutoSelectorBase::IsInputOutputOverlap(const OpParam& opParam) const
     CHK_PRT_RET(
         inputDataSize == 0 || outputDataSize == 0,
         // 不存在overlap情况
-        HCCL_INFO("[Algo][AutoSelectorBase][IsInputOutputOverlap] The input or output buffer size is 0. Not overlap."),
+        HCCL_INFO("[Algo][AutoSelectorBase][IsInputOutputOverlap] The input or output buffer size is 0. No overlap."),
         false);
 
     uintptr_t inputStart = reinterpret_cast<uintptr_t>(opParam.inputPtr);
@@ -380,7 +380,7 @@ bool AutoSelectorBase::IsInputOutputOverlap(const OpParam& opParam) const
             inputStart, inputEnd, outputStart, outputEnd),
         true);
 
-    HCCL_DEBUG("[Algo][AutoSelectorBase][IsInputOutputOverlap]No overlap between input and output memory.");
+    HCCL_DEBUG("[Algo][AutoSelectorBase][IsInputOutputOverlap] No overlap between input and output memory.");
     return false;
 }
 

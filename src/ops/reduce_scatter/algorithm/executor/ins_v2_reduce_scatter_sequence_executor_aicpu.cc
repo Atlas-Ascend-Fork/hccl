@@ -374,7 +374,7 @@ HcclResult InsV2ReduceScatterSequenceExecutorAicpu<AlgTopoMatch, InsAlgTemplate0
     algTemplate->GetRes(req);
     if (channelLevelIdx >= remoteRankToChannelInfo_.size()) {
         HCCL_ERROR(
-            "[InsV2ReduceScatterSequenceExecutorAicpu][GenTempResource] channelLevelIdx[%u] should be lower"
+            "[InsV2ReduceScatterSequenceExecutorAicpu][GenTempResource] channelLevelIdx[%u] should be lower "
             "than remoteRankToChannelInfo_.size()[%zu]",
             channelLevelIdx, remoteRankToChannelInfo_.size());
         return HCCL_E_INTERNAL;
@@ -514,7 +514,7 @@ HcclResult InsV2ReduceScatterSequenceExecutorAicpu<AlgTopoMatch, InsAlgTemplate0
     }
     HCCL_INFO(
         "[InsV2ReduceScatterSequenceExecutor][HcclEngineCtxCreate] "
-        "threadNum[%llu], ccuKernelNum[%llu]",
+        "threadNum[%u], ccuKernelNum[%u]",
         threadNum, ccuKernelNum);
 
     std::vector<u32> ccuKernelNumList

@@ -185,14 +185,14 @@ namespace {
         CHK_PRT_RET(
             srcSlice.count_ * DATATYPE_SIZE_TABLE[dataType] != srcSlice.size_,
             HCCL_ERROR(
-                "[AlgDataTransWrapper] %s: src slice count [%u] is not mate to src slice size [%u], "
+                "[AlgDataTransWrapper] %s: src slice count [%u] is not matched to src slice size [%u], "
                 "dataType is [%d].",
                 funcName, srcSlice.count_, srcSlice.size_, dataType),
             HcclResult::HCCL_E_INTERNAL);
         CHK_PRT_RET(
             dstSlice.count_ * DATATYPE_SIZE_TABLE[dataType] != dstSlice.size_,
             HCCL_ERROR(
-                "[AlgDataTransWrapper] %s: dst slice count [%u] is not mate to dst slice size [%u], "
+                "[AlgDataTransWrapper] %s: dst slice count [%u] is not matched to dst slice size [%u], "
                 "dataType is [%d].",
                 funcName, dstSlice.count_, dstSlice.size_, dataType),
             HcclResult::HCCL_E_INTERNAL);
@@ -486,14 +486,14 @@ HcclResult SendRecvBatchWriteReduce(const SendRecvReduceInfo& sendRecvInfo, cons
         CHK_PRT_RET(
             srcSlice.count_ * DATATYPE_SIZE_TABLE[sendRecvInfo.dataType_] != srcSlice.size_,
             HCCL_ERROR(
-                "[AlgDataTransWrapper] SendRecvBatchWriteReduce: src slice count [%u] is not mate to src slice "
+                "[AlgDataTransWrapper] SendRecvBatchWriteReduce: src slice count [%u] is not matched to src slice "
                 "size [%u], dataType is [%d].",
                 srcSlice.count_, srcSlice.size_, sendRecvInfo.dataType_),
             HcclResult::HCCL_E_INTERNAL);
         CHK_PRT_RET(
             dstSlice.count_ * DATATYPE_SIZE_TABLE[sendRecvInfo.dataType_] != dstSlice.size_,
             HCCL_ERROR(
-                "[AlgDataTransWrapper] SendRecvBatchWriteReduce: dst slice count [%u] is not mate to dst slice "
+                "[AlgDataTransWrapper] SendRecvBatchWriteReduce: dst slice count [%u] is not matched to dst slice "
                 "size [%u], dataType is [%d].",
                 dstSlice.count_, dstSlice.size_, sendRecvInfo.dataType_),
             HcclResult::HCCL_E_INTERNAL);
@@ -534,14 +534,14 @@ HcclResult SendBatchWriteReduce(const DataReduceInfo& sendInfo, const ThreadHand
         CHK_PRT_RET(
             srcSlice.count_ * DATATYPE_SIZE_TABLE[sendInfo.dataType_] != srcSlice.size_,
             HCCL_ERROR(
-                "[AlgDataTransWrapper] SendBatchWriteReduce: src slice count [%u] is not mate to src slice "
+                "[AlgDataTransWrapper] SendBatchWriteReduce: src slice count [%u] is not matched to src slice "
                 "size [%u], dataType is [%d].",
                 srcSlice.count_, srcSlice.size_, sendInfo.dataType_),
             HcclResult::HCCL_E_INTERNAL);
         CHK_PRT_RET(
             dstSlice.count_ * DATATYPE_SIZE_TABLE[sendInfo.dataType_] != dstSlice.size_,
             HCCL_ERROR(
-                "[AlgDataTransWrapper] SendBatchWriteReduce: dst slice count [%u] is not mate to dst slice "
+                "[AlgDataTransWrapper] SendBatchWriteReduce: dst slice count [%u] is not matched to dst slice "
                 "size [%u], dataType is [%d].",
                 dstSlice.count_, dstSlice.size_, sendInfo.dataType_),
             HcclResult::HCCL_E_INTERNAL);
@@ -733,14 +733,14 @@ HcclResult RecvReadReduce(const DataReduceInfo& recvInfo, const ThreadHandle& th
         CHK_PRT_RET(
             srcSlice.count_ * DATATYPE_SIZE_TABLE[recvInfo.dataType_] != srcSlice.size_,
             HCCL_ERROR(
-                "[AlgDataTransWrapper] RecvReadReduce: src slice count [%u] is not mate to src slice size "
+                "[AlgDataTransWrapper] RecvReadReduce: src slice count [%u] is not matched to src slice size "
                 "[%u], dataType is [%d].",
                 srcSlice.count_, srcSlice.size_, recvInfo.dataType_),
             HcclResult::HCCL_E_INTERNAL);
         CHK_PRT_RET(
             dstSlice.count_ * DATATYPE_SIZE_TABLE[recvInfo.dataType_] != dstSlice.size_,
             HCCL_ERROR(
-                "[AlgDataTransWrapper] RecvReadReduce: dst slice count [%u] is not mate to dst slice size "
+                "[AlgDataTransWrapper] RecvReadReduce: dst slice count [%u] is not matched to dst slice size "
                 "[%u], dataType is [%d].",
                 dstSlice.count_, dstSlice.size_, recvInfo.dataType_),
             HcclResult::HCCL_E_INTERNAL);
@@ -766,14 +766,14 @@ HcclResult RecvBatchReadReduce(const DataReduceInfo& recvInfo, const ThreadHandl
         CHK_PRT_RET(
             srcSlice.count_ * DATATYPE_SIZE_TABLE[recvInfo.dataType_] != srcSlice.size_,
             HCCL_ERROR(
-                "[AlgDataTransWrapper] RecvBatchReadReduce: src slice count [%u] is not mate to src slice "
+                "[AlgDataTransWrapper] RecvBatchReadReduce: src slice count [%u] is not matched to src slice "
                 "size [%u], dataType is [%d].",
                 srcSlice.count_, srcSlice.size_, recvInfo.dataType_),
             HcclResult::HCCL_E_INTERNAL);
         CHK_PRT_RET(
             dstSlice.count_ * DATATYPE_SIZE_TABLE[recvInfo.dataType_] != dstSlice.size_,
             HCCL_ERROR(
-                "[AlgDataTransWrapper] RecvBatchReadReduce: dst slice count [%u] is not mate to dst slice "
+                "[AlgDataTransWrapper] RecvBatchReadReduce: dst slice count [%u] is not matched to dst slice "
                 "size [%u], dataType is [%d].",
                 dstSlice.count_, dstSlice.size_, recvInfo.dataType_),
             HcclResult::HCCL_E_INTERNAL);
@@ -815,14 +815,14 @@ HcclResult SendRecvReadReduce(const SendRecvReduceInfo& sendRecvInfo, const Thre
         CHK_PRT_RET(
             srcSlice.count_ * DATATYPE_SIZE_TABLE[sendRecvInfo.dataType_] != srcSlice.size_,
             HCCL_ERROR(
-                "[AlgDataTransWrapper] SendRecvReadReduce: src slice count [%u] is not mate to src slice size "
+                "[AlgDataTransWrapper] SendRecvReadReduce: src slice count [%u] is not matched to src slice size "
                 "[%u], dataType is [%d].",
                 srcSlice.count_, srcSlice.size_, sendRecvInfo.dataType_),
             HcclResult::HCCL_E_INTERNAL);
         CHK_PRT_RET(
             dstSlice.count_ * DATATYPE_SIZE_TABLE[sendRecvInfo.dataType_] != dstSlice.size_,
             HCCL_ERROR(
-                "[AlgDataTransWrapper] SendRecvReadReduce: dst slice count [%u] is not mate to dst slice size "
+                "[AlgDataTransWrapper] SendRecvReadReduce: dst slice count [%u] is not matched to dst slice size "
                 "[%u], dataType is [%d].",
                 dstSlice.count_, dstSlice.size_, sendRecvInfo.dataType_),
             HcclResult::HCCL_E_INTERNAL);
@@ -851,14 +851,14 @@ HcclResult SendRecvBatchReadReduce(const SendRecvReduceInfo& sendRecvInfo, const
         CHK_PRT_RET(
             srcSlice.count_ * DATATYPE_SIZE_TABLE[sendRecvInfo.dataType_] != srcSlice.size_,
             HCCL_ERROR(
-                "[AlgDataTransWrapper] SendRecvBatchReadReduce: src slice count [%u] is not mate to src slice "
+                "[AlgDataTransWrapper] SendRecvBatchReadReduce: src slice count [%u] is not matched to src slice "
                 "size [%u], dataType is [%d].",
                 srcSlice.count_, srcSlice.size_, sendRecvInfo.dataType_),
             HcclResult::HCCL_E_INTERNAL);
         CHK_PRT_RET(
             dstSlice.count_ * DATATYPE_SIZE_TABLE[sendRecvInfo.dataType_] != dstSlice.size_,
             HCCL_ERROR(
-                "[AlgDataTransWrapper] SendRecvBatchReadReduce: dst slice count [%u] is not mate to dst slice "
+                "[AlgDataTransWrapper] SendRecvBatchReadReduce: dst slice count [%u] is not matched to dst slice "
                 "size [%u], dataType is [%d].",
                 dstSlice.count_, dstSlice.size_, sendRecvInfo.dataType_),
             HcclResult::HCCL_E_INTERNAL);

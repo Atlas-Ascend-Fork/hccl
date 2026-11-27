@@ -317,11 +317,11 @@ HcclResult InsTempScatterMesh1D::RunMesh(
                     void* txDstPtr
                         = (!symDirectWrite) ? linkSend.remoteCclMem.addr : linkSend.remoteOutputGraphMode.addr;
                     CHK_PTR_NULL(txDstPtr);
-                    HCCL_DEBUG("[InsTempScatterMesh1D][RunMesh] txDstPtr[%d]", txDstPtr);
+                    HCCL_DEBUG("[InsTempScatterMesh1D][RunMesh] txDstPtr[%p]", txDstPtr);
                     HCCL_DEBUG(
-                        "[InsTempScatterMesh1D][RunMesh] srcOffset[%d], tempAlgParams.buffInfo.inputPtr[%d]", srcOffset,
-                        tempAlgParams.buffInfo.inputPtr);
-                    HCCL_DEBUG("[InsTempScatterMesh1D][RunMesh] dstOffset[%d], txDstPtr[%d]", dstOffset, txDstPtr);
+                        "[InsTempScatterMesh1D][RunMesh] srcOffset[%llu], tempAlgParams.buffInfo.inputPtr[%p]",
+                        srcOffset, tempAlgParams.buffInfo.inputPtr);
+                    HCCL_DEBUG("[InsTempScatterMesh1D][RunMesh] dstOffset[%llu], txDstPtr[%p]", dstOffset, txDstPtr);
                     DataSlice srcSlice = DataSlice(tempAlgParams.buffInfo.inputPtr, srcOffset, curSliceSize, curCount);
                     HCCL_DEBUG("[InsTempScatterMesh1D][RunMesh] got srcSlice");
                     DataSlice dstSlice = DataSlice(txDstPtr, dstOffset, curSliceSize, curCount);
@@ -331,8 +331,8 @@ HcclResult InsTempScatterMesh1D::RunMesh(
                 }
                 SlicesList txSlicesList({txSrcSlices}, {txDstSlices});
                 HCCL_DEBUG(
-                    "[InsTempScatterMesh1D][RunMesh] tempAlgParam.buffInfo.hcclBuff.addr[%d], "
-                    "tempAlgParams.buffInfo.inputPtr[%d], tempAlgParams.buffInfo.outputPtr[%d], ",
+                    "[InsTempScatterMesh1D][RunMesh] tempAlgParam.buffInfo.hcclBuff.addr[%p], "
+                    "tempAlgParams.buffInfo.inputPtr[%p], tempAlgParams.buffInfo.outputPtr[%p], ",
                     tempAlgParams.buffInfo.hcclBuff.addr, tempAlgParams.buffInfo.inputPtr,
                     tempAlgParams.buffInfo.outputPtr);
                 HCCL_DEBUG(

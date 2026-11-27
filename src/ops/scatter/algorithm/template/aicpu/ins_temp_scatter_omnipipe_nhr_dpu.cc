@@ -140,7 +140,7 @@ HcclResult InsTempScatterOmniPipeNHRDpu::RunDpuDataExchange(
 HcclResult InsTempScatterOmniPipeNHRDpu::PrepareDpuExecution(const OpParam& param, const ThreadHandle& thread)
 {
     if (HcommBatchModeEnd(param.algTag) != HCCL_SUCCESS) {
-        HCCL_ERROR("[InsTempScatterOmniPipeNHRDpu] failed set eager mode, tag is %s.", param.algTag);
+        HCCL_ERROR("[InsTempScatterOmniPipeNHRDpu] failed to set eager mode, tag is %s.", param.algTag);
         HcommBatchModeStart(param.algTag);
         return HCCL_E_INTERNAL;
     }
@@ -188,7 +188,7 @@ HcclResult InsTempScatterOmniPipeNHRDpu::WaitDpuResponse(
     }
     HCCL_DEBUG("[InsTempScatterOmniPipeNHRDpu] HcommWaitResponse run over, recvMsgId[%u]", recvMsgId);
     if (HcommBatchModeStart(param.algTag) != HCCL_SUCCESS) {
-        HCCL_ERROR("[InsTempScatterOmniPipeNHRDpu] failed set batch mode, tag is %s.", param.algTag);
+        HCCL_ERROR("[InsTempScatterOmniPipeNHRDpu] failed to set batch mode, tag is %s.", param.algTag);
         return HCCL_E_INTERNAL;
     }
     if (recvMsgId != sendMsgId) {

@@ -31,7 +31,7 @@ int32_t HcclLaunchDPUKernel(uint64_t ptr, int32_t size)
     // 根据名字获取template
     auto templateIns = InsAlgTemplateRegistry::Instance().GetAlgTemplate(dpuRunInfo.templateName);
     if (templateIns.get() == nullptr) {
-        HCCL_ERROR("Fail to find template of %s", dpuRunInfo.templateName.c_str());
+        HCCL_ERROR("Failed to find template of %s", dpuRunInfo.templateName.c_str());
         return static_cast<int32_t>(HCCL_E_INTERNAL);
     }
 

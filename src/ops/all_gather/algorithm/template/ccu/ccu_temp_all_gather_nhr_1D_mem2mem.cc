@@ -122,7 +122,7 @@ HcclResult CcuTempAllGatherNHR1DMem2Mem::CalcRes(
     CHK_RET(GetDieInfoFromChannelDescs(comm, rankIdToChannelDesc_, myRank_, dieNum, enableDieId));
 
     if (dieNum < 1 || dieNum > CCU_DIE_NUM_MAX_2) { // 目前只支持1个或2个die
-        HCCL_ERROR("[CcuTempAllGatherNHR1DMem2Mem::CalcRes] get channelDescs fail");
+        HCCL_ERROR("[CcuTempAllGatherNHR1DMem2Mem::CalcRes] get channelDescs failed");
         return HcclResult::HCCL_E_INTERNAL;
     }
 
@@ -346,7 +346,7 @@ HcclResult CcuTempAllGatherNHR1DMem2Mem::KernelRun(
     u32 kernelNum = templateResource.ccuKernels.size();
 
     if (templateDataParams.sliceSize == 0 && templateDataParams.tailSize == 0) {
-        HCCL_INFO("[CcuTempAllGatherNHR1DMem2Mem] sliceSize is 0, no need do, just success.");
+        HCCL_INFO("[CcuTempAllGatherNHR1DMem2Mem] sliceSize is 0, no need to do, just return success.");
         return HCCL_SUCCESS;
     }
 

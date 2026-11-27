@@ -135,7 +135,7 @@ HcclResult InsTempDpuAlltoAllMesh::KernelRun(
     if (!templateResource.isDpuThreadEnabled) {
         // 转换成eager-mode，保障AICPU指令下发执行完成
         if (HcommBatchModeEnd(param.algTag) != HCCL_SUCCESS) {
-            HCCL_ERROR("[InsTempDpuAlltoAllMesh] failed set eager mode, tag is %s.", param.algTag);
+            HCCL_ERROR("[InsTempDpuAlltoAllMesh] failed to set eager mode, tag is %s.", param.algTag);
             return HCCL_E_INTERNAL;
         }
         if (HcommThreadSynchronize(threads_[0]) != 0) {
@@ -144,7 +144,7 @@ HcclResult InsTempDpuAlltoAllMesh::KernelRun(
         }
         // 将执行模式转换回到batch
         if (HcommBatchModeStart(param.algTag) != HCCL_SUCCESS) {
-            HCCL_ERROR("[InsTempDpuAlltoAllMesh] failed set batch mode, tag is %s.", param.algTag);
+            HCCL_ERROR("[InsTempDpuAlltoAllMesh] failed to set batch mode, tag is %s.", param.algTag);
             return HCCL_E_INTERNAL;
         }
     }
@@ -270,7 +270,7 @@ HcclResult InsTempDpuAlltoAllMesh::SendRecvData(
         return HCCL_E_INTERNAL;
     }
 
-    HCCL_INFO("[InsTempDpuAlltoAllMesh] [SendRecvData]HcommWaitResponse run over, recvMsgId[%u]", recvMsgId);
+    HCCL_INFO("[InsTempDpuAlltoAllMesh] [SendRecvData] HcommWaitResponse run over, recvMsgId[%u]", recvMsgId);
 
     if (recvMsgId != sendMsgId) {
         HCCL_ERROR(

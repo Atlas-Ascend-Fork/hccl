@@ -998,7 +998,7 @@ HcclResult InsV2BroadcastOmniPipeExecutor<
         DataSlice srcSlice(param.inputPtr, srcOff, copySize, copyCount);
         DataSlice dstSlice(resCtx.cclMem.addr, dstOff, copySize, copyCount);
         HCCL_DEBUG(
-            "[%s] Root adapt localcopy, myRank[%u], srcOff %llu, dstOff %llu, count %llu", __func__, myRank_, srcOff,
+            "[%s] Root adapt local copy, myRank[%u], srcOff %llu, dstOff %llu, count %llu", __func__, myRank_, srcOff,
             dstOff, copyCount);
         CHK_RET(LocalCopy(controlThread_, srcSlice, dstSlice));
     }
@@ -1085,14 +1085,14 @@ HcclResult InsV2BroadcastOmniPipeExecutor<
     tempParamLocalcopy.localCopyFlag = 1;
 
     HCCL_DEBUG(
-        "[%s] Post-AG localcopy start, myRank[%u], currDataCount %llu, processedDataCount %llu, repeatNum %u", __func__,
-        myRank_, currDataCount, processedDataCount, rankSize_);
+        "[%s] Post-AG local copy start, myRank[%u], currDataCount %llu, processedDataCount %llu, repeatNum %u",
+        __func__, myRank_, currDataCount, processedDataCount, rankSize_);
     CHK_RET(PreSyncInterThreads(controlThread_, tempMainThreadsLevel01AG_, ntfIdxCtrlToTempLevel01AG_));
     if (myRank_ != param.root) {
         CHK_RET(DoLocalCopy(tempParamLocalcopy, controlThread_, allRankSplitData, curLoopAllRankSplitData));
     }
     CHK_RET(PostSyncInterThreads(controlThread_, tempMainThreadsLevel01AG_, ntfIdxTempToCtrlLevel01AG_));
-    HCCL_DEBUG("[%s] Post-AG localcopy end", __func__);
+    HCCL_DEBUG("[%s] Post-AG local copy end", __func__);
     return HCCL_SUCCESS;
 }
 
@@ -1161,7 +1161,7 @@ HcclResult InsV2BroadcastOmniPipeExecutor<
     OmniPipeSliceInfo omniPipeSliceInfoAG;
     HCCL_INFO("[InsV2BroadcastOmniPipeExecutor][OrchestrateLoop] loopTimes = [%u]", loopTimes);
 
-    // 预置 localcopy 参数模板 (参考 allReduce 3-level tempParamLocalcopy)
+    // 预置 local copy 参数模板 (参考 allReduce 3-level tempParamLocalcopy)
     TemplateDataParams tempParamLocalcopy;
     InitLocalCopyTemplateParam(param, resCtx, tempParamLocalcopy);
 

@@ -73,7 +73,7 @@ HcclResult InsTempAllReduceMesh1DTwoShot::CalcRes(
     resourceRequest.channels.push_back(channelReq);
 
     HCCL_INFO(
-        "[InsTempAllReduceMesh1DTwoShot] Calculate resource finished."
+        "[InsTempAllReduceMesh1DTwoShot] Calculate resource finished. "
         "resource request: threadNum[%u], main thread notifyNum[%u], channelNum[%zu]",
         resourceRequest.slaveThreadNum + 1, resourceRequest.notifyNumOnMainThread,
         resourceRequest.channels.at(0).size());

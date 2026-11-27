@@ -82,7 +82,7 @@ HcclResult InsTempAllGatherNHRDPUInter::KernelRun(
     } else {
         // 转换成eager-mode，保障AICPU指令下发执行完成
         if (HcommBatchModeEnd(param.algTag) != HCCL_SUCCESS) {
-            HCCL_ERROR("[InsTempAllGatherNHRDPUInter] failed set eager mode, tag is %s.", param.algTag);
+            HCCL_ERROR("[InsTempAllGatherNHRDPUInter] failed to set eager mode, tag is %s.", param.algTag);
             return HCCL_E_INTERNAL;
         }
 
@@ -126,7 +126,7 @@ HcclResult InsTempAllGatherNHRDPUInter::KernelRun(
 
         // 将执行模式转换回到batch
         if (HcommBatchModeStart(param.algTag) != HCCL_SUCCESS) {
-            HCCL_ERROR("[InsTempAllGatherNHRDPUInter] failed set batch mode, tag is %s.", param.algTag);
+            HCCL_ERROR("[InsTempAllGatherNHRDPUInter] failed to set batch mode, tag is %s.", param.algTag);
             return HCCL_E_INTERNAL;
         }
     }
