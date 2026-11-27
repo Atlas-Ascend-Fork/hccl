@@ -26,7 +26,7 @@ export HCCL_AICPU_ORDER_LAUNCH_ENABLE=0
 ## 使用约束
 
 - 进程级环境变量，在通信域初始化时解析并缓存，进程内所有通信域共享同一取值，修改后需重启进程生效。
-- 开关由HCOMM通信域管理侧解析，HCCL侧经HcclConfigGetInfo查询项`HCCL_CONFIG_TYPE_AICPU_ORDER_LAUNCH_ENABLE`（uint32_t，1=开启/0=关闭）消费，详见HCOMM的[HcclConfigGetInfo](https://gitcode.com/cann/hcomm/blob/master/docs/zh/api_ref/comm_mgr_c/HcclConfigGetInfo.md)接口说明。
+- 开关由HCOMM通信域管理侧解析，HCCL侧经HcclConfigGetInfo查询项`HCCL_CONFIG_TYPE_AICPU_ORDER_LAUNCH_ENABLE`（uint32_t，1=开启/0=关闭）消费，详见HCOMM的[HcclConfigGetInfo](https://gitcode.com/cann/hcomm/blob/9.3.0/docs/zh/api_ref/comm_mgr_c/HcclConfigGetInfo.md)接口说明。
 - 图模式（Ascend IR）Prepare阶段的展开线程覆盖不受该开关影响（属任务下发载体，非保序同步链）。
 
 ## 产品支持情况

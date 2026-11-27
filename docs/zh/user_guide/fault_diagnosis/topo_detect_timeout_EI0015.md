@@ -104,7 +104,7 @@ connected rankinfo：详细表示已连接的每个rank编号，示例中：`[00
 
 #### 排查失败rank报错的原因
 
-第三步排查正常时，根据[该rank的run日志位置](#找到未成功连接rank的位置)找到debug日志，debug日志和run日志关系[参考](https://www.hiascend.com/document/detail/zh/CANNCommunityEdition/latest/maintenref/logreference/logreference_0002.html)。根据debug日志的报错现象进一步[排查](#超时问题速查表)，其中run日志和debug日志对应关系：
+第三步排查正常时，根据[该rank的run日志位置](#找到未成功连接rank的位置)找到debug日志，debug日志和run日志关系[参考](https://www.hiascend.com/document/detail/zh/CANNCommunityEdition/930/maintenref/logreference/logreference_0002.html)。根据debug日志的报错现象进一步[排查](#超时问题速查表)，其中run日志和debug日志对应关系：
 
 ```text
 ├── debug

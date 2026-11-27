@@ -255,7 +255,7 @@ HCCL的日志信息会记录在CANN日志中，CANN的相关日志说明请参�
 ## HCCL相关故障码
 
 可根据业务日志中的故障码查找对应的错误标题，再使用多级关键字检索plog日志。
-故障现象、可能原因及解决方法请参见《[HCCL错误码参考](https://gitcode.com/cann/hcomm/blob/master/docs/zh/error_codes/README.md)》。
+故障现象、可能原因及解决方法请参见《[HCCL错误码参考](https://gitcode.com/cann/hcomm/blob/9.3.0/docs/zh/error_codes/README.md)》。
 场景化定位指导请参见[故障诊断](README.md)。
 
 <!-- npu="950" id10 -->
