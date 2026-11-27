@@ -9,6 +9,7 @@
  */
 
 #include <gtest/gtest.h>
+#include <array>
 #include <iterator>
 #include <map>
 #include <utility>
@@ -281,6 +282,60 @@ namespace {
         EXPECT_EQ(trace.headCounters, 0u);
         EXPECT_EQ(trace.tailCounters, 0u);
         EXPECT_EQ(trace.syncBeforeTail, 1u); // 所有 block 参与本地会合
+    }
+
+    TEST(AlltoAllAivCoreTest, ReadStagingStaggersGmPhasesAndKeepsMatchingSlices)
+    {
+        constexpr uint32_t RANKS = 4;
+        constexpr uint32_t CORES_PER_PEER = 14;
+        constexpr uint32_t SENDER = 2;
+        constexpr uint32_t RECEIVER = 1;
+        constexpr uint64_t PHASE_BYTES = 256;
+
+        for (uint64_t count : {1317120ULL, 1317127ULL}) {
+            SCOPED_TRACE(count);
+            const uint64_t bytes = count * sizeof(uint32_t);
+            const uint64_t stride = bytes + 12;
+            auto runCore = [&](uint32_t rank, uint32_t peer, uint32_t core) {
+                Trace trace{rank, peer * CORES_PER_PEER + core, 0, 0, {}};
+                currentTrace = &trace;
+                AivAlltoAllV2Mesh1D<uint32_t>(
+                    nullptr, Address(INPUT_BASE, rank), Address(OUTPUT_BASE, rank), rank, 0, RANKS, count, 0, 0, 0, 1,
+                    stride, stride, 1, 0, 0, RANKS * CORES_PER_PEER, true, nullptr, nullptr, nullptr, 0, false, false,
+                    0, 0);
+                currentTrace = nullptr;
+                return trace;
+            };
+
+            std::array<uint32_t, PHASE_BYTES / UB_ALIGN_SIZE> bucketCounts{};
+            uint64_t offset = 0;
+            for (uint32_t core = 0; core < CORES_PER_PEER; ++core) {
+                const auto sender = runCore(SENDER, RECEIVER, core);
+                const auto receiver = runCore(RECEIVER, SENDER, core);
+                ASSERT_EQ(sender.events.size(), 4u);
+                ASSERT_EQ(receiver.events.size(), 4u);
+                const auto& preCopy = sender.events[0];
+                const auto& record = sender.events[1];
+                const auto& wait = receiver.events[2];
+                const auto& readRemote = receiver.events[3];
+                EXPECT_EQ(preCopy.kind, EventKind::COPY);
+                EXPECT_EQ(preCopy.source, Address(INPUT_BASE, SENDER) + RECEIVER * stride + offset);
+                EXPECT_EQ(preCopy.destination, Address(CCL_BASE, SENDER) + RECEIVER * bytes + offset);
+                ASSERT_GT(preCopy.bytes, 0u);
+                EXPECT_EQ(record.kind, EventKind::RECORD);
+                EXPECT_EQ(wait.kind, EventKind::WAIT);
+                EXPECT_EQ(record.target, wait.target);
+                EXPECT_EQ(record.slot, wait.slot);
+                EXPECT_EQ(record.tag, wait.tag);
+                EXPECT_EQ(readRemote.kind, EventKind::COPY);
+                EXPECT_EQ(readRemote.source, preCopy.destination);
+                EXPECT_EQ(readRemote.destination, Address(OUTPUT_BASE, RECEIVER) + SENDER * stride + offset);
+                EXPECT_EQ(readRemote.bytes, preCopy.bytes);
+                EXPECT_LE(++bucketCounts[(preCopy.destination % PHASE_BYTES) / UB_ALIGN_SIZE], 2u);
+                offset += preCopy.bytes;
+            }
+            EXPECT_EQ(offset, bytes);
+        }
     }
 } // namespace
 } // namespace alltoall_aiv_test
