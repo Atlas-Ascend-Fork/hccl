@@ -52,6 +52,10 @@ public:
     virtual u64 GetThreadNum() const = 0;
     virtual u64 CalcScratchMultiple(BufferType inBuffType, BufferType outBuffType) = 0;
 
+    // 单轮KernelRun的数据量上界（字节），UINT64_MAX表示不受限。默认取UB协议单条write指令的上限；
+    // 模板在一轮内还会继续切分、或引擎不受该约束时按自身粒度覆写
+    virtual u64 GetLoopLimit() const { return UB_MAX_DATA_SIZE; }
+
     virtual HcclResult
     KernelRun(const OpParam& param, const TemplateDataParams& tempAlgParams, TemplateResource& templateResource)
         = 0;

@@ -44,6 +44,7 @@ public:
         TemplateResource& templateResource) override;
     void SetRoot(u32 root);
     u64 GetThreadNum() const override;
+    u64 GetLoopLimit() const override;
     HcclResult GetRes(AlgResourceRequest& resourceRequest) const override;
     HcclResult FastLaunch(const OpParam& param, const TemplateFastLaunchCtx& tempFastLaunchCtx) override;
 

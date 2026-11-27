@@ -40,6 +40,9 @@ public:
     HcclResult GetRes(AlgResourceRequest& resourceRequest) const override;
     u64 CalcScratchMultiple(BufferType inBuffType, BufferType outBuffType) override;
 
+    // AICPU远端写无单条指令上限，只受ccl buffer约束
+    u64 GetLoopLimit() const override { return UINT64_MAX; }
+
     u64 GetThreadNum() const override;
 
     virtual HcclResult DPUKernelRun(

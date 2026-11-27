@@ -44,6 +44,7 @@ public:
         const OpParam& param, const TemplateDataParams& templateDataParams,
         TemplateResource& templateResource) override;
     u64 CalcScratchMultiple(BufferType inBuffType, BufferType outBuffType) override;
+    u64 GetLoopLimit() const override;
     void SetRoot(u32 root);
     u64 GetThreadNum() const override;
     HcclResult GetRes(AlgResourceRequest& resourceRequest) const override;

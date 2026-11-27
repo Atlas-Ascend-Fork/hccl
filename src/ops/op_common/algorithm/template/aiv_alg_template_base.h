@@ -48,6 +48,8 @@ public:
         HcclComm comm, const OpParam& param, const TopoInfoWithNetLayerDetails* topoInfo,
         AlgResourceRequest& resourceRequest);
     virtual u64 CalcScratchMultiple(BufferType inBuffType, BufferType outBuffType);
+    // AIV远端写无单条指令上限，只受ccl buffer约束
+    virtual u64 GetLoopLimit() const { return UINT64_MAX; }
     virtual HcclResult CalNumBlocks(u32& numBlocks, u64 dataSize, u32 numBlocksLimit);
     virtual HcclResult
     KernelRun(const OpParam& param, const TemplateDataParams& tempAlgParams, const TemplateResource& templateResource);

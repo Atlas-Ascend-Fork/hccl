@@ -39,6 +39,7 @@ public:
         AlgResourceRequest& resourceRequest) override;
 
     u64 GetThreadNum() const override;
+    u64 GetLoopLimit() const override;
     HcclResult KernelRun(
         const OpParam& param, const TemplateDataParams& templateDataParams,
         TemplateResource& templateResource) override;

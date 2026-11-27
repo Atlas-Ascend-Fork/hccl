@@ -188,5 +188,11 @@ HcclResult CcuTempBroadcastMesh1D::KernelRun(
     return HCCL_SUCCESS;
 }
 
+u64 CcuTempBroadcastMesh1D::GetLoopLimit() const
+{
+    // 每条write只有4KB，上界取kernel内loop group的串行迭代次数上限，不含收尾的那一组
+    return CCU_MS_DEFAULT_LOOP_COUNT * CCU_MS_SIZE * GetMaxLoopIterNum();
+}
+
 u64 CcuTempBroadcastMesh1D::GetThreadNum() const { return 1; }
 } // namespace ops_hccl

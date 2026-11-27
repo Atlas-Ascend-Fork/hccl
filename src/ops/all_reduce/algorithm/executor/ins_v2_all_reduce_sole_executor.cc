@@ -411,9 +411,10 @@ REGISTER_ALG_ATTRS(
 REGISTER_EXEC_V2(
     HcclCMDType::HCCL_CMD_ALLREDUCE, AicpuAllReduceSoleNHRMultiLink, InsV2AllReduceSoleExecutor, TopoMatchOneLevel,
     InsTempAllReduceNHR);
+// Level1Nhr(level0实例size互质, 如跨POD 1+7卡)下不过滤: MultiLink是单级NHR多通道, 与AG/RS口径一致
 REGISTER_ALG_ATTRS(
     AicpuAllReduceSoleNHRMultiLink, topo.maxTopoLevelNum = TOPO_LEVEL_NUM_3; topo.supportLevel0Topos = LEVEL0_TOPO_CLOS;
-    topo.topoCustomCheck = [](const TopoInfoWithNetLayerDetails* topo) -> bool {
+    topo.isSupportLevel1Nhr = true; topo.topoCustomCheck = [](const TopoInfoWithNetLayerDetails* topo) -> bool {
         return topo->level0Topo == Level0Shape::CLOS;
     };
     op.isSupportProd = false;

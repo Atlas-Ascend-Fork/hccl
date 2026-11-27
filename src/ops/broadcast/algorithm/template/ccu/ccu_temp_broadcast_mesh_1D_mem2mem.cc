@@ -235,6 +235,14 @@ void CcuTempBroadcastMesh1DMem2Mem::SetRoot(u32 root)
         subCommRootId_);
 }
 
+u64 CcuTempBroadcastMesh1DMem2Mem::GetLoopLimit() const
+{
+    // 每条write是一个rank切片：normal = cur / R，last = cur % R + normal。
+    // 取R * (UB_MAX_DATA_SIZE - R)可保证last始终小于UB_MAX_DATA_SIZE；对齐后各轮起始偏移保持128B对齐
+    return CcuAlignDown(
+        static_cast<u64>(templateRankSize_) * (UB_MAX_DATA_SIZE - templateRankSize_), CCU_2DIE_SPLIT_ALIGN_SIZE);
+}
+
 u64 CcuTempBroadcastMesh1DMem2Mem::GetThreadNum() const { return 1; }
 
 HcclResult CcuTempBroadcastMesh1DMem2Mem::GetRes(AlgResourceRequest& resourceRequest) const

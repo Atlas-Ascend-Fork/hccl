@@ -192,19 +192,20 @@ HcclResult InsV2BroadcastSoleExecutor<AlgTopoMatch, InsAlgTemplate>::Orchestrate
         CHK_RET(algTemplate->SetchannelsPerRank(templateAlgRes.channels));
     }
 
-    // 根据CCL Buffer大小和UB_MAX_DATA_SIZE，计算出一轮中最多能输出多少数据
+    // 根据CCL Buffer大小和模板声明的单轮上界，计算出一轮中最多能输出多少数据
     u32 templateScratchMultiplier
         = algTemplate->CalcScratchMultiple(tempAlgParams.buffInfo.inBuffType, tempAlgParams.buffInfo.outBuffType);
     u64 maxDataSizePerLoop = 0;
     maxTmpMemSize_ = tempAlgParams.buffInfo.hcclBuff.size;
-    u64 transportBoundDataSize = UB_MAX_DATA_SIZE; // algTemplate->CalcLoopMaxCount();
+    // 模板声明的单轮上界按单条指令的切分粒度给出，UINT64_MAX表示不受限（此时只受ccl buffer约束）
+    u64 templateLoopLimit = algTemplate->GetLoopLimit();
     HCCL_INFO("[InsV2BroadcastSoleExecutor]maxTmpMemSize_ [%llu]", maxTmpMemSize_);
     if (templateScratchMultiplier != 0) {
         u64 scratchBoundDataSize
             = maxTmpMemSize_ / templateScratchMultiplier / HCCL_MIN_SLICE_ALIGN * HCCL_MIN_SLICE_ALIGN;
-        maxDataSizePerLoop = std::min(transportBoundDataSize, scratchBoundDataSize);
+        maxDataSizePerLoop = std::min(templateLoopLimit, scratchBoundDataSize);
     } else {
-        maxDataSizePerLoop = transportBoundDataSize;
+        maxDataSizePerLoop = templateLoopLimit;
     }
     u64 maxDataCountPerLoop = maxDataSizePerLoop / dataTypeSize_;
 
@@ -214,14 +215,14 @@ HcclResult InsV2BroadcastSoleExecutor<AlgTopoMatch, InsAlgTemplate>::Orchestrate
 
     HCCL_INFO(
         "[InsV2BroadcastSoleExecutor][OrchestrateOpbase] maxDataCountPerLoop[%llu], maxDataSizePerLoop[%llu], "
-        "transportBoundDataSize[%llu], templateScratchMultiplier[%llu]",
-        maxDataCountPerLoop, maxDataSizePerLoop, transportBoundDataSize, templateScratchMultiplier);
+        "templateLoopLimit[%llu], templateScratchMultiplier[%llu]",
+        maxDataCountPerLoop, maxDataSizePerLoop, templateLoopLimit, templateScratchMultiplier);
     CHK_PRT_RET(
         maxDataCountPerLoop == 0,
         HCCL_ERROR("[InsV2BroadcastSoleExecutor][OrchestrateOpbase] maxDataCountPerLoop is 0"), HCCL_E_INTERNAL);
 
     u64 loopTimes = dataSize / maxLoopOutputSize + static_cast<u64>(dataSize % maxLoopOutputSize != 0);
-    // 如果是对称内存，每次传输的大小不受cclbuffer和UB_MAX_DATA_SIZE的限制
+    // 如果是对称内存，每次传输的大小不受cclbuffer和模板声明的单轮上界的限制
     if (param.supportSymmetricMemory) {
         loopTimes = 1;
         tempAlgParams.enableRemoteMemAccess = true;

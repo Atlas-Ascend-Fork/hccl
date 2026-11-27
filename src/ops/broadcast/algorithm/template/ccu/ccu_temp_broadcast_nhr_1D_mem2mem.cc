@@ -554,6 +554,14 @@ u64 CcuTempBroadcastNHR1DMem2Mem::GetThreadNum() const
     return twoNum;
 }
 
+u64 CcuTempBroadcastNHR1DMem2Mem::GetLoopLimit() const
+{
+    // 每条write是一个die内rank切片：normal = cur / R，last = cur % R + normal，die切分后切片只会更小。
+    // 取R * (UB_MAX_DATA_SIZE - R)可保证last始终小于UB_MAX_DATA_SIZE；对齐后各轮起始偏移保持128B对齐
+    return CcuAlignDown(
+        static_cast<u64>(templateRankSize_) * (UB_MAX_DATA_SIZE - templateRankSize_), CCU_2DIE_SPLIT_ALIGN_SIZE);
+}
+
 HcclResult CcuTempBroadcastNHR1DMem2Mem::GetRes(AlgResourceRequest& resourceRequest) const
 {
     resourceRequest.slaveThreadNum = 1;
