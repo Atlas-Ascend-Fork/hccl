@@ -29,10 +29,10 @@ HcclResult InsV2AlltoAllVSequenceExecutor<AlgTopoMatch>::CalcAlgHierarchyInfoV2(
     rankSize_ = topoInfo->userRankSize;
     devType_ = topoInfo->deviceType;
     totalRankSize_ = topoInfo->userRankSize;
-    totalStages_ = topoInfo->topoLevelNums;
 
     AlgTopoMatch topoMatch;
     CHK_RET(topoMatch.MatchTopo(topoInfo, algHierarchyInfo, algAttrs));
+    totalStages_ = static_cast<u32>(algHierarchyInfo.infos.size());
     HCCL_INFO(
         "[InsV2AlltoAllVSequenceExecutor][CalcAlgHierarchyInfoV2] myRank[%u], rankSize[%u], "
         "totalStages[%u]",
