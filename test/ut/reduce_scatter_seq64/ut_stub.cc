@@ -15,10 +15,15 @@
 // 本地构建若出现残余未定义符号，按同样方式在本文件追加桩定义即可。
 #include <cerrno>
 #include <cstring>
+#include <map>
+#include <string>
+#include <vector>
 
+#include "executor_v2_base.h"
 #include "log.h"
 #include "tuner_setup.h"
 #include "alg_env_config.h"
+#include "dlhcomm_function.h"
 #include "hcomm_primitives_dl.h" // 引入 HCOMM 原语声明与 ThreadHandle/ChannelHandle 等类型
 #include "channel.h"             // CalcChannelRequest* 声明
 #include "op_common.h"           // HcclGetHcclAlgo/CheckHostDPUOnly 声明
@@ -238,3 +243,62 @@ int32_t HcommBatchModeEnd(const char* batchTag)
     return 0;
 }
 } // extern "C"
+
+// ============ costTable 过滤补齐: 保序判定单例 / HCOMM 版本 / 图查询 ============
+
+namespace ops_hccl {
+// pipeline_alg_attrs_registration 只替换 executor 构造，但 CostExecutor 的基类
+// 构造/析构与未被覆盖的虚函数仍需闭合链接（真实实现见 executor_v2_base.cc，本 UT 不链接）。
+InsCollAlgBase::InsCollAlgBase() = default;
+InsCollAlgBase::~InsCollAlgBase() = default;
+std::string InsCollAlgBase::Describe() const { return "UT pipeline attrs executor"; }
+HcclResult InsCollAlgBase::FastLaunch(const OpParam&, const CcuFastLaunchCtx*) { return HCCL_E_NOT_SUPPORT; }
+HcclResult InsCollAlgBase::RestoreChannelMap(
+    const AlgResourceCtxSerializable&, std::vector<std::map<u32, std::vector<ChannelInfo>>>&) const
+{
+    return HCCL_E_NOT_SUPPORT;
+}
+HcclResult InsCollAlgBase::OrchestrateWithThread(const OpParam&, const AlgResourceCtxSerializable&, ThreadHandle)
+{
+    return HCCL_E_NOT_SUPPORT;
+}
+
+// order_preserved_common.h 的 IsNeedStrictModeForOrderPreserved 经 GetDeterministicLevel 访问该单例;
+// 真实实现走 dlopen, 本 UT 不加载动态库
+DlHcommFunction& DlHcommFunction::GetInstance()
+{
+    static DlHcommFunction instance;
+    return instance;
+}
+
+DlHcommFunction::~DlHcommFunction() {}
+
+// 桩为 0(非 STRICT), 保序判断不影响 64bit/PROD 的属性过滤
+const u8& GetExternalInputHcclDeterministic()
+{
+    static u8 deterministic = 0;
+    return deterministic;
+}
+} // namespace ops_hccl
+
+extern "C" {
+// 返回低于 9.2.0.1 的版本: GetDeterministicLevel 走上面的环境变量分支
+int GetHcommVersion(void) { return 0; }
+}
+
+// cost_table 的 IsHostNicToDeviceNicLink 引用图查询; 本 UT 不做真实图查询, 统一按不支持返回
+HcclResult HcclRankGraphGetLinks(
+    HcclComm comm, uint32_t netLayer, uint32_t myRank, uint32_t rank, CommLink** links, uint32_t* linkNum)
+{
+    (void)comm;
+    (void)netLayer;
+    (void)myRank;
+    (void)rank;
+    if (links != nullptr) {
+        *links = nullptr;
+    }
+    if (linkNum != nullptr) {
+        *linkNum = 0;
+    }
+    return HCCL_E_NOT_SUPPORT;
+}

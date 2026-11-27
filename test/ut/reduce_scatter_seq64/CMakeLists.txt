@@ -8,9 +8,10 @@
 # See LICENSE in the root of the software repository for the full text of the License.
 # -----------------------------------------------------------------------------------------------------------
 
-# reduce_scatter_seq64: RS/AR AicpuReduce 模板 cost 建模 UT（轻量目标，不链 executor/注册闭包）。
-# 仅编入被测模板 + cost 框架的静态方法链；HCOMM 原语以真实 dlsym 层闭合链接，
-# log/tuner/环境配置/securec 等以 ut_stub.cc 桩提供，残余未定义符号时按其注释追加桩定义。
+# reduce_scatter_seq64: RS/AR AicpuReduce 模板 cost 建模 UT（主体轻量，不链 executor 方法）。
+# 仅编入被测模板 + cost 框架的静态方法链；额外编入 3 个 executor 的注册对象，
+# 供 pipeline_alg_attrs_test 读取生产 REGISTER_ALG_ATTRS；executor 方法由 --gc-sections 裁掉。
+# HCOMM 原语以真实 dlsym 层闭合链接，log/tuner/环境配置/securec 等以 ut_stub.cc 桩提供。
 
 set(_repo_root ${CMAKE_CURRENT_SOURCE_DIR}/../../..)
 
@@ -27,6 +28,7 @@ set(_ut_include_dirs
     ${_repo_root}/src/ops/op_common/selector
     ${_repo_root}/src/ops/op_common/selector/pub_inc
     ${_repo_root}/src/ops/op_common/topo_info
+    ${_repo_root}/src/ops/op_common/algorithm/template/aiv
     ${_repo_root}/src/ops/reduce_scatter/algorithm/template
     ${_repo_root}/src/ops/reduce_scatter/algorithm/template/aicpu
     ${_repo_root}/src/ops/all_reduce/algorithm/template/aicpu
@@ -106,20 +108,54 @@ set(_ut_src
     ${_repo_root}/src/ops/op_common/selector/cost_model.cc
     ${_repo_root}/src/ops/op_common/selector/alg_attrs_registry.cc
     ${_repo_root}/src/ops/op_common/selector/auto_selector_base.cc
+    ${_repo_root}/src/ops/op_common/selector/cost_table.cc
     ${_repo_root}/src/ops/op_common/algorithm/executor/registry/coll_alg_v2_exec_registry.cc
     ${_repo_root}/src/common/alg_parse.cc
 )
 
+# 编译生产 executor 的 REGISTER_ALG_ATTRS，供 pipeline_alg_attrs_test 读取真实 registry；
+# registration_stub.h 只替换 executor 构造，属性注册代码保持原样。
+add_library(pipeline_alg_attrs_registration OBJECT
+    ${_repo_root}/src/ops/all_reduce/algorithm/executor/ins_v2_all_reduce_omnipipe_executor.cc
+    ${_repo_root}/src/ops/reduce/algorithm/executor/ins_v2_reduce_omnipipe_3d_executor.cc
+    ${_repo_root}/src/ops/reduce_scatter/algorithm/executor/ins_v2_reduce_scatter_omnipipe_executor.cc
+)
+target_include_directories(pipeline_alg_attrs_registration PRIVATE
+    ${_ut_include_dirs}
+    ${_repo_root}/src/ops/op_common/algorithm/topo_match
+    ${_repo_root}/src/ops/all_reduce/algorithm/template
+    ${_repo_root}/src/ops/reduce/algorithm/template
+    ${_repo_root}/src/ops/reduce/algorithm/template/aicpu
+)
+target_link_libraries(pipeline_alg_attrs_registration PRIVATE $<BUILD_INTERFACE:intf_llt_pub>)
+_detect_cann_version(pipeline_alg_attrs_registration)
+target_compile_options(pipeline_alg_attrs_registration PRIVATE
+    -U_FORTIFY_SOURCE
+    -ffunction-sections
+    -fdata-sections
+    -fno-access-control
+    -include ${CMAKE_CURRENT_SOURCE_DIR}/registration_stub.h
+)
+
 # ---------- reduce_scatter_seq64_test: 模板 cost 建模（A/B/C/D 期望值 + HostReduceSlope 门控） ----------
+# ---------- 另含 pipeline_alg_attrs_test: 10 处 pipeline 算法
+#            （6 个 DPU + 4 个 AICPU）的注册属性 + costTable 过滤 ----------
 add_executable(reduce_scatter_seq64_test
     ${CMAKE_CURRENT_SOURCE_DIR}/reduce_scatter_seq64_test.cc
     ${CMAKE_CURRENT_SOURCE_DIR}/all_reduce_nhr_cost_test.cc
     ${CMAKE_CURRENT_SOURCE_DIR}/all_gather_nhr_cost_test.cc
+    ${CMAKE_CURRENT_SOURCE_DIR}/pipeline_alg_attrs_test.cc
     ${_ut_src}
+    $<TARGET_OBJECTS:pipeline_alg_attrs_registration>
 )
 
 target_compile_options(reduce_scatter_seq64_test PRIVATE
     -U_FORTIFY_SOURCE
+)
+
+# executor 注册对象库按 function-section 编译，链接期裁掉未被引用的 executor 方法。
+target_link_options(reduce_scatter_seq64_test PRIVATE
+    -Wl,--gc-sections
 )
 
 target_include_directories(reduce_scatter_seq64_test PRIVATE ${_ut_include_dirs})

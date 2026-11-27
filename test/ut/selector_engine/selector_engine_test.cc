@@ -41,6 +41,14 @@ OpParam MakeParam(OpExecuteConfig config, HcclCMDType opType, HcclDataType dataT
     return param;
 }
 
+OpParam MakeReduceOpParam(HcclDataType dataType, HcclReduceOp reduceType)
+{
+    OpParam param{};
+    param.DataDes.dataType = dataType;
+    param.reduceType = reduceType;
+    return param;
+}
+
 std::vector<OpExecuteConfig> EngineList(std::initializer_list<OpExecuteConfig> engines)
 {
     return std::vector<OpExecuteConfig>(engines);
@@ -225,4 +233,75 @@ TEST(GetOpDataTypeTest, VOpReadsVDataDesUnionMember)
     param.vDataDes.dataType = HCCL_DATA_TYPE_FP16; // union偏移16, 与DataDes.dataType(偏移8)不同
     param.opType = HcclCMDType::HCCL_CMD_ALLGATHER_V;
     EXPECT_EQ(ops_hccl::GetOpDataType(param), HCCL_DATA_TYPE_FP16);
+}
+
+// ---------- IsDataTypeOrReduceTypeSpecial: 64bit 数据类型与 PROD 归约不支持 DPU pipeline ----------
+// 三种64bit类型(INT64/UINT64/FP64)都必须命中, 漏判会让该类型的 Reduce/ReduceScatter 选到 pipeline 算法
+TEST(IsDataTypeOrReduceTypeSpecialTest, All64BitDataTypesAreSpecial)
+{
+    // given
+    OpParam int64Param = MakeReduceOpParam(HCCL_DATA_TYPE_INT64, HcclReduceOp::HCCL_REDUCE_SUM);
+    OpParam uint64Param = MakeReduceOpParam(HCCL_DATA_TYPE_UINT64, HcclReduceOp::HCCL_REDUCE_SUM);
+    OpParam fp64Param = MakeReduceOpParam(HCCL_DATA_TYPE_FP64, HcclReduceOp::HCCL_REDUCE_SUM);
+    // when
+    // then
+    EXPECT_TRUE(ops_hccl::IsDataTypeOrReduceTypeSpecial(int64Param));
+    EXPECT_TRUE(ops_hccl::IsDataTypeOrReduceTypeSpecial(uint64Param));
+    EXPECT_TRUE(ops_hccl::IsDataTypeOrReduceTypeSpecial(fp64Param));
+}
+
+// 非64bit类型不命中; INT128(16字节)不属于 Is64BitDataType, 沿用普通类型选路
+TEST(IsDataTypeOrReduceTypeSpecialTest, Non64BitDataTypesAreNotSpecial)
+{
+    // given
+    OpParam int8Param = MakeReduceOpParam(HCCL_DATA_TYPE_INT8, HcclReduceOp::HCCL_REDUCE_SUM);
+    OpParam uint32Param = MakeReduceOpParam(HCCL_DATA_TYPE_UINT32, HcclReduceOp::HCCL_REDUCE_SUM);
+    OpParam fp32Param = MakeReduceOpParam(HCCL_DATA_TYPE_FP32, HcclReduceOp::HCCL_REDUCE_SUM);
+    OpParam bfp16Param = MakeReduceOpParam(HCCL_DATA_TYPE_BFP16, HcclReduceOp::HCCL_REDUCE_SUM);
+    OpParam int128Param = MakeReduceOpParam(HCCL_DATA_TYPE_INT128, HcclReduceOp::HCCL_REDUCE_SUM);
+
+    // when
+    // then
+    EXPECT_FALSE(ops_hccl::IsDataTypeOrReduceTypeSpecial(int8Param));
+    EXPECT_FALSE(ops_hccl::IsDataTypeOrReduceTypeSpecial(uint32Param));
+    EXPECT_FALSE(ops_hccl::IsDataTypeOrReduceTypeSpecial(fp32Param));
+    EXPECT_FALSE(ops_hccl::IsDataTypeOrReduceTypeSpecial(bfp16Param));
+    EXPECT_FALSE(ops_hccl::IsDataTypeOrReduceTypeSpecial(int128Param));
+}
+
+// PROD 与数据类型无关, 非64bit也必须命中; 与64bit同时满足时同样只判为特殊
+TEST(IsDataTypeOrReduceTypeSpecialTest, ProdReduceTypeIsSpecialRegardlessOfDataType)
+{
+    // given
+    OpParam fp16Param = MakeReduceOpParam(HCCL_DATA_TYPE_FP16, HcclReduceOp::HCCL_REDUCE_PROD);
+    OpParam int64Param = MakeReduceOpParam(HCCL_DATA_TYPE_INT64, HcclReduceOp::HCCL_REDUCE_PROD);
+
+    // when
+    // then
+    EXPECT_TRUE(ops_hccl::IsDataTypeOrReduceTypeSpecial(fp16Param));
+    EXPECT_TRUE(ops_hccl::IsDataTypeOrReduceTypeSpecial(int64Param));
+}
+
+// 只有 PROD 需要挡住 pipeline, 其余归约类型不受影响
+TEST(IsDataTypeOrReduceTypeSpecialTest, NonProdReduceTypesAreNotSpecial)
+{
+    // given
+    OpParam maxParam = MakeReduceOpParam(HCCL_DATA_TYPE_FP32, HcclReduceOp::HCCL_REDUCE_MAX);
+    OpParam minParam = MakeReduceOpParam(HCCL_DATA_TYPE_FP32, HcclReduceOp::HCCL_REDUCE_MIN);
+
+    // when
+    // then
+    EXPECT_FALSE(ops_hccl::IsDataTypeOrReduceTypeSpecial(maxParam));
+    EXPECT_FALSE(ops_hccl::IsDataTypeOrReduceTypeSpecial(minParam));
+}
+
+// 默认构造(RESERVED/RESERVED)不能被误判为特殊, 否则默认配置会整体绕开 pipeline 选路
+TEST(IsDataTypeOrReduceTypeSpecialTest, DefaultOpParamIsNotSpecial)
+{
+    // given
+    OpParam param{};
+
+    // when
+    // then
+    EXPECT_FALSE(ops_hccl::IsDataTypeOrReduceTypeSpecial(param));
 }

@@ -110,6 +110,14 @@ struct AlgAttrs {
     OpAttrs op;
 };
 
+// pipeline 系列算法在注册属性层与选路层都不支持 64bit 数据类型与 PROD 归约。
+// executor 的 REGISTER_ALG_ATTRS 与 UT 共用本函数, 避免测试与生产各写一份字面量后漂移。
+inline void SetPipelineAlgoOpAttrs(OpAttrs& op)
+{
+    op.isSupportProd = false;
+    op.unsupportedDataTypes = UNSUPPORTED_64BIT;
+}
+
 // 公共函数：判断输入输出是否 overlap（按算子类型区分）
 bool IsInputOutputOverlap(const OpParam& opParam);
 

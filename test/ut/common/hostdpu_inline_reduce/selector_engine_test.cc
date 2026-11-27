@@ -284,5 +284,28 @@ namespace {
         }
     }
 
+    // ReduceScatter 的 64bit/PROD 回退目标是 MeshMesh(host LocalReduce), NHR 才是 inline-reduce 变体。
+    TEST_F(SelectorEngineTest, ReduceScatterFallbackAttrsAllow64BitAndProd)
+    {
+        const auto* fallback = AlgAttrsRegistry::Instance().Get("DpuReduceScatterSequenceMeshMesh");
+        ASSERT_NE(fallback, nullptr);
+        EXPECT_TRUE(fallback->op.isSupportProd);
+        EXPECT_TRUE(fallback->op.unsupportedDataTypes.empty());
+
+        const auto* inlineOnly = AlgAttrsRegistry::Instance().Get("DpuReduceScatterSequenceMeshNHR");
+        ASSERT_NE(inlineOnly, nullptr);
+        EXPECT_FALSE(inlineOnly->op.isSupportProd);
+        EXPECT_EQ(inlineOnly->op.unsupportedDataTypes, UNSUPPORTED_64BIT);
+    }
+
+    // Reduce NDA 回退复用 AllReduce NDA 的 Intra/Inter 模板，支持 64bit/PROD。
+    TEST_F(SelectorEngineTest, ReduceNdaFallbackAttrsAllow64BitAndProd)
+    {
+        const auto* fallback = AlgAttrsRegistry::Instance().Get("DpuReduceSequenceMeshNHRNDA");
+        ASSERT_NE(fallback, nullptr);
+        EXPECT_TRUE(fallback->op.isSupportProd);
+        EXPECT_TRUE(fallback->op.unsupportedDataTypes.empty());
+    }
+
 } // namespace
 } // namespace inline_reduce_ut

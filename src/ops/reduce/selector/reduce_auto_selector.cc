@@ -316,7 +316,7 @@ SelectorStatus ReduceAutoSelector::SelectAicpuAlgo(
     HCCL_DEBUG("[ReduceAutoSelector][%s] start, topoInfo levelNum[%u]", __func__, topoInfo->topoLevelNums);
     (void)configAlgMap;
     if (topoInfo->topoLevelNums > 1) {
-        if (Is64BitDataType(opParam.DataDes.dataType) || opParam.reduceType == HcclReduceOp::HCCL_REDUCE_PROD) {
+        if (IsDataTypeOrReduceTypeSpecial(opParam)) {
             if (topoInfo->topoLevelNums == TOPO_LEVEL_NUM_2) {
                 selectAlgName = "AicpuReduceSequenceNHRAicpuReduceNHR";
             } else {
@@ -375,8 +375,7 @@ SelectorStatus ReduceAutoSelector::SelectMeshAlgoAicpu(
                 } else {
                     selectAlgName = "AicpuReduceSoleMesh";
                 }
-            } else if (
-                Is64BitDataType(opParam.DataDes.dataType) || opParam.reduceType == HcclReduceOp::HCCL_REDUCE_PROD) {
+            } else if (IsDataTypeOrReduceTypeSpecial(opParam)) {
                 // 64位类型/PROD改走分层算法，归约在AICPU上做，规避SDMA对fp64/uint64的限制
                 selectAlgName = "AicpuReduceSequenceMeshNHRAicpuReduce";
             } else {
@@ -384,7 +383,7 @@ SelectorStatus ReduceAutoSelector::SelectMeshAlgoAicpu(
             }
         } else if (IsLayerAllConnetedWithTopo(topoInfo, 0, CommTopo::COMM_TOPO_1DMESH)) {
             // MESH_1D 即可链接所有卡， 使用 MESH_1D 算法
-            if (Is64BitDataType(opParam.DataDes.dataType) || opParam.reduceType == HcclReduceOp::HCCL_REDUCE_PROD) {
+            if (IsDataTypeOrReduceTypeSpecial(opParam)) {
                 selectAlgName = "AicpuReduceSoleMesh";
             } else if (dataSize >= UBX_REDUCE_CONCURRENT_DATA_SIZE) {
                 selectAlgName = "AicpuReduceConcurMeshNHR";
@@ -392,7 +391,7 @@ SelectorStatus ReduceAutoSelector::SelectMeshAlgoAicpu(
                 selectAlgName = "AicpuReduceSoleMesh";
             }
         } else {
-            if (Is64BitDataType(opParam.DataDes.dataType) || opParam.reduceType == HcclReduceOp::HCCL_REDUCE_PROD) {
+            if (IsDataTypeOrReduceTypeSpecial(opParam)) {
                 selectAlgName = "AicpuReduceSoleNHRAicpuReduce";
             } else {
                 if (IsLargeData(dataSize)) {
@@ -403,7 +402,7 @@ SelectorStatus ReduceAutoSelector::SelectMeshAlgoAicpu(
             }
         }
     } else if (topoInfo->level0Topo == Level0Shape::CLOS) {
-        if (Is64BitDataType(opParam.DataDes.dataType) || opParam.reduceType == HcclReduceOp::HCCL_REDUCE_PROD) {
+        if (IsDataTypeOrReduceTypeSpecial(opParam)) {
             selectAlgName = "AicpuReduceSoleNHRAicpuReduce";
         } else {
             selectAlgName = "AicpuReduceSoleNHR";
@@ -505,6 +504,7 @@ SelectorStatus ReduceAutoSelector::SelectDPUAlgo(
     HCCL_INFO(
         "[ReduceAutoSelector] hccl algo op config: config opType:%d, level0:%u, level1:%u, level2:%u, level3:%u",
         opParam.opType, algos[0], algos[1], algos[2], algos[3]);
+
     if (topoInfo->topoLevelNums > 1) {
         if ((topoInfo->deviceNumPerModule == 1) || (topoInfo->level0Topo == Level0Shape::MESH_1D)) {
             SelectDpuReduceSequenceAlgo(opParam, topoInfo, selectAlgName);
@@ -514,7 +514,8 @@ SelectorStatus ReduceAutoSelector::SelectDPUAlgo(
                 SelectDpuReduceSequenceAlgo(opParam, topoInfo, selectAlgName);
                 return SelectorStatus::MATCH;
             } else {
-                if (!IsLayerAllConnetedWithTopo(topoInfo, 0, CommTopo::COMM_TOPO_1DMESH)) {
+                if (!IsLayerAllConnetedWithTopo(topoInfo, 0, CommTopo::COMM_TOPO_1DMESH)
+                    && !IsDataTypeOrReduceTypeSpecial(opParam)) {
                     selectAlgName = "DpuReducePipeLineMeshNHRNHR";
                     HCCL_INFO("selectAlgName is DpuReducePipeLineMeshNHRNHR");
                     return SelectorStatus::MATCH;
@@ -550,13 +551,15 @@ SelectorStatus ReduceAutoSelector::SelectNdaAlgo(
     // 判断条件与SelectDPUAlgo保持一致(仅去除数据量切换), 选择的算法替换为NDA对应版本:
     // DpuReduceSequenceMeshNHR -> DpuReduceSequenceMeshNHRNDA(Intra/Inter四级流水),
     // DpuReducePipeLineMeshNHRNHR -> DpuReducePipeLineMeshNHRNHRNDA(三级流水)
+    // pipeline 不支持 64bit 数据类型与 PROD 归约, 与 SelectDPUAlgo 一致回退到 NDA 序列算法。
     if (topoInfo->topoLevelNums > 1) {
         if ((topoInfo->deviceNumPerModule == 1) || (topoInfo->level0Topo == Level0Shape::MESH_1D)) {
             selectAlgName = "DpuReduceSequenceMeshNHRNDA";
             HCCL_INFO("[ReduceNda] selectAlgName is DpuReduceSequenceMeshNHRNDA");
             return SelectorStatus::MATCH;
         } else if (topoInfo->level0Topo == Level0Shape::MESH_1D_CLOS) {
-            if (!topoInfo->level0PcieMix && dataSize > REDUCE_NDA_PIPELINE_MIN_DATA_SIZE) {
+            if (!topoInfo->level0PcieMix && dataSize > REDUCE_NDA_PIPELINE_MIN_DATA_SIZE
+                && !IsDataTypeOrReduceTypeSpecial(opParam)) {
                 selectAlgName = "DpuReducePipeLineMeshNHRNHRNDA";
                 HCCL_INFO("[ReduceNda] selectAlgName is %s, dataSize[%llu]", selectAlgName.c_str(), dataSize);
                 return SelectorStatus::MATCH;

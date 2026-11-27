@@ -26,6 +26,9 @@ const std::vector<std::string>& LastCandidatePrefixes();
 // 注入 HcclTunerInit 返回值: 基模式用例注入哨兵错误, 证明 Run 越过 only 报错分支进入正常路径
 void SetTunerInitResult(HcclResult ret);
 
+// 注入 hostDPUOnly 判定结果: true 时 Select 直接采用 SelectNdaAlgo/SelectDPUAlgo 的结果, 不经 costTable 过滤
+void SetHostDpuOnly(bool value);
+
 // 注入"已注册算法"全集, GenerateCostModel 按候选前缀过滤后生成 count>0 模型; 空集保持空模型走负向路径
 void SetCostModelAlgos(const std::vector<std::string>& algos);
 

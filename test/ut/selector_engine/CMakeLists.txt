@@ -18,6 +18,7 @@ set(_selector_ut_include_dirs
     ${_repo_root}/src/ops/op_common/selector/pub_inc
     ${_repo_root}/src/ops/op_common/topo_info
     ${_repo_root}/src/ops/op_common/algorithm/template
+    ${_repo_root}/src/ops/op_common/algorithm/template/aiv
     ${_repo_root}/src/ops/op_common/algorithm/template/registry
     ${_repo_root}/src/ops/op_common/algorithm/template/wrapper
     ${_repo_root}/src/ops/op_common/algorithm/executor
@@ -25,6 +26,11 @@ set(_selector_ut_include_dirs
     ${_repo_root}/src/ops/op_common/algorithm/executor/channel
     ${_repo_root}/src/ops/op_common/algorithm/topo_match
     ${_repo_root}/src/ops/op_common/algorithm/template/aiv
+    ${_repo_root}/src/ops/all_reduce/selector
+    ${_repo_root}/src/ops/all_reduce/algorithm/executor
+    ${_repo_root}/src/ops/reduce/selector
+    ${_repo_root}/src/ops/reduce_scatter/selector
+    ${_repo_root}/src/ops/reduce_scatter/algorithm/executor
     ${_repo_root}/src/common
     ${_repo_root}/src/common/tuner
     ${_repo_root}/src/common/hcomm_dlsym
@@ -89,14 +95,21 @@ macro(_detect_cann_version _target)
 endmacro()
 
 # SelectorEngine 回退语义 UT: 真实编译 selector_engine.cc/auto_selector_base.cc,
-# costModel/costTable/tuner/HCOMM ctx 依赖由本目录桩提供, 不依赖硬件
+# costModel/costTable/tuner/HCOMM ctx 依赖由本目录桩提供, 不依赖硬件。
+# 另编入 AllReduce/Reduce/ReduceScatter 三个算子 selector, 覆盖 IsDataTypeOrReduceTypeSpecial
+# 的 pipeline 选路守护(见 selector_dpu_guard_test.cc)。
 set(ut_src_list
     ${CMAKE_CURRENT_SOURCE_DIR}/selector_engine_test.cc
+    ${CMAKE_CURRENT_SOURCE_DIR}/selector_dpu_guard_test.cc
     ${CMAKE_CURRENT_SOURCE_DIR}/stub/log_stub.cc
     ${CMAKE_CURRENT_SOURCE_DIR}/stub/securec_stub.cc
     ${CMAKE_CURRENT_SOURCE_DIR}/stub/selector_deps_stub.cc
     ${_repo_root}/src/ops/op_common/selector/selector_engine.cc
     ${_repo_root}/src/ops/op_common/selector/auto_selector_base.cc
+    ${_repo_root}/src/ops/op_common/selector/selector_registry.cc
+    ${_repo_root}/src/ops/all_reduce/selector/all_reduce_auto_selector.cc
+    ${_repo_root}/src/ops/reduce/selector/reduce_auto_selector.cc
+    ${_repo_root}/src/ops/reduce_scatter/selector/reduce_scatter_auto_selector.cc
 )
 
 add_executable(selector_engine_test ${ut_src_list})

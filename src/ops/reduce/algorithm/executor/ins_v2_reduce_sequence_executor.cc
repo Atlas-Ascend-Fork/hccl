@@ -796,7 +796,7 @@ REGISTER_EXECUTOR_BY_FOUR_TEMPS(
     InsTempGatherMesh1dIntra);
 REGISTER_ALG_ATTRS(DpuReduceSequenceMeshNHRNDA, topo.supportLevel0Topos = LEVEL0_TOPO_MESH_1D_CLOS;
                    topo.minTopoLevelNum = TOPO_LEVEL_NUM_2; topo.maxTopoLevelNum = TOPO_LEVEL_NUM_3;
-                   topo.isHostDpuOnly = true; op.unsupportedDataTypes = UNSUPPORTED_64BIT; op.isSupportInplace = false);
+                   topo.isHostDpuOnly = true; op.isSupportInplace = false);
 
 // RHD（Recursive Halving-Doubling）二级（Dpu 引擎）：L0 z 轴绕路 + L1 host DPU RHD inter 相位
 // 模板，模板实参 = RS 下沉链 L0/L1 + Gather 回升链 L1/L0。
