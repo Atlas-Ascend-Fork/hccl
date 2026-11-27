@@ -18,6 +18,8 @@
 #include "ins_temp_all_gather_rhd_dpu.h"
 #include "ins_temp_all_gather_mesh_1D_Z_axis_detour.h"
 #include "aicpu_temp_scatter_mesh_1D_Z_axis_detour.h"
+#include "ins_temp_scatter_mesh_1D.h"
+#include "ins_temp_all_gather_mesh_1D.h"
 #include "alg_attrs_registry.h"
 
 #include "alg_attrs_registry.h"
@@ -26,6 +28,25 @@
 namespace ops_hccl {
 
 // 当前sequence支持两级和三级组网
+namespace {
+    // 分轨拓扑专用二级匹配：将物理L0和L1合为逻辑L0 Mesh，最高轨层对应逻辑L1。
+    class BroadcastRailTwoLevelMatcher : public TopoMatchBaseV2 {
+    public:
+        std::string Describe() const override { return "Broadcast rail two-level matcher."; }
+
+        HcclResult MatchTopo(
+            TopoInfoWithNetLayerDetails* topoInfo, AlgHierarchyInfoForAllLevel& algHierarchyInfo,
+            const AlgAttrs& algAttrs) override
+        {
+            CHK_PTR_NULL(topoInfo);
+            const u32 railLayer = ResolveAicpuRailNetLayer(topoInfo);
+            if (railLayer == INVALID_UINT || algAttrs.algoTypes.size() != ALGO_LEVEL_NUM_TWO) {
+                return HCCL_E_NOT_SUPPORT;
+            }
+            return MatchRailHierarchy(*topoInfo, algHierarchyInfo, algAttrs, railLayer);
+        }
+    };
+} // namespace
 
 template <
     typename AlgTopoMatch, typename InsAlgTemplate0, typename InsAlgTemplate1, typename InsAlgTemplate2,
@@ -932,6 +953,17 @@ REGISTER_EXEC_V2_MULTI(
     InsTempAllGatherNHR,                  // AllGather L2 (跨超节点)
     InsTempAllGatherNHR,                  // AllGather L1 (框间)
     InsTempAllGatherMesh1D1DZAxisDetour); // AllGather L0 (框内, Z轴绕路)
+
+// 特殊场景算法：用于至少三层物理分轨拓扑的AICPU路径。
+// rail matcher 将物理L0和L1压缩为逻辑L0 Mesh，最高轨层对应逻辑L1 NHR；
+// 与常规三级 AICPU 算法共同参与 cost 竞争，executor 按实际匹配层数跳过未使用的 L2。
+REGISTER_EXEC_V2_MULTI(
+    HcclCMDType::HCCL_CMD_BROADCAST, AicpuBroadcastSequenceMeshNHR, BroadcastSequenceMesh1dNHRNHRExecutor,
+    BroadcastRailTwoLevelMatcher, InsTempScatterMesh1D, InsTempScatterNHR, InsTempScatterNHR, InsTempAllGatherNHR,
+    InsTempAllGatherNHR, InsTempAllGatherMesh1D);
+REGISTER_ALG_ATTRS(AicpuBroadcastSequenceMeshNHR, topo.supportLevel0Topos = LEVEL0_TOPO_MESH_1D;
+                   topo.minTopoLevelNum = TOPO_LEVEL_NUM_3; topo.maxTopoLevelNum = HCCL_LOGIC_TOPO_LEVEL_NUM;
+                   topo.isSupportLevel1Nhr = true; topo.topoPrecondCheck = IsAicpuRailTopology;);
 
 REGISTER_ALG_ATTRS(
     AicpuBroadcastSequenceMeshConcurRHD, topo.minTopoLevelNum = TOPO_LEVEL_NUM_2;

@@ -105,6 +105,7 @@ if(_version GREATER_EQUAL 90000000)
     configure_inline_reduce_ut(all_reduce_rhd_registration)
     target_compile_options(all_reduce_rhd_registration PRIVATE -include ${CMAKE_CURRENT_SOURCE_DIR}/registration_stub.h)
     add_executable(all_reduce_rhd_test all_reduce_rhd_test.cc
+        ${_repo_root}/src/ops/op_common/algorithm/topo_match/topo_match_base_v2.cc
         $<TARGET_OBJECTS:inline_reduce_selector_support> $<TARGET_OBJECTS:all_reduce_rhd_registration>)
     configure_inline_reduce_ut(all_reduce_rhd_test)
     run_llt_test(TARGET all_reduce_rhd_test TASK_NUM 1)

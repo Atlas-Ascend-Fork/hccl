@@ -49,6 +49,11 @@ struct Reduce3LIsDpuOffloadTemplate<InsTempReduceScatterRhdDpuInter> : std::true
 template <>
 struct Reduce3LIsDpuOffloadTemplate<InsTempAllGatherRHDDPU> : std::true_type {};
 
+template <typename TopoMatch, typename FirstTemplate, typename SecondTemplate>
+constexpr bool REDUCE_RAIL_MESH_RHD
+    = std::is_same_v<TopoMatch, TopoMatchTwoLevel> && std::is_same_v<FirstTemplate, InsTempReduceScatterMesh1D>
+      && std::is_same_v<SecondTemplate, InsTempReduceScatterRHD>;
+
 template <
     typename AlgTopoMatch, typename AlgTemplate0, typename AlgTemplate1, typename AlgTemplate2, typename AlgTemplate3,
     typename AlgTemplate4, typename AlgTemplate5>
@@ -92,11 +97,12 @@ std::vector<CostModelParam> ReduceSequenceExecutorAicpu3Level<
         return {};
     }
     HCCL_INFO(
-        "[ReduceSequenceExecutorAicpu3Level][CalcCostCoeff] rankSize=%d, rankSizeLevel0=%d, rankSizeLevel1=%d, "
-        "rankSizeLevel2=%d, "
-        "portNumLevel0=%d, portNumLevel1=%d, portNumLevel2=%d, netTypeLevel0=%d, netTypeLevel1=%d, netTypeLevel2=%d",
-        rankSize, rankSizeLevel0, rankSizeLevel1, rankSizeLevel2, portNumLevel0, portNumLevel1, portNumLevel2,
-        static_cast<int>(netTypeLevel0), static_cast<int>(netTypeLevel1), static_cast<int>(netTypeLevel2));
+        "[ReduceSequenceExecutorAicpu3Level][CalcCostCoeff] rankSize=%u, rankSizeLevel0=%u, rankSizeLevel1=%u, "
+        "rankSizeLevel2=%u, "
+        "portNumLevel0=%u, portNumLevel1=%u, portNumLevel2=%u, netTypeLevel0=%d, netTypeLevel1=%d, netTypeLevel2=%d",
+        rankSize, rankSizeLevel0, rankSizeLevel1, rankSizeLevel2, portNumLevel0.front(), portNumLevel1.front(),
+        portNumLevel2.front(), static_cast<int>(netTypeLevel0), static_cast<int>(netTypeLevel1),
+        static_cast<int>(netTypeLevel2));
     std::vector<CostModelParam> params
         = [rankSize, rankSizeLevel0, rankSizeLevel1, rankSizeLevel2, portNumLevel0, portNumLevel1, portNumLevel2,
            netTypeLevel0, netTypeLevel1, netTypeLevel2, isPod, algName] {
@@ -500,6 +506,9 @@ void ReduceSequenceExecutorAicpu3Level<
         // recv 溢出会覆盖相邻区域，破坏后续相位读源。
         // AICPU/device 三级维持三同基（0913d1eb 绿基线）不变。
         tempAlgParamsRSL1.buffInfo.hcclBuffBaseOff = meshCommBuffOffset_;
+    } else if constexpr (REDUCE_RAIL_MESH_RHD<AlgTopoMatch, AlgTemplate0, AlgTemplate1>) {
+        // 非 2 幂时 RHD 会重排份额槽，原始输入必须保留到镜像完成。
+        tempAlgParamsRSL1.buffInfo.hcclBuffBaseOff = meshCommBuffOffset_;
     } else {
         tempAlgParamsRSL1.buffInfo.hcclBuffBaseOff = 0;
     }
@@ -747,18 +756,16 @@ HcclResult ReduceSequenceExecutorAicpu3Level<
 {
     HCCL_INFO("[ReduceSequenceExecutorAicpu3Level][OrchestrateLoop] Start");
 
-    // 非整除数据尾 staging（仅 DPU 卸载实例，
-    // 模板零改动）：RhdDpuInter 均匀 σ-unit 契约只覆盖 totalRankAlign 整除数据，非整除余量直接入链
-    // 会在 L2 每 pod-slice 丢 8/4 字节尾、AG 尾感知 WQE 携带发送方陈旧 L1 尾字节直达输出
-    // （409：72 源仅合 24）。CCL 末端预留输入/输出双 rankAlign tile，预算分区前收缩工作区；
-    // 每轮只跑整除对齐前缀，余量单独一轮 staged（补位车道取有效输入复制初始化），仅回拷有效字节。
+    // RHD 使用均匀的非空分片。非整除的末尾数据在 CCL 末端补齐，完成后仅回拷有效字节。
+    constexpr bool stageRhdTail = Reduce3LIsDpuOffloadTemplate<AlgTemplate2>::value
+                                  || REDUCE_RAIL_MESH_RHD<AlgTopoMatch, AlgTemplate0, AlgTemplate1>;
     u32 totalRankAlign = rankSizeLevel0_ * rankSizeLevel1_;
     if (!skipLevel2_) {
         totalRankAlign *= rankSizeLevel2_;
     }
     AlgResourceCtxSerializable loopResCtx = resCtx;
     [[maybe_unused]] ReduceRhdTail rhdTail{};
-    if constexpr (Reduce3LIsDpuOffloadTemplate<AlgTemplate2>::value) {
+    if constexpr (stageRhdTail) {
         CHK_RET(ReduceRhdPrepareTailWorkspace(dataCount_, totalRankAlign, dataTypeSize_, loopResCtx.cclMem, rhdTail));
     }
 
@@ -885,9 +892,7 @@ HcclResult ReduceSequenceExecutorAicpu3Level<
         u64 currDataCount;
         [[maybe_unused]] u64 validDataCount = 0;
         bool paddedTailLoop = false;
-        if constexpr (Reduce3LIsDpuOffloadTemplate<AlgTemplate2>::value) {
-            // DPU 卸载实例：均匀槽整除契约——每轮只跑 totalRankAlign 整除前缀；末尾余量单独
-            // 一轮 staged 进隔离 tile（整链跑在补位后的对齐槽上），仅回拷有效字节
+        if constexpr (stageRhdTail) {
             validDataCount = ReduceRhdSelectLoopCount(remaining, maxCountPerLoop, totalRankAlign);
             currDataCount = std::max(validDataCount, static_cast<u64>(totalRankAlign));
             paddedTailLoop = validDataCount != currDataCount;
@@ -991,6 +996,28 @@ HcclResult ReduceSequenceExecutorAicpu3Level<
     HCCL_INFO("[ReduceSequenceExecutorAicpu3Level][OrchestrateLoop] End.");
     return HCCL_SUCCESS;
 }
+
+REGISTER_EXEC_V2_MULTI(
+    HcclCMDType::HCCL_CMD_REDUCE, AicpuReduceSequenceMeshNHR, ReduceSequenceExecutorAicpu3Level, TopoMatchTwoLevel,
+    InsTempReduceScatterMesh1D, InsTempReduceScatterNHR, InsTempReduceScatterNHR, InsTempAllGatherNHR,
+    InsTempAllGatherNHR, InsTempAllGatherMesh1D);
+REGISTER_ALG_ATTRS(AicpuReduceSequenceMeshNHR, topo.minTopoLevelNum = TOPO_LEVEL_NUM_3;
+                   topo.maxTopoLevelNum = HCCL_LOGIC_TOPO_LEVEL_NUM; topo.isSupportLevel1Nhr = true;
+                   topo.topoPrecondCheck = IsAicpuRailTopology; op.unsupportedDataTypes = UNSUPPORTED_64BIT;
+                   op.isSupportInplace = false; op.isSupportProd = false);
+
+REGISTER_EXEC_V2_MULTI(
+    HcclCMDType::HCCL_CMD_REDUCE, AicpuReduceSequenceMeshRHD, ReduceSequenceExecutorAicpu3Level, TopoMatchTwoLevel,
+    InsTempReduceScatterMesh1D, InsTempReduceScatterRHD, InsTempReduceScatterRHD, InsTempAllGatherRHD,
+    InsTempAllGatherRHD, InsTempAllGatherMesh1D);
+REGISTER_ALG_ATTRS(
+    AicpuReduceSequenceMeshRHD, topo.supportLevel0Topos = LEVEL0_TOPO_MESH_1D; topo.minTopoLevelNum = TOPO_LEVEL_NUM_3;
+    topo.maxTopoLevelNum = HCCL_LOGIC_TOPO_LEVEL_NUM; topo.isSupportLevel1Nhr = true;
+    topo.topoPrecondCheck = IsAicpuRailTopology; op.unsupportedDataTypes = UNSUPPORTED_64BIT;
+    op.isSupportInplace = false; op.isSupportProd = false;
+    topo.topoCustomCheck = [](const TopoInfoWithNetLayerDetails*) -> bool {
+        return false;
+    };);
 
 REGISTER_EXEC_V2_MULTI(
     HcclCMDType::HCCL_CMD_REDUCE, AicpuReduceSequenceMeshConcurNHRNHR, ReduceSequenceExecutorAicpu3Level,

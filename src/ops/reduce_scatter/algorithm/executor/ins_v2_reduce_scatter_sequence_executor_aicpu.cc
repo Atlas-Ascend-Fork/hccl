@@ -32,6 +32,26 @@ namespace ops_hccl {
 constexpr u32 SEQUENCE_EXECUTOR_LEVEL_NUM = 2;
 constexpr u32 CCL_MEM_HALF_DIVISOR = 2;
 
+namespace {
+    // 分轨拓扑专用二级匹配：将物理L0和L1合为逻辑L0 Mesh，最高轨层对应逻辑L1。
+    class ReduceScatterRailTwoLevelMatcher : public TopoMatchBaseV2 {
+    public:
+        std::string Describe() const override { return "ReduceScatter rail two-level matcher."; }
+
+        HcclResult MatchTopo(
+            TopoInfoWithNetLayerDetails* topoInfo, AlgHierarchyInfoForAllLevel& algHierarchyInfo,
+            const AlgAttrs& algAttrs) override
+        {
+            CHK_PTR_NULL(topoInfo);
+            const u32 railLayer = ResolveAicpuRailNetLayer(topoInfo);
+            if (railLayer == INVALID_UINT || algAttrs.algoTypes.size() != ALGO_LEVEL_NUM_TWO) {
+                return HCCL_E_NOT_SUPPORT;
+            }
+            return MatchRailHierarchy(*topoInfo, algHierarchyInfo, algAttrs, railLayer);
+        }
+    };
+} // namespace
+
 template <typename AlgTopoMatch, typename InsAlgTemplate0, typename InsAlgTemplate1>
 InsV2ReduceScatterSequenceExecutorAicpu<
     AlgTopoMatch, InsAlgTemplate0, InsAlgTemplate1>::InsV2ReduceScatterSequenceExecutorAicpu()
@@ -579,6 +599,17 @@ REGISTER_ALG_ATTRS(
         u64 totalSize = perRankSize * topo->userRankSize;
         return totalSize > RS_AICPU_SEQUENCE_SIZE_THRESHOLD;
     });
+
+// 特殊场景算法：用于至少三层物理分轨拓扑的AICPU路径。
+// rail matcher 将物理L0和L1压缩为逻辑L0 Mesh，最高轨层对应逻辑L1 NHR；
+// 与常规三级 AICPU 算法共同参与 cost 竞争，复用 AICPU 顺序 executor。
+REGISTER_EXECUTOR_BY_TWO_TEMPS(
+    HcclCMDType::HCCL_CMD_REDUCE_SCATTER, AicpuReduceScatterSequenceMeshNHR, InsV2ReduceScatterSequenceExecutorAicpu,
+    ReduceScatterRailTwoLevelMatcher, InsTempReduceScatterMesh1D, InsTempReduceScatterNHR);
+REGISTER_ALG_ATTRS(AicpuReduceScatterSequenceMeshNHR, topo.supportLevel0Topos = LEVEL0_TOPO_MESH_1D;
+                   topo.minTopoLevelNum = TOPO_LEVEL_NUM_3; topo.maxTopoLevelNum = HCCL_LOGIC_TOPO_LEVEL_NUM;
+                   topo.isSupportLevel1Nhr = true; op.isSupportProd = false;
+                   op.unsupportedDataTypes = UNSUPPORTED_64BIT; topo.topoPrecondCheck = IsAicpuRailTopology;);
 
 REGISTER_EXECUTOR_BY_TWO_TEMPS(
     HcclCMDType::HCCL_CMD_REDUCE_SCATTER, AicpuReduceScatterSequenceMeshChunkConcurNHR,

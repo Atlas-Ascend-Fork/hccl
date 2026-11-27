@@ -9,6 +9,7 @@
  */
 
 #include "ins_v2_all_reduce_sequence_executor_aicpu.h"
+#include <type_traits>
 #include "executor_common_ops.h"
 #include "alg_attrs_registry.h"
 #include "ins_temp_reduce_scatter_mesh_1D_Z_axis_detour.h"
@@ -36,6 +37,10 @@ namespace ops_hccl {
 
 constexpr u32 SEQUENCE_EXECUTOR_LEVEL_NUM = 2;
 constexpr u32 CCL_MEM_HALF_DIVISOR = 2;
+
+template <typename InnerTemplate, typename OuterTemplate>
+constexpr bool ALL_REDUCE_SEQUENCE_MESH_RHD = std::is_same_v<InnerTemplate, InsTempReduceScatterMesh1D>
+                                              && std::is_same_v<OuterTemplate, InsTempReduceScatterRHD>;
 
 template <
     typename AlgTopoMatch, typename InsAlgTemplate0, typename InsAlgTemplate1, typename InsAlgTemplate2,
@@ -145,6 +150,9 @@ InsV2AllReduceSequenceExecutorAicpu<AlgTopoMatch, InsAlgTemplate0, InsAlgTemplat
     meta.groupSizes = {1, 1, 1, 1};
     meta.dataRatios = {1.0f / rankSizeLevel0, 1.0f / rankSize, 1.0f / rankSize, 1.0f / rankSizeLevel0};
     meta.rankSizes = {rankSizeLevel0, rankSizeLevel1, rankSizeLevel1, rankSizeLevel0};
+    if constexpr (ALL_REDUCE_SEQUENCE_MESH_RHD<InsAlgTemplate0, InsAlgTemplate1>) {
+        meta.algoTypes = {AlgoType::MESH, AlgoType::RHD, AlgoType::RHD, AlgoType::MESH};
+    }
     return meta;
 }
 
@@ -688,7 +696,7 @@ InsV2AllReduceSequenceExecutorAicpu<AlgTopoMatch, InsAlgTemplate0, InsAlgTemplat
             if (plan.paddedTail) {
                 CHK_RET(ArSeqRhdStageTail(param, rhdTail, processedDataCount, plan.validCount, threads_[0]));
             }
-            // Step1：框内 MeshConcur ReduceScatter。
+            // Step1：框内 ReduceScatter。
             GenTempAlgParamsStepOne(loop, plan.currDataCount, processedDataCount, tempAlgParamsStepOne);
             if (plan.paddedTail) {
                 tempAlgParamsStepOne.buffInfo.inputPtr = rhdTail.storage.addr;
@@ -740,7 +748,7 @@ InsV2AllReduceSequenceExecutorAicpu<AlgTopoMatch, InsAlgTemplate0, InsAlgTemplat
             tempAlgParamsStepThree.skipPrePhase = true;
             CHK_RET(algTemplateStepThree->KernelRun(param, tempAlgParamsStepThree, templateResourceStepThree));
 
-            // Step4：框内 MeshConcur AllGather，回写用户输出（尾块先落隔离 tile，再回拷有效字节）。
+            // Step4：框内 AllGather，回写用户输出（尾块先落隔离 tile，再回拷有效字节）。
             GenTempAlgParamsStepFour(
                 loop, plan.currDataCount, processedDataCount, tempAlgParamsStepOne.sliceSize,
                 tempAlgParamsStepOne.tailSize, 0, tempAlgParamsStepFour);
@@ -971,6 +979,28 @@ InsV2AllReduceSequenceExecutorAicpu<AlgTopoMatch, InsAlgTemplate0, InsAlgTemplat
 #endif
 
 #if CANN_VERSION_NUM >= CANN_VERSION(9, 0, 0)
+REGISTER_EXECUTOR_BY_FOUR_TEMPS(
+    HcclCMDType::HCCL_CMD_ALLREDUCE, AicpuAllReduceSequenceMeshNHR, InsV2AllReduceSequenceExecutorAicpu,
+    TopoMatchTwoLevel, InsTempReduceScatterMesh1D, InsTempReduceScatterNHR, InsTempAllGatherNHR,
+    InsTempAllGatherMesh1D);
+REGISTER_ALG_ATTRS(AicpuAllReduceSequenceMeshNHR, topo.minTopoLevelNum = TOPO_LEVEL_NUM_3;
+                   topo.maxTopoLevelNum = HCCL_LOGIC_TOPO_LEVEL_NUM; topo.supportLevel0Topos = LEVEL0_TOPO_MESH_1D;
+                   topo.isSupportLevel1Nhr = true; topo.topoPrecondCheck = IsAicpuRailTopology;
+                   op.isSupportProd = false; op.unsupportedDataTypes = UNSUPPORTED_64BIT;);
+
+REGISTER_EXECUTOR_BY_FOUR_TEMPS(
+    HcclCMDType::HCCL_CMD_ALLREDUCE, AicpuAllReduceSequenceMeshRHD, InsV2AllReduceSequenceExecutorAicpu,
+    TopoMatchTwoLevel, InsTempReduceScatterMesh1D, InsTempReduceScatterRHD, InsTempAllGatherRHD,
+    InsTempAllGatherMesh1D);
+REGISTER_ALG_ATTRS(
+    AicpuAllReduceSequenceMeshRHD, topo.minTopoLevelNum = TOPO_LEVEL_NUM_3;
+    topo.maxTopoLevelNum = HCCL_LOGIC_TOPO_LEVEL_NUM; topo.supportLevel0Topos = LEVEL0_TOPO_MESH_1D;
+    topo.isSupportLevel1Nhr = true; topo.topoPrecondCheck = IsAicpuRailTopology;
+    topo.topoCustomCheck = [](const TopoInfoWithNetLayerDetails*) -> bool {
+        return false;
+    };
+    op.isSupportProd = false; op.unsupportedDataTypes = UNSUPPORTED_64BIT;);
+
 REGISTER_EXECUTOR_BY_FOUR_TEMPS(
     HcclCMDType::HCCL_CMD_ALLREDUCE, AicpuAllReduceSequenceMeshConcurNHR, InsV2AllReduceSequenceExecutorAicpu,
     TopoMatchTwoLevel, InsTempReduceScatterMesh1DZAxisDetour, InsTempReduceScatterNHR, InsTempAllGatherNHR,

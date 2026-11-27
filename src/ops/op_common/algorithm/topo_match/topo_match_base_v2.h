@@ -30,6 +30,9 @@ constexpr u32 CONCURRENT_SUBGROUP_NUM = 2;
 // 判断是否为 2 的整数次幂（含 1，排除 0）
 bool IsPowerOfTwo(u32 value);
 
+// TwoLevel的外层HD要求算法组规模为2的整数次幂。
+HcclResult ValidateTwoLevelOuterDim(AlgoType algo, u32 dim, u32 myRank);
+
 // 辗转相除求两数最大公约数；a 或 b 为 0 时返回 1 避免退化
 u32 CalcGcdByPair(u32 a, u32 b);
 
@@ -52,10 +55,18 @@ std::vector<u32> CollectEffectiveIndices(const std::vector<PhysicalLevelInfo>& p
 bool HasGlobalDeviceSourceOnHighestLayer(
     const std::vector<PhysicalLevelInfo>& physicalLevels, OpExecuteConfig engine, u32 userRankSize);
 
-// layer2多实例且不存在当前引擎可用的DEVICE全域来源时, 使用分轨匹配, 不限定全域来源层号。
+// 已识别轨层且不存在当前引擎可用的DEVICE全域来源时, 使用分轨匹配。
 // HOSTCPU固定走普通匹配。来源必须具有GLOBAL单实例分区和TopoInstance, 不能仅凭本地规模判定。
 bool ShouldUseRailHierarchy(
-    const std::vector<PhysicalLevelInfo>& physicalLevels, OpExecuteConfig engine, u32 userRankSize);
+    const std::vector<PhysicalLevelInfo>& physicalLevels, OpExecuteConfig engine, u32 userRankSize, u32 railLayer);
+
+// AICPU分轨候选共用的准入条件，轨层号取实际最高层。
+u32 ResolveAicpuRailNetLayer(const TopoInfoWithNetLayerDetails* topoInfo);
+
+inline bool IsAicpuRailTopology(const TopoInfoWithNetLayerDetails* topoInfo)
+{
+    return ResolveAicpuRailNetLayer(topoInfo) != INVALID_UINT;
+}
 
 // 判断算法是否属于 Mesh 类
 bool IsMeshAlgo(AlgoType algo);
@@ -78,7 +89,7 @@ HcclResult ResolveSegmentMapping(
 // 引擎过滤 + 锚点匹配 + 分段，得 effIdx 与 pIndices
 HcclResult ResolveMapping(
     const std::vector<PhysicalLevelInfo>& physicalLevels, const AlgAttrs& algAttrs, u32 userRankSize,
-    std::vector<u32>& effIdx, std::vector<u32>& pIndices);
+    std::vector<u32>& effIdx, std::vector<u32>& pIndices, u32 railLayer = INVALID_UINT);
 
 // Two/ThreeLevel在ShouldUseRailHierarchy为true时统一构造规则分轨算法组并校验真实DEVICE来源。
 // HOSTCPU固定走ResolveMapping使用Host全域来源; 本函数不接受HOSTCPU。
@@ -86,7 +97,7 @@ HcclResult ResolveMapping(
 // 不查询GetLinks; 失败仅表示该算法布局不支持, 不作为物理断网判据或跨rank错误汇聚。
 HcclResult MatchRailHierarchy(
     const TopoInfoWithNetLayerDetails& topoInfo, AlgHierarchyInfoForAllLevel& algHierarchyInfo,
-    const AlgAttrs& algAttrs);
+    const AlgAttrs& algAttrs, u32 railLayer);
 
 // 在 meshEffPos 之上找首个 localRanks 包含 mesh 层 localRanks 的物理层
 int32_t FindUpperEncompassingLevel(

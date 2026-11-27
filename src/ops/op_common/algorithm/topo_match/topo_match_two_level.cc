@@ -106,15 +106,16 @@ HcclResult TopoMatchTwoLevel::MatchTopo(
 
     // 存在当前引擎可用的DEVICE全域来源时走普通匹配, 否则按全局分区选择分轨布局。
     // 不以各rank本地匹配的成败切换路径。
-    // HOSTCPU使用Host全域来源, 由ResolveMapping排除轨层并校验Host包含链。
-    if (ShouldUseRailHierarchy(physicalLevels, algAttrs.engine, userRankSize)) {
-        return MatchRailHierarchy(*topoInfo, algHierarchyInfo, algAttrs);
+    // HOSTCPU使用全域HOST来源，并沿用L2多实例时的裁剪和包含关系校验。
+    const u32 railLayer = ResolveRailNetLayer(topoInfo->netLayerDetails);
+    if (ShouldUseRailHierarchy(physicalLevels, algAttrs.engine, userRankSize, railLayer)) {
+        return MatchRailHierarchy(*topoInfo, algHierarchyInfo, algAttrs, railLayer);
     }
     HcclResult ret = HCCL_SUCCESS;
     // 引擎过滤 + 锚点匹配 + 分段 + 最高层校验
     std::vector<u32> effIdx;
     std::vector<u32> pIndices;
-    ret = ResolveMapping(physicalLevels, algAttrs, userRankSize, effIdx, pIndices);
+    ret = ResolveMapping(physicalLevels, algAttrs, userRankSize, effIdx, pIndices, railLayer);
     if (ret != HCCL_SUCCESS) {
         return ret;
     }
@@ -139,11 +140,7 @@ HcclResult TopoMatchTwoLevel::MatchTopo(
     }
 
     // 框间 HD 仅支持 2 的整数次幂维度；非对称拓扑使用 GCD 打平后的 d1
-    if (algAttrs.algoTypes[1] == AlgoType::HD && !IsPowerOfTwo(d1)) {
-        HCCL_INFO(
-            "[TopoMatchTwoLevel] Rank [%u], inter dim size[%u] is not a power of two, HD not supported.", myRank, d1);
-        return HcclResult::HCCL_E_NOT_SUPPORT;
-    }
+    CHK_RET(ValidateTwoLevelOuterDim(algAttrs.algoTypes[1], d1, myRank));
 
     // 构造 infos
     std::vector<u32> group0 = BuildLevel0Group(physicalLevels[phys0], myRank, asymmetric, gcd);

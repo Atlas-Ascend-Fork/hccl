@@ -45,12 +45,14 @@ bool CommAddrEqual(const CommAddr& lhs, const CommAddr& rhs);
  * 返回HCCL_E_NOT_SUPPORT表示不满足对应范围约束或排序键取不到值, 由调用方降级。
  */
 HcclResult NormalizePhysicalLevels(
-    std::vector<PhysicalLevelInfo>& candidates, u32 userRank, u32 userRankSize, std::vector<PhysicalLevelInfo>& levels);
+    std::vector<PhysicalLevelInfo>& candidates, u32 userRank, u32 userRankSize, u32 railLayer,
+    std::vector<PhysicalLevelInfo>& levels);
 
 /**
  * 标准化结果的一致性校验, 逐条对应标准化后应当成立的不变量。
  */
-HcclResult ValidatePhysicalLevels(const std::vector<PhysicalLevelInfo>& levels, u32 userRank, u32 userRankSize);
+HcclResult
+ValidatePhysicalLevels(const std::vector<PhysicalLevelInfo>& levels, u32 userRank, u32 userRankSize, u32 railLayer);
 
 // ---- 依赖HcclComm (physical_level_build.cc) ----
 

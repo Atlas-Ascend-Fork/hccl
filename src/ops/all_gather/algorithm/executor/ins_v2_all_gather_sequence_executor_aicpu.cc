@@ -10,6 +10,7 @@
 
 #include "ins_v2_all_gather_sequence_executor_aicpu.h"
 #include "executor_common_ops.h"
+#include "ins_temp_all_gather_mesh_1D.h"
 #include "ins_temp_all_gather_mesh_1D_Z_axis_detour.h"
 #include "ins_temp_all_gather_nhr.h"
 #include "ins_temp_all_gather_rhd.h"
@@ -585,6 +586,24 @@ HcclResult InsV2AllGatherSequenceExecutorAicpu<AlgTopoMatch, InsAlgTemplate0, In
 }
 
 #if CANN_VERSION_NUM >= CANN_VERSION(9, 0, 0)
+REGISTER_EXECUTOR_BY_TWO_TEMPS(
+    HcclCMDType::HCCL_CMD_ALLGATHER, AicpuAllGatherSequenceMeshNHR, InsV2AllGatherSequenceExecutorAicpu,
+    TopoMatchTwoLevel, InsTempAllGatherMesh1D, InsTempAllGatherNHR);
+REGISTER_ALG_ATTRS(AicpuAllGatherSequenceMeshNHR, topo.minTopoLevelNum = TOPO_LEVEL_NUM_3;
+                   topo.maxTopoLevelNum = HCCL_LOGIC_TOPO_LEVEL_NUM; topo.supportLevel0Topos = LEVEL0_TOPO_MESH_1D;
+                   topo.isSupportLevel1Nhr = true; topo.topoPrecondCheck = IsAicpuRailTopology;);
+
+REGISTER_EXECUTOR_BY_TWO_TEMPS(
+    HcclCMDType::HCCL_CMD_ALLGATHER, AicpuAllGatherSequenceMeshRHD, InsV2AllGatherSequenceExecutorAicpu,
+    TopoMatchTwoLevel, InsTempAllGatherMesh1D, InsTempAllGatherRHD);
+REGISTER_ALG_ATTRS(
+    AicpuAllGatherSequenceMeshRHD, topo.minTopoLevelNum = TOPO_LEVEL_NUM_3;
+    topo.maxTopoLevelNum = HCCL_LOGIC_TOPO_LEVEL_NUM; topo.supportLevel0Topos = LEVEL0_TOPO_MESH_1D;
+    topo.isSupportLevel1Nhr = true; topo.topoPrecondCheck = IsAicpuRailTopology;
+    topo.topoCustomCheck = [](const TopoInfoWithNetLayerDetails*) -> bool {
+        return false;
+    };);
+
 REGISTER_EXECUTOR_BY_TWO_TEMPS(
     HcclCMDType::HCCL_CMD_ALLGATHER, AicpuAllGatherSequenceMeshConcurNHR, InsV2AllGatherSequenceExecutorAicpu,
     TopoMatchTwoLevel, InsTempAllGatherMesh1D1DZAxisDetour, InsTempAllGatherNHR);

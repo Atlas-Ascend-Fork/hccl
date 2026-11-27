@@ -12,8 +12,10 @@ cmake_minimum_required(VERSION 3.14)
 
 file(GLOB_RECURSE UT_FILES RELATIVE ${CMAKE_CURRENT_SOURCE_DIR} "*.cc")
 
-# 被测源文件：V2 base（公共工具函数）+ 4 个 matcher + 日志桩
+# 被测源文件：物理层构建、拓扑匹配及日志桩
 set(SOURCE_FILES
+    ${PROJECT_SOURCE_DIR}/src/ops/op_common/topo_info/physical_level_build.cc
+    ${PROJECT_SOURCE_DIR}/src/ops/op_common/topo_info/physical_level_normalize.cc
     ${PROJECT_SOURCE_DIR}/src/ops/op_common/algorithm/topo_match/topo_match_base_v2.cc
     ${PROJECT_SOURCE_DIR}/src/ops/op_common/algorithm/topo_match/topo_match_one_level.cc
     ${PROJECT_SOURCE_DIR}/src/ops/op_common/algorithm/topo_match/topo_match_two_level.cc
@@ -34,6 +36,7 @@ endif()
 target_include_directories(topo_match_test PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/stub
     ${PROJECT_SOURCE_DIR}/src/ops/op_common/algorithm/topo_match
+    ${PROJECT_SOURCE_DIR}/src/ops/op_common/topo_info
     ${PROJECT_SOURCE_DIR}/src/ops/op_common/inc
     ${PROJECT_SOURCE_DIR}/src/ops/op_common
     ${PROJECT_SOURCE_DIR}/src/ops/op_common/selector
