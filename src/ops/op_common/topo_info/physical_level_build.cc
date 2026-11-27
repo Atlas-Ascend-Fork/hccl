@@ -327,6 +327,16 @@ namespace {
         return HCCL_SUCCESS;
     }
 
+    HcclResult ValidateServerInPod(const NetLayerSnapshot& server, const NetLayerSnapshot& pod, u32 myRank)
+    {
+        if (!std::includes(
+                pod.localRanks.begin(), pod.localRanks.end(), server.localRanks.begin(), server.localRanks.end())) {
+            HCCL_ERROR("[PhysicalLevel][Connectivity] layer[%u] exceeds local pod, rank[%u]", server.netLayer, myRank);
+            return HCCL_E_PARA;
+        }
+        return HCCL_SUCCESS;
+    }
+
     HcclResult ValidateRailConnectivity(
         const std::vector<NetLayerSnapshot>& snapshots, const NetLayerSnapshot& pod, const NetLayerSnapshot& rail,
         u32 myRank, u32 rankSize)
@@ -349,7 +359,7 @@ namespace {
         // 在完整分区和实例内理论可达的模型下, 上限不足是连通性的否证, 不是启发式拒绝。
         u64 maxConnections = 0;
         for (const auto& layer : snapshots) {
-            if (layer.netLayer >= RAIL_NET_LAYER) {
+            if (layer.netLayer > POD_NET_LAYER) {
                 maxConnections += static_cast<u64>(rankSize) - layer.instSizeList.size();
             }
         }
@@ -369,13 +379,30 @@ namespace {
         return HCCL_SUCCESS;
     }
 
-    HcclResult ValidatePhysicalConnectivity(const std::vector<NetLayerSnapshot>& snapshots, u32 myRank, u32 rankSize)
+    HcclResult ValidatePhysicalConnectivity(
+        const std::vector<NetLayerSnapshot>& snapshots, u32 railLayer, u32 myRank, u32 rankSize)
     {
+        if (railLayer != INVALID_UINT) {
+            // 最高层的单rank轨没有跨Pod对端。检查全局分区，保证各rank的准入结论一致。
+            const auto& railSizes = snapshots.back().instSizeList;
+            if (std::find(railSizes.begin(), railSizes.end(), 1U) != railSizes.end()) {
+                HCCL_ERROR(
+                    "[PhysicalLevel][Connectivity][Disconnected] singleton rail has no cross-pod peer, "
+                    "rank[%u], userRankSize[%u], railLayer[%u]",
+                    myRank, rankSize, railLayer);
+                return HCCL_E_NOT_SUPPORT;
+            }
+        }
+
         // 分区已校验总和为rankSize, 只有一个实例即覆盖全域。具体算法所需链路仍由建链检查。
         if (rankSize == 1 || std::any_of(snapshots.begin(), snapshots.end(), [rankSize](const NetLayerSnapshot& layer) {
                 return layer.instSizeList.size() == 1 && layer.instSizeList.front() == rankSize;
             })) {
             return HCCL_SUCCESS;
+        }
+        if (railLayer != INVALID_UINT) {
+            // 轨层解析保证L1和实际最高层分别是Pod和轨。
+            return ValidateRailConnectivity(snapshots, snapshots[1], snapshots.back(), myRank, rankSize);
         }
         const NetLayerSnapshot* pod = nullptr;
         const NetLayerSnapshot* rail = nullptr;
@@ -395,12 +422,8 @@ namespace {
             return HCCL_SUCCESS;
         }
         for (const auto& layer : snapshots) {
-            if (layer.netLayer < POD_NET_LAYER
-                && !std::includes(
-                    pod->localRanks.begin(), pod->localRanks.end(), layer.localRanks.begin(), layer.localRanks.end())) {
-                HCCL_ERROR(
-                    "[PhysicalLevel][Connectivity] layer[%u] exceeds local pod, rank[%u]", layer.netLayer, myRank);
-                return HCCL_E_PARA;
+            if (layer.netLayer < POD_NET_LAYER) {
+                CHK_RET(ValidateServerInPod(layer, *pod, myRank));
             }
         }
         return ValidateRailConnectivity(snapshots, *pod, *rail, myRank, rankSize);
@@ -586,12 +609,15 @@ HcclResult BuildPhysicalLevels(HcclComm comm, TopoInfoWithNetLayerDetails* topoI
             topoInfo->userRankSize),
         HCCL_E_PARA);
 
-    // 两类错误均直接失败: 必需元数据缺失/非法; 完整分区证明连接数量上限不足。
-    // 后者已否证物理连通性, legacy算法不能补出不存在的跨分区连接, 因此不保留兜底。
+    // 元数据错误和已证明的断网在选择算法前直接返回。
     // 仅视图表达限制可在后续降级; 无法判定连通性的拓扑继续匹配与建链。
     std::vector<NetLayerSnapshot> snapshots;
     CHK_RET(FetchNetLayerSnapshots(comm, topoInfo, snapshots));
-    CHK_RET(ValidatePhysicalConnectivity(snapshots, topoInfo->userRank, topoInfo->userRankSize));
+    const u32 railLayer = ResolveRailNetLayer(topoInfo->netLayerDetails);
+    if (railLayer != INVALID_UINT) {
+        CHK_RET(ValidateServerInPod(snapshots.front(), snapshots[1], topoInfo->userRank));
+    }
+    CHK_RET(ValidatePhysicalConnectivity(snapshots, railLayer, topoInfo->userRank, topoInfo->userRankSize));
 
     // 在临时对象中构建, 全部校验通过后再赋值; 降级或失败时physicalLevels保持为空
     std::vector<PhysicalLevelInfo> candidates;
@@ -599,10 +625,10 @@ HcclResult BuildPhysicalLevels(HcclComm comm, TopoInfoWithNetLayerDetails* topoI
 
     HcclResult ret = BuildPhysicalLevelCandidates(comm, topoInfo, snapshots, candidates);
     if (ret == HCCL_SUCCESS) {
-        ret = NormalizePhysicalLevels(candidates, topoInfo->userRank, topoInfo->userRankSize, levels);
+        ret = NormalizePhysicalLevels(candidates, topoInfo->userRank, topoInfo->userRankSize, railLayer, levels);
     }
     if (ret == HCCL_SUCCESS) {
-        ret = ValidatePhysicalLevels(levels, topoInfo->userRank, topoInfo->userRankSize);
+        ret = ValidatePhysicalLevels(levels, topoInfo->userRank, topoInfo->userRankSize, railLayer);
     }
     if (ret != HCCL_SUCCESS) {
         // 仅保留物理视图构建/表达限制的降级; 前面的结构校验错误已直接返回。

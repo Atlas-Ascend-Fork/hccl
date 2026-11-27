@@ -11,6 +11,7 @@
 #ifndef OPS_HCCL_SRC_OPS_INC_COLL_ALG_PARAM
 #define OPS_HCCL_SRC_OPS_INC_COLL_ALG_PARAM
 
+#include <algorithm>
 #include <cstddef>
 #include <string>
 #include <vector>
@@ -46,7 +47,7 @@ constexpr u32 HCCL_LOGIC_TOPO_LEVEL_NUM = 4; // HCCL逻辑拓扑层级最多4级
 // physicalLevels的条目数上界。
 constexpr u32 PHYSICAL_LEVEL_NUM_LIMIT = 10;
 
-// 物理网络层身份, 不是算法层号或层数。稀疏层号不改变语义, layer3不自动视为轨层。
+// 物理网络层身份, 不随算法层号或层数改变。RAIL_NET_LAYER用于保留既有L2匹配规则。
 // 编号在topo_host.h中与HcclNetLayer编译期绑定, 此处不反向包含该头文件。
 constexpr u32 SERVER_NET_LAYER = 0;
 constexpr u32 POD_NET_LAYER = 1;
@@ -199,6 +200,25 @@ struct NetLayerDetails {
     std::vector<std::vector<u32>> instSizeListOfLayer;
     std::vector<u32> localNetInsSizeOfLayer;
 };
+
+// 跨Pod分轨要求至少三个实际网络层，且Server和Pod均有分区；实际最高层有多个实例时为轨层。
+inline u32 ResolveRailNetLayer(const NetLayerDetails& details)
+{
+    const auto& layers = details.netLayers;
+    const auto& instanceCounts = details.netInstNumOfLayer;
+    if (layers.size() < TOPO_LEVEL_NUM_3 || instanceCounts.size() <= POD_NET_LAYER
+        || instanceCounts[SERVER_NET_LAYER] <= 1 || instanceCounts[POD_NET_LAYER] <= 1
+        || std::find(layers.begin(), layers.end(), SERVER_NET_LAYER) == layers.end()
+        || std::find(layers.begin(), layers.end(), POD_NET_LAYER) == layers.end()) {
+        return INVALID_UINT;
+    }
+    const u32 highestLayer = *std::max_element(layers.begin(), layers.end());
+    if (highestLayer <= POD_NET_LAYER || highestLayer >= instanceCounts.size() || instanceCounts[highestLayer] <= 1) {
+        return INVALID_UINT;
+    }
+    return highestLayer;
+}
+
 struct TopoInstDetails {
     u32 topoInstNum;
     std::vector<u32> sizeOfTopo;

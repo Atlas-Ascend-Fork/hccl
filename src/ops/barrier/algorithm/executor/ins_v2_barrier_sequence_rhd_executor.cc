@@ -114,16 +114,22 @@ namespace {
 
     TopoAttrs MakeBarrierRhdTopo(u8 levelNum, bool hostDpu, OpExecuteConfig engine, std::vector<AlgoType> algoTypes)
     {
+        const bool allowRail = levelNum == BARRIER_TWO_LEVELS && !hostDpu;
         TopoAttrs topo;
         topo.minTopoLevelNum = levelNum;
-        topo.maxTopoLevelNum = levelNum;
+        topo.maxTopoLevelNum = allowRail ? HCCL_LOGIC_TOPO_LEVEL_NUM : levelNum;
         topo.supportLevel0Topos = LEVEL0_TOPO_MESH_1D;
         topo.isHostDpuOnly = hostDpu;
         topo.supportDevTypes = {HcclDevType::DEV_TYPE_950};
         // 在选型阶段预检分组和端点位置，条件不满足时回退到默认选路。
-        topo.topoPrecondCheck = [levelNum, hostDpu, engine,
+        topo.topoPrecondCheck = [levelNum, hostDpu, engine, allowRail,
                                  algoTypes = std::move(algoTypes)](const TopoInfoWithNetLayerDetails* topoInfo) {
             if (topoInfo == nullptr) {
+                return false;
+            }
+            const u32 railLayer = allowRail ? ResolveAicpuRailNetLayer(topoInfo) : INVALID_UINT;
+            const bool isRail = railLayer != INVALID_UINT;
+            if (topoInfo->topoLevelNums != levelNum && !isRail) {
                 return false;
             }
             AlgAttrs attrs;
@@ -152,6 +158,9 @@ namespace {
                     return false;
                 }
                 const auto& physical = topo.physicalLevels[physicalIdx];
+                if (isRail && level == levelNum - 1 && physical.ref.netLayer != railLayer) {
+                    return false;
+                }
                 if (hostDpu && level == levelNum - 1) {
                     if (physical.locType != ENDPOINT_LOC_TYPE_HOST
                         || std::find(

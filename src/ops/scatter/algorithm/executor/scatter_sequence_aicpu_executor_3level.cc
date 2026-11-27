@@ -11,6 +11,7 @@
 #include "scatter_sequence_aicpu_executor_3level.h"
 #include "cost_model.h"
 #include "aicpu_temp_scatter_mesh_1D_Z_axis_detour.h"
+#include "ins_temp_scatter_mesh_1D.h"
 #include "ins_temp_scatter_nhr.h"
 #include "ins_temp_scatter_rhd.h"
 #include "alg_attrs_registry.h"
@@ -22,6 +23,26 @@ namespace ops_hccl {
 constexpr u32 SEQUENCE_EXECUTOR_LEVEL_NUM = 3;
 // 两级 sequence 仅在大数据量使能(对齐运行态语义): totalSize > 4GB
 constexpr u64 SCATTER_SEQUENCE_SIZE_THRESHOLD = 4ULL * 1024 * 1024 * 1024;
+
+namespace {
+    // 分轨拓扑专用二级匹配：将物理L0和L1合为逻辑L0 Mesh，最高轨层对应逻辑L1。
+    class ScatterRailTwoLevelMatcher : public TopoMatchBaseV2 {
+    public:
+        std::string Describe() const override { return "Scatter rail two-level matcher."; }
+
+        HcclResult MatchTopo(
+            TopoInfoWithNetLayerDetails* topoInfo, AlgHierarchyInfoForAllLevel& algHierarchyInfo,
+            const AlgAttrs& algAttrs) override
+        {
+            CHK_PTR_NULL(topoInfo);
+            const u32 railLayer = ResolveAicpuRailNetLayer(topoInfo);
+            if (railLayer == INVALID_UINT || algAttrs.algoTypes.size() != ALGO_LEVEL_NUM_TWO) {
+                return HCCL_E_NOT_SUPPORT;
+            }
+            return MatchRailHierarchy(*topoInfo, algHierarchyInfo, algAttrs, railLayer);
+        }
+    };
+} // namespace
 
 template <typename AlgTopoMatch, typename InsAlgTemplate0, typename InsAlgTemplate1, typename InsAlgTemplate2>
 ScatterSequenceAicpu3LevelExecutor<
@@ -500,12 +521,17 @@ ScatterSequenceAicpu3LevelExecutor<AlgTopoMatch, InsAlgTemplate0, InsAlgTemplate
     u32 physIdxLevel0 = static_cast<u32>(physIdx[0][0]);
     u32 physIdxLevel1 = (physIdx.size() > 1) ? static_cast<u32>(physIdx[1][0]) : physIdxLevel0;
     u32 physIdxLevel2 = (physIdx.size() > 2) ? static_cast<u32>(physIdx[2][0]) : physIdxLevel0;
+    CommTopo netTypeLevel0 = GetPhysicalLevelTopoType(topoInfo, physIdxLevel0);
     CommTopo netTypeLevel1 = GetPhysicalLevelTopoType(topoInfo, physIdxLevel1);
     CommTopo netTypeLevel2 = GetPhysicalLevelTopoType(topoInfo, physIdxLevel2);
+    std::vector<u32> portNumLevel0 = GetPhysicalLevelPortNums(topoInfo, physIdxLevel0);
     std::vector<u32> portNumLevel1 = GetPhysicalLevelPortNums(topoInfo, physIdxLevel1);
     std::vector<u32> portNumLevel2 = GetPhysicalLevelPortNums(topoInfo, physIdxLevel2);
+    const AlgAttrs algAttrs = GetAlgoMeta(algName != nullptr ? algName : "");
+    const bool useLevel0MeshCost = algAttrs.algoTypes.size() == ALGO_LEVEL_NUM_TWO
+                                   && algAttrs.algoTypes[0] == AlgoType::MESH && algAttrs.algoTypes[1] == AlgoType::NHR;
     // 匹配层链路降级(portNums 为空)时算法不参与 costmodel(与其余算子统一口径)
-    if (portNumLevel1.empty() || portNumLevel2.empty()) {
+    if (portNumLevel1.empty() || portNumLevel2.empty() || (useLevel0MeshCost && portNumLevel0.empty())) {
         HCCL_WARNING("[ScatterSequenceAicpu3LevelExecutor][CalcCostCoeff] portNum is empty");
         return {};
     }
@@ -515,16 +541,17 @@ ScatterSequenceAicpu3LevelExecutor<AlgTopoMatch, InsAlgTemplate0, InsAlgTemplate
         rankSizeLevel0, rankSizeLevel1, rankSizeLevel2, rankSize, static_cast<int>(skipLevel1),
         static_cast<int>(skipLevel2));
     std::vector<CostModelParam> params = [rankSizeLevel0, rankSizeLevel1, rankSizeLevel2, rankSize, skipLevel1,
-                                          skipLevel2, portNumLevel1, portNumLevel2, netTypeLevel1, netTypeLevel2,
-                                          isPod] {
+                                          skipLevel2, portNumLevel0, portNumLevel1, portNumLevel2, netTypeLevel0,
+                                          netTypeLevel1, netTypeLevel2, isPod, useLevel0MeshCost] {
         std::vector<CostModelParam> v;
+        // MeshConcur 的 L0 模板按 CLOS 分量取 L1；纯 Mesh 模板应取实际 L0 平面。
+        const CommTopo meshNetType = useLevel0MeshCost ? netTypeLevel0 : netTypeLevel1;
+        const std::vector<u32>& meshPortNum = useLevel0MeshCost ? portNumLevel0 : portNumLevel1;
         if (skipLevel1 && skipLevel2) {
             // 单级退化：仅 level0 mesh 一段，处理全量（数据流等价 SoleMesh）。
-            // p0 为 ZAxis 模板: portNum/netType 均按其 CLOS 分量口径注入 level1
-            // (单级退化时 level1 兜底为 level0, mesh 形态自然退化为单通道)
             auto p0 = InsAlgTemplate0::CalcCostCoeff(CalcCostCoeffParam{
-                rankSizeLevel0, 1.0f, netTypeLevel1, BufferType::INPUT, BufferType::OUTPUT, BufferType::HCCL_BUFFER,
-                portNumLevel1, isPod});
+                rankSizeLevel0, 1.0f, meshNetType, BufferType::INPUT, BufferType::OUTPUT, BufferType::HCCL_BUFFER,
+                meshPortNum, isPod});
             if (p0.empty()) {
                 HCCL_WARNING(
                     "[ScatterSequenceAicpu3LevelExecutor] CalcCostCoeff incomplete (single level, p0=%zu).", p0.size());
@@ -539,8 +566,8 @@ ScatterSequenceAicpu3LevelExecutor<AlgTopoMatch, InsAlgTemplate0, InsAlgTemplate
             // buffer 对齐运行态 OrchestrateLoop：L0 INPUT→HCCL_BUFFER（仅 root PreCopy），
             // L1 HCCL_BUFFER→OUTPUT（仅 PostCopy）
             auto p0 = InsAlgTemplate0::CalcCostCoeff(CalcCostCoeffParam{
-                rankSizeLevel0, 1.0f * rankSizeLevel1, netTypeLevel1, BufferType::INPUT, BufferType::HCCL_BUFFER,
-                BufferType::HCCL_BUFFER, portNumLevel1, isPod});
+                rankSizeLevel0, 1.0f * rankSizeLevel1, meshNetType, BufferType::INPUT, BufferType::HCCL_BUFFER,
+                BufferType::HCCL_BUFFER, meshPortNum, isPod});
             auto p1 = InsAlgTemplate1::CalcCostCoeff(CalcCostCoeffParam{
                 rankSizeLevel1, 1.0f * rankSizeLevel2, netTypeLevel1, BufferType::HCCL_BUFFER, BufferType::OUTPUT,
                 BufferType::HCCL_BUFFER, portNumLevel1, isPod});
@@ -559,10 +586,10 @@ ScatterSequenceAicpu3LevelExecutor<AlgTopoMatch, InsAlgTemplate0, InsAlgTemplate
         // buffer 对齐运行态 OrchestrateLoop：L0 INPUT→HCCL_BUFFER（仅 root PreCopy），
         // L1 HCCL_BUFFER→HCCL_BUFFER（scratch 中转，无 PreCopy/PostCopy），
         // L2 HCCL_BUFFER→OUTPUT（仅 PostCopy）
-        // Step1: 框内 Scatter（level0 mesh，发 L1·L2 份；ZAxis 模板按 CLOS 分量口径注 level1 netType）
+        // Step1: 框内 Scatter（level0 mesh，发 L1·L2 份）
         auto p0 = InsAlgTemplate0::CalcCostCoeff(CalcCostCoeffParam{
-            rankSizeLevel0, 1.0f * rankSizeLevel1 * rankSizeLevel2, netTypeLevel1, BufferType::INPUT,
-            BufferType::HCCL_BUFFER, BufferType::HCCL_BUFFER, portNumLevel1, isPod});
+            rankSizeLevel0, 1.0f * rankSizeLevel1 * rankSizeLevel2, meshNetType, BufferType::INPUT,
+            BufferType::HCCL_BUFFER, BufferType::HCCL_BUFFER, meshPortNum, isPod});
         // Step2: 框间 Scatter（level1 NHR，发 L2 份）
         auto p1 = InsAlgTemplate1::CalcCostCoeff(CalcCostCoeffParam{
             rankSizeLevel1, 1.0f * rankSizeLevel2, netTypeLevel1, BufferType::HCCL_BUFFER, BufferType::HCCL_BUFFER,
@@ -638,6 +665,16 @@ REGISTER_ALG_ATTRS(
         u64 totalSize = perRankSize * topo->userRankSize;
         return totalSize > SCATTER_SEQUENCE_SIZE_THRESHOLD;
     });
+
+// 特殊场景算法：用于至少三层物理分轨拓扑的AICPU路径。
+// rail matcher 将物理L0和L1压缩为逻辑L0 Mesh，最高轨层对应逻辑L1 NHR；
+// 与常规三级 AICPU 算法共同参与 cost 竞争，准入不附加数据量软门槛。
+REGISTER_EXEC_V2_MULTI(
+    HcclCMDType::HCCL_CMD_SCATTER, AicpuScatterSequenceMeshNHR, ScatterSequenceAicpu3LevelExecutor,
+    ScatterRailTwoLevelMatcher, InsTempScatterMesh1D, InsTempScatterNHR, InsTempScatterNHR);
+REGISTER_ALG_ATTRS(AicpuScatterSequenceMeshNHR, topo.minTopoLevelNum = TOPO_LEVEL_NUM_3;
+                   topo.maxTopoLevelNum = HCCL_LOGIC_TOPO_LEVEL_NUM; topo.supportLevel0Topos = LEVEL0_TOPO_MESH_1D;
+                   topo.isSupportLevel1Nhr = true; topo.topoPrecondCheck = IsAicpuRailTopology;);
 
 // Scatter RHD（AICPU 家族，preferred-only）：L0 绕路 + L1/L2 设备侧 RHD 模板。
 // topoCustomCheck 恒 false：未配置 HCCL_ALGO 时被默认选路（软策略）过滤，显式配置后软策略

@@ -109,28 +109,28 @@ namespace {
         return std::includes(outer.begin(), outer.end(), inner.begin(), inner.end());
     }
 
-    HcclResult ValidateRanges(const std::vector<PhysicalLevelInfo>& levels, bool hasLayer2Partition)
+    bool HasValidRanges(const std::vector<PhysicalLevelInfo>& levels, u32 railLayer)
     {
+        const bool allowLegacyCrossing = HasLayer2Partition(levels);
         for (size_t idx = 1; idx < levels.size(); idx++) {
             const auto& lower = levels[idx - 1];
             const auto& upper = levels[idx];
             // Normalize已排序; 此处也供ValidatePhysicalLevels直接校验外部输入。
-            if (hasLayer2Partition && upper.ref.netLayer < lower.ref.netLayer) {
-                return HCCL_E_NOT_SUPPORT;
+            if ((railLayer != INVALID_UINT || allowLegacyCrossing) && upper.ref.netLayer < lower.ref.netLayer) {
+                return false;
             }
-            // layer2多实例时保留可能的交叉范围, 不据此决定是否使用分轨算法。
-            // 同netLayer内仍须成链; layer0/1仍维持Server属于超节点的约束。
-            // 这是物理来源目录的约束, 各算法匹配器仍须检查自己消费的来源能承载算法组。
-            if (hasLayer2Partition && lower.ref.netLayer != upper.ref.netLayer
-                && upper.ref.netLayer >= RAIL_NET_LAYER) {
+            // 保持既有L2交叉规则，并允许进入实际轨层时跨层交叉。同一netLayer内仍须成链。
+            if (lower.ref.netLayer != upper.ref.netLayer
+                && ((railLayer != INVALID_UINT && upper.ref.netLayer == railLayer)
+                    || (allowLegacyCrossing && upper.ref.netLayer >= RAIL_NET_LAYER))) {
                 continue;
             }
             if (!IsSuperSetOf(upper.localRanks, lower.localRanks)) {
-                HCCL_WARNING("[PhysicalLevel] level[%zu] does not contain level[%zu]", idx, idx - 1);
-                return HCCL_E_NOT_SUPPORT;
+                HCCL_DEBUG("[PhysicalLevel] level[%zu] does not contain level[%zu]", idx, idx - 1);
+                return false;
             }
         }
-        return HCCL_SUCCESS;
+        return true;
     }
 
 } // namespace
@@ -155,7 +155,8 @@ bool CommAddrEqual(const CommAddr& lhs, const CommAddr& rhs)
 }
 
 HcclResult NormalizePhysicalLevels(
-    std::vector<PhysicalLevelInfo>& candidates, u32 userRank, u32 userRankSize, std::vector<PhysicalLevelInfo>& levels)
+    std::vector<PhysicalLevelInfo>& candidates, u32 userRank, u32 userRankSize, u32 railLayer,
+    std::vector<PhysicalLevelInfo>& levels)
 {
     levels.clear();
     if (userRankSize == 0 || userRank >= userRankSize) {
@@ -195,23 +196,29 @@ HcclResult NormalizePhysicalLevels(
         return HCCL_E_NOT_SUPPORT;
     }
 
-    // 2. layer2多实例时先按netLayer分开以保留物理来源, 其他拓扑按三键排序; 不做合并。
-    //    用sort而非stable_sort:
-    //    LevelLess是全序, 结果与输入顺序无关 —— 输入顺序来自RankGraph的哈希遍历, 本就不可依赖
+    // 2. 优先保留普通匹配使用的层顺序。仅在普通范围校验失败时按实际轨层组织视图。
+    const auto sortLevels = [&validCands](bool sortByNetLayer) {
+        std::sort(validCands.begin(), validCands.end(), [sortByNetLayer](const auto& lhs, const auto& rhs) {
+            if (sortByNetLayer && lhs.ref.netLayer != rhs.ref.netLayer) {
+                return lhs.ref.netLayer < rhs.ref.netLayer;
+            }
+            return LevelLess(lhs, rhs);
+        });
+    };
     const bool hasLayer2Partition = HasLayer2Partition(validCands);
-    std::sort(validCands.begin(), validCands.end(), [hasLayer2Partition](const auto& lhs, const auto& rhs) {
-        if (hasLayer2Partition && lhs.ref.netLayer != rhs.ref.netLayer) {
-            return lhs.ref.netLayer < rhs.ref.netLayer;
+    sortLevels(hasLayer2Partition);
+    bool validRanges = HasValidRanges(validCands, INVALID_UINT);
+    if (!validRanges && railLayer != INVALID_UINT) {
+        if (!hasLayer2Partition) {
+            sortLevels(true);
         }
-        return LevelLess(lhs, rhs);
-    });
-    levels = std::move(validCands);
-
-    // 3. 保留layer2多实例时的真实交叉范围, 算法匹配器再校验所选来源能承载算法组。
-    if (ValidateRanges(levels, hasLayer2Partition) != HCCL_SUCCESS) {
-        levels.clear();
+        validRanges = HasValidRanges(validCands, railLayer);
+    }
+    if (!validRanges) {
+        HCCL_WARNING("[PhysicalLevel][Normalize] invalid physical level ranges, rank[%u]", userRank);
         return HCCL_E_NOT_SUPPORT;
     }
+    levels = std::move(validCands);
 
     HCCL_INFO("[PhysicalLevel][Normalize] rank[%u] got [%zu] levels", userRank, levels.size());
     return HCCL_SUCCESS;
@@ -384,7 +391,8 @@ namespace {
 
 } // namespace
 
-HcclResult ValidatePhysicalLevels(const std::vector<PhysicalLevelInfo>& levels, u32 userRank, u32 userRankSize)
+HcclResult
+ValidatePhysicalLevels(const std::vector<PhysicalLevelInfo>& levels, u32 userRank, u32 userRankSize, u32 railLayer)
 {
     // 不变量1
     if (userRankSize == 0 || userRank >= userRankSize) {
@@ -404,11 +412,11 @@ HcclResult ValidatePhysicalLevels(const std::vector<PhysicalLevelInfo>& levels, 
         }
     }
 
-    HcclResult ret = ValidateRanges(levels, HasLayer2Partition(levels));
-    if (ret == HCCL_SUCCESS) {
-        ret = ValidateUniqueSource(levels);
+    if (!HasValidRanges(levels, INVALID_UINT) && (railLayer == INVALID_UINT || !HasValidRanges(levels, railLayer))) {
+        HCCL_WARNING("[PhysicalLevel][Validate] invalid physical level ranges, rank[%u]", userRank);
+        return HCCL_E_NOT_SUPPORT;
     }
-    return ret;
+    return ValidateUniqueSource(levels);
 }
 
 } // namespace ops_hccl

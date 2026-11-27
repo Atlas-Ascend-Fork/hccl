@@ -120,15 +120,16 @@ HcclResult TopoMatchThreeLevel::MatchTopo(
 
     // 存在当前引擎可用的DEVICE全域来源时走普通匹配, 否则按全局分区选择分轨布局。
     // 不以各rank本地匹配的成败切换路径。
-    // HOSTCPU使用Host全域来源, 由ResolveMapping排除轨层并校验Host包含链。
-    if (ShouldUseRailHierarchy(physicalLevels, algAttrs.engine, userRankSize)) {
-        return MatchRailHierarchy(*topoInfo, algHierarchyInfo, algAttrs);
+    // HOSTCPU使用全域HOST来源，并沿用L2多实例时的裁剪和包含关系校验。
+    const u32 railLayer = ResolveRailNetLayer(topoInfo->netLayerDetails);
+    if (ShouldUseRailHierarchy(physicalLevels, algAttrs.engine, userRankSize, railLayer)) {
+        return MatchRailHierarchy(*topoInfo, algHierarchyInfo, algAttrs, railLayer);
     }
     HcclResult ret = HCCL_SUCCESS;
     // 引擎过滤 + 锚点匹配 + 分段 + 最高层校验
     std::vector<u32> effIdx;
     std::vector<u32> pIndices;
-    ret = ResolveMapping(physicalLevels, algAttrs, userRankSize, effIdx, pIndices);
+    ret = ResolveMapping(physicalLevels, algAttrs, userRankSize, effIdx, pIndices, railLayer);
     if (ret != HCCL_SUCCESS) {
         return ret;
     }
@@ -161,10 +162,11 @@ HcclResult TopoMatchThreeLevel::MatchTopo(
     CHK_PRT_RET(
         ret != HCCL_SUCCESS, HCCL_WARNING("[TopoMatchThreeLevel] ValidateGroup level2 failed: hcclRet -> %d", ret),
         HcclResult::HCCL_E_NOT_SUPPORT);
-    // layer2多实例可能与Pod交叉。普通路径的中间组仍须落在所选来源内。
+    // 普通路径的中间组须落在所选来源内。HostDPU沿用L2多实例时的检查。
     const auto& level1Ranks = physicalLevels[phys1].localRanks;
-    if (HasLayer2Partition(physicalLevels)
-        && !std::includes(level1Ranks.begin(), level1Ranks.end(), group1.begin(), group1.end())) {
+    const bool checkGroupScope = HasLayer2Partition(physicalLevels)
+                                 || (algAttrs.engine != OpExecuteConfig::HOSTCPU && railLayer != INVALID_UINT);
+    if (checkGroupScope && !std::includes(level1Ranks.begin(), level1Ranks.end(), group1.begin(), group1.end())) {
         HCCL_INFO("[TopoMatchThreeLevel] Rank [%u], level1 group exceeds its physical source.", myRank);
         return HCCL_E_NOT_SUPPORT;
     }

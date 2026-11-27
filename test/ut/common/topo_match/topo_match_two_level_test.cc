@@ -24,6 +24,83 @@ protected:
     TopoMatchTwoLevel matcher_;
 };
 
+TEST_F(TopoMatchTwoLevelTest, RailRequiresThreeActualLayersAndAnOutermostPartition)
+{
+    NetLayerDetails details{};
+    details.netLayers = {0, 1};
+    details.netInstNumOfLayer = {4, 2};
+    EXPECT_EQ(ResolveRailNetLayer(details), INVALID_UINT);
+
+    details.netLayers = {0, 3};
+    details.netInstNumOfLayer = {4, 0, 0, 4};
+    EXPECT_EQ(ResolveRailNetLayer(details), INVALID_UINT);
+
+    details.netLayers = {0, 1, 2, 3};
+    details.netInstNumOfLayer = {4, 2, 4, 1};
+    EXPECT_EQ(ResolveRailNetLayer(details), INVALID_UINT);
+}
+
+TEST_F(TopoMatchTwoLevelTest, RailBindsHighestLayerForSparseAndFourLayerTopologies)
+{
+    for (const bool hasIntermediateLayer : {false, true}) {
+        auto topo = MakeTopoInfo(
+            0, 8,
+            {
+                MakeLevel(Range(2), PhysicalLevelView::GLOBAL, {2, 2, 2, 2}),
+                MakeLevel(Range(4), PhysicalLevelView::GLOBAL, {4, 4}, true, COMM_TOPO_1DMESH),
+                MakeLevel({0, 4}, PhysicalLevelView::GLOBAL, {2, 2, 2, 2}),
+            });
+        topo.physicalLevels[0].ref.netLayer = 0;
+        topo.physicalLevels[1].ref.netLayer = 1;
+        topo.physicalLevels[2].ref.netLayer = 3;
+        topo.netLayerDetails.netLayers = {0, 1, 3};
+        topo.netLayerDetails.netInstNumOfLayer = {4, 2, 0, 4};
+        if (hasIntermediateLayer) {
+            auto middle = MakeLevel({0, 5}, PhysicalLevelView::GLOBAL, {2, 2, 2, 2});
+            middle.ref.netLayer = 2;
+            topo.physicalLevels.insert(topo.physicalLevels.begin() + 2, std::move(middle));
+            topo.netLayerDetails.netLayers = {0, 1, 2, 3};
+            topo.netLayerDetails.netInstNumOfLayer[2] = 4;
+        }
+        topo.physicalLevelNum = static_cast<u32>(topo.physicalLevels.size());
+        topo.netLayerDetails.netLayerNum = static_cast<u32>(topo.netLayerDetails.netLayers.size());
+        topo.topoLevelNums = topo.netLayerDetails.netLayerNum;
+
+        EXPECT_EQ(ResolveAicpuRailNetLayer(&topo), 3U);
+        AlgHierarchyInfoForAllLevel info;
+        ASSERT_EQ(matcher_.MatchTopo(&topo, info, MakeProfile({AlgoType::MESH, AlgoType::NHR})), HCCL_SUCCESS);
+        ASSERT_EQ(info.infos.size(), 2U);
+        EXPECT_EQ(info.infos[1][0], (std::vector<u32>{0, 4}));
+        ASSERT_EQ(info.physicalIdxForAlgoLevels.size(), 2U);
+        ASSERT_FALSE(info.physicalIdxForAlgoLevels[1].empty());
+        const auto railIdx = static_cast<u32>(info.physicalIdxForAlgoLevels[1][0]);
+        ASSERT_LT(railIdx, topo.physicalLevels.size());
+        EXPECT_EQ(topo.physicalLevels[railIdx].ref.netLayer, 3U);
+    }
+}
+
+TEST_F(TopoMatchTwoLevelTest, RailCountLimitAppliesToAlgorithmCandidate)
+{
+    auto topo = MakeTopoInfo(
+        0, 34,
+        {
+            MakeLevel({0}, PhysicalLevelView::GLOBAL, std::vector<u32>(34, 1)),
+            MakeLevel(Range(17), PhysicalLevelView::GLOBAL, {17, 17}, true, COMM_TOPO_1DMESH),
+            MakeLevel({0, 17}, PhysicalLevelView::GLOBAL, std::vector<u32>(17, 2)),
+        });
+    for (u32 layer = 0; layer < topo.physicalLevels.size(); ++layer) {
+        topo.physicalLevels[layer].ref.netLayer = layer;
+    }
+    topo.netLayerDetails.netLayers = {0, 1, 2};
+    topo.netLayerDetails.netInstNumOfLayer = {34, 2, 17};
+    topo.netLayerDetails.netLayerNum = 3;
+    topo.topoLevelNums = 3;
+
+    EXPECT_EQ(ResolveRailNetLayer(topo.netLayerDetails), 2U);
+    AlgHierarchyInfoForAllLevel info;
+    EXPECT_EQ(matcher_.MatchTopo(&topo, info, MakeProfile({AlgoType::MESH, AlgoType::NHR})), HCCL_E_NOT_SUPPORT);
+}
+
 // d0=3、d1=4：仅 HD 所在的框间维度要求为 2 的整数次幂
 TEST_F(TopoMatchTwoLevelTest, HdPowerOfTwoInterDimWithNonPowerOfTwoIntraDim)
 {
