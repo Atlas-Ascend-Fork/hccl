@@ -141,11 +141,11 @@ HcclResult InsTempAllGatherMesh1D1DZAxisDetour::CalcRes(
     level1ChannelNumPerRank_ = level1Channels.empty() ? 0 : CalcChannelsPerRank(level1Channels);
     channelsPerRank_ = level0ChannelNumPerRank_ + level1ChannelNumPerRank_;
     std::vector<HcclChannelDesc> mergedChannels;
-    HCCL_INFO("level0Channels[%zu]level1Channels[%zu]\n", level0Channels.size(), level1Channels.size());
+    HCCL_INFO("level0Channels[%zu] level1Channels[%zu]", level0Channels.size(), level1Channels.size());
     mergedChannels.insert(mergedChannels.end(), level0Channels.begin(), level0Channels.end());
     mergedChannels.insert(mergedChannels.end(), level1Channels.begin(), level1Channels.end());
     resourceRequest.channels.push_back(mergedChannels);
-    HCCL_INFO("mergedChannels[%zu]\n", mergedChannels.size());
+    HCCL_INFO("mergedChannels[%zu]", mergedChannels.size());
 
     if (subCommRanks_.size() <= COMM_LEVEL0) {
         return HCCL_E_PARA;
@@ -171,7 +171,7 @@ HcclResult InsTempAllGatherMesh1D1DZAxisDetour::CalcDataSplitByPortGroup(
     std::vector<u64>& elemCountOut, std::vector<u64>& sizeOut, std::vector<u64>& elemOffset)
 {
     HCCL_INFO(
-        "[InsTempAllGatherMesh1D1DZAxisDetour][CalcDataSplitByPortGroup] Run Start[%u][%u][%u]\n",
+        "[InsTempAllGatherMesh1D1DZAxisDetour][CalcDataSplitByPortGroup] Run Start[%u][%u][%u]",
         level0ChannelNumPerRank_, level1ChannelNumPerRank_, templateRankSize_);
     // Thread resources use the maximum channel count; split data by this peer's actual channels.
     const u32 level1ChannelNum

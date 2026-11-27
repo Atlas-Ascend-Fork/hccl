@@ -1521,7 +1521,7 @@ HcclResult HcclExecOp(
             CHK_RET(HcclThreadAcquireWithStream(
                 comm, param.engine, param.stream, resCtxHost->notifyNumOnMainThread, &thread));
             if (resCtxHost->threads.empty()) {
-                HCCL_ERROR("[%s] reused threads is empty after DeSerialize, cannot overwrite main thread.", __func__);
+                HCCL_ERROR("[%s] reused threads are empty after DeSerialize, cannot overwrite main thread.", __func__);
                 return HCCL_E_UNAVAIL;
             }
             resCtxHost->threads[0] = thread;
@@ -2480,7 +2480,7 @@ static HcclResult HcclGetAicpuThread(
         CHK_RET(SaveUnfoldThreadInfo(comm, param, resCtxHost->unfoldThread));
     }
     HCCL_INFO("[HcclGetThread] unfoldThread [%lu]", resCtxHost->unfoldThread);
-    HCCL_DEBUG("threads ptr is %p\n", threads.data());
+    HCCL_DEBUG("threads ptr is %p", threads.data());
     for (u32 i = 0; i < threadNum; i++) {
         resCtxHost->threads.push_back(threads[i]);
     }
@@ -2565,8 +2565,7 @@ HcclResult GeGetThread(
         u32 threadNum = resRequest.slaveThreadNum;
         if (threadNum > slaveStreams) {
             HCCL_ERROR(
-                "Thread Num Should less than slave streams. slaveStreams[%llu], threadNums[%llu]", slaveStreams,
-                threadNum);
+                "Thread Num Should less than slave streams. slaveStreams[%u], threadNums[%u]", slaveStreams, threadNum);
             return HCCL_E_UNAVAIL;
         }
 
@@ -4258,7 +4257,7 @@ HcclResult HcclAllocAlgResourceAiv(
     uint64_t cclBufferSize;
     // 从通信域获取CCL buffer
     CHK_RET(HcclGetHcclBuffer(comm, &cclBufferAddr, &cclBufferSize));
-    HCCL_INFO("[%s]local cclBufferAddr[%p] cclBufferSize[%llu]", __func__, cclBufferAddr, cclBufferSize);
+    HCCL_INFO("[%s]local cclBufferAddr[%p] cclBufferSize[%llu bytes]", __func__, cclBufferAddr, cclBufferSize);
     resCtxHost->cclMem = HcclMem{HCCL_MEM_TYPE_DEVICE, cclBufferAddr, cclBufferSize};
 
     buffersIn[resCtxHost->topoInfo.userRank] = cclBufferAddr;
@@ -4316,7 +4315,7 @@ HcclResult HcclAllocAlgResourceAiv(
             uint64_t remoteBufferSize;
             CHK_RET(HcclChannelGetHcclBuffer(comm, levelNChannels[idx], &remoteBufferAddr, &remoteBufferSize));
             HCCL_INFO(
-                "[%s]remoteRank[%u] cclBufferAddr[%p] cclBufferSize[%llu]", __func__, channelDesc.remoteRank,
+                "[%s]remoteRank[%u] cclBufferAddr[%p] cclBufferSize[%llu bytes]", __func__, channelDesc.remoteRank,
                 remoteBufferAddr, remoteBufferSize);
             buffersIn[channelDesc.remoteRank] = remoteBufferAddr;
 
@@ -4625,7 +4624,7 @@ HcclResult SingleRankProc(HcclComm comm, OpParam& param)
     } else {
         len = DATATYPE_SIZE_TABLE[param.DataDes.dataType] * param.DataDes.count;
     }
-    HCCL_INFO("[%s] sendBuf[%p], recvBuf[%p], len[%llu]", __func__, param.inputPtr, param.outputPtr, len);
+    HCCL_INFO("[%s] sendBuf[%p], recvBuf[%p], len[%llu bytes]", __func__, param.inputPtr, param.outputPtr, len);
     if (len > 0) {
         ThreadHandle cpuTsThread{0};
         CHK_RET(HcclThreadAcquireWithStream(comm, COMM_ENGINE_CPU_TS, param.stream, 1, &cpuTsThread));
@@ -4916,7 +4915,7 @@ HcclRegistryBuff(HcclComm comm, const char* memTag, void* bufferPtr, uint64_t bu
     CHK_PTR_NULL(memHandle);
     CommMem regMem{COMM_MEM_TYPE_DEVICE, bufferPtr, bufferSize};
     CHK_RET(HcclCommMemReg(comm, memTag, &regMem, memHandle));
-    HCCL_INFO("[%s] regMemAddr[%p] regMemSize[%llu]", __func__, regMem.addr, regMem.size);
+    HCCL_INFO("[%s] regMemAddr[%p] regMemSize[%llu bytes]", __func__, regMem.addr, regMem.size);
     CHK_PTR_NULL(*memHandle);
     return HCCL_SUCCESS;
 }

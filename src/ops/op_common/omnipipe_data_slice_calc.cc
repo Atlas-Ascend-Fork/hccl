@@ -1161,7 +1161,7 @@ OmniPipeSliceInfo CalcAGOmniPipeSliceInfo(OmniPipeSliceParam& omniPipeSliceParam
 
         HCCL_INFO(
             "[CalcAGOmniPipeSliceInfo] "
-            "xInCornerStep=[%u],yRanyInCornerStepkSize=[%u],zConnerStep=[%u],",
+            "xInCornerStep=[%u],yInCornerStep=[%u],zConnerStep=[%u],",
             xInCornerStep, yInCornerStep, zConnerStep);
     } else {
         HCCL_INFO("[CalcAGOmniPipeSliceInfo] xyB<=zB");
@@ -1201,7 +1201,7 @@ OmniPipeSliceInfo CalcAGOmniPipeSliceInfo(OmniPipeSliceParam& omniPipeSliceParam
         }
         HCCL_INFO(
             "[CalcAGOmniPipeSliceInfo] "
-            "xInCornerStep=[%u],yRanyInCornerStepkSize=[%u],zConnerStep=[%u],",
+            "xInCornerStep=[%u],yInCornerStep=[%u],zConnerStep=[%u],",
             xInCornerStep, yInCornerStep, zConnerStep);
     }
     // z是慢轴，n-1步同轴+1步斜对角

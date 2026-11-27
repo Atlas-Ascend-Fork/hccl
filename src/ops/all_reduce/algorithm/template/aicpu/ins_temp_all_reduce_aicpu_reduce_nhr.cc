@@ -175,7 +175,7 @@ HcclResult InsTempAllReduceAicpuReduceNHR::KernelRun(
 
 HcclResult InsTempAllReduceAicpuReduceNHR::CalcSlice(u64 chunkSize)
 {
-    HCCL_INFO("[InsTempAllReduceAicpuReduceNHR] rank[%d] CalcSlice start", chunkSize);
+    HCCL_INFO("[InsTempAllReduceAicpuReduceNHR] chunkSize[%llu] CalcSlice start", chunkSize);
     // 按 rank 切分数据
     sliceInfoVec_ = RankSliceInfo(templateRankSize_);
 
@@ -187,7 +187,7 @@ HcclResult InsTempAllReduceAicpuReduceNHR::CalcSlice(u64 chunkSize)
         u64 currChunkSize = std::min<u64>(dataSize - accumOff, chunkSize);
         sliceInfoVec_[rankIdx].emplace_back(SliceInfo{accumOff, currChunkSize});
         HCCL_DEBUG(
-            "[InsTempAllReduceAicpuReduceNHR] rankIdx [%d] CalcSlice accumOff[%u], currChunkSize[%u]", rankIdx,
+            "[InsTempAllReduceAicpuReduceNHR] rankIdx [%d] CalcSlice accumOff[%llu], currChunkSize[%llu]", rankIdx,
             accumOff, currChunkSize);
         accumOff += currChunkSize;
     }

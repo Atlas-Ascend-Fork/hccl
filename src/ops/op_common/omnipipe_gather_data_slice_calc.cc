@@ -111,7 +111,7 @@ void CalcGatherStepDataAndOffset(GatherSliceContext& ctx)
         }
     }
     HCCL_INFO(
-        "[CalcGatherOmniPipeSliceInfo] xInCornerStep=[%d],yInCornerStep=[%d],zConnerStep=[%d]", ctx.xInCornerStep,
+        "[CalcGatherOmniPipeSliceInfo] xInCornerStep=[%d],yInCornerStep=[%d],zCornerStep=[%d]", ctx.xInCornerStep,
         ctx.yInCornerStep, ctx.zCornerStep);
 }
 

@@ -75,7 +75,7 @@ HcclResult InsTempBarrierNHRDPU::KernelRun(
     } else {
         // 转换成 eager-mode，保障 AICPU 指令下发执行完成
         if (HcommBatchModeEnd(param.algTag) != HCCL_SUCCESS) {
-            HCCL_ERROR("[InsTempBarrierNHRDPU] failed set eager mode, tag is %s.", param.algTag);
+            HCCL_ERROR("[InsTempBarrierNHRDPU] failed to set eager mode, tag is %s.", param.algTag);
             return HCCL_E_INTERNAL;
         }
 
@@ -118,7 +118,7 @@ HcclResult InsTempBarrierNHRDPU::KernelRun(
         }
 
         if (HcommBatchModeStart(param.algTag) != HCCL_SUCCESS) {
-            HCCL_ERROR("[InsTempBarrierNHRDPU] failed set batch mode, tag is %s.", param.algTag);
+            HCCL_ERROR("[InsTempBarrierNHRDPU] failed to set batch mode, tag is %s.", param.algTag);
             return HCCL_E_INTERNAL;
         }
     }

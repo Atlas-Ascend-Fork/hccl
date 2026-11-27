@@ -198,7 +198,7 @@ HcclResult InsTempReduceScatterVMesh1D::RunReduceScatterV(
         return HCCL_E_INTERNAL;
     }
     for (size_t i = 0; i < allRankProcessSize_.size(); ++i) {
-        HCCL_INFO("Rank %zu has process size: %llu", i, allRankProcessSize_[i]);
+        HCCL_INFO("Rank %zu has process size: %llu bytes", i, allRankProcessSize_[i]);
     }
     u64 dataTypeSize = DATATYPE_SIZE_TABLE[dataType_];
     u32 peers = templateRankSize_ > 1 ? templateRankSize_ - 1 : 1;

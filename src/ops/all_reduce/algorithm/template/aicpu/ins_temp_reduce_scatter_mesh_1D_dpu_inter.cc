@@ -120,7 +120,7 @@ HcclResult InsTempReduceScatterMesh1dDpuInter::KernelRun(
     } else {
         // 转换成eager-mode，保障AICPU指令下发执行完成
         if (HcommBatchModeEnd(param.algTag) != HCCL_SUCCESS) {
-            HCCL_ERROR("[InsTempReduceScatterMesh1dDpuInter] failed set eager mode, tag is %s.", param.algTag);
+            HCCL_ERROR("[InsTempReduceScatterMesh1dDpuInter] failed to set eager mode, tag is %s.", param.algTag);
             return HCCL_E_INTERNAL;
         }
 
@@ -159,7 +159,7 @@ HcclResult InsTempReduceScatterMesh1dDpuInter::KernelRun(
 
         // 将执行模式转换回到batch
         if (HcommBatchModeStart(param.algTag) != HCCL_SUCCESS) {
-            HCCL_ERROR("[InsTempReduceScatterMesh1dDpuInter] failed set batch mode, tag is %s.", param.algTag);
+            HCCL_ERROR("[InsTempReduceScatterMesh1dDpuInter] failed to set batch mode, tag is %s.", param.algTag);
             return HCCL_E_INTERNAL;
         }
         HCCL_INFO("[InsTempReduceScatterMesh1dDpuInter] HcommWaitResponse run over, recvMsgId[%u]", recvMsgId);
@@ -190,7 +190,7 @@ HcclResult InsTempReduceScatterMesh1dDpuInter::RunDpuTransfer(
     if (iter != rankIds.end()) {
         myAlgRank = std::distance(rankIds.begin(), iter);
     } else {
-        HCCL_ERROR("[InsTempReduceScatterMesh1dDpuInter][RunReduceScatter] rankIds or myRank is error.");
+        HCCL_ERROR("[InsTempReduceScatterMesh1dDpuInter][RunReduceScatter] rankIds or myRank is invalid.");
         return HCCL_E_INTERNAL;
     }
     HCCL_DEBUG("[InsTempReduceScatterMesh1dDpuInter][sliceNum]: [%zu] ", tempAlgParams.allRankSliceSize.size());
@@ -291,7 +291,7 @@ HcclResult InsTempReduceScatterMesh1dDpuInter::PostLocalReduce(
     if (iter != rankIds.end()) {
         myAlgRank = std::distance(rankIds.begin(), iter);
     } else {
-        HCCL_ERROR("[InsTempReduceScatterMesh1dDpuInter][RunReduceScatter] rankIds or myRank_ is error.");
+        HCCL_ERROR("[InsTempReduceScatterMesh1dDpuInter][RunReduceScatter] rankIds or myRank_ is invalid.");
         return HCCL_E_INTERNAL;
     }
     HCCL_INFO("[InsTempReduceScatterMesh1dDpuInter][PostCopy], copy from scratch to output");

@@ -99,7 +99,7 @@ HcclResult InsTempAllReduceNHR::CalcRes(
     }
     GetRes(resourceRequest);
 
-    HCCL_INFO("[InsTempAllReduceNHR] Calculate resource finished.");
+    HCCL_INFO("[InsTempAllReduceNHR] Calculate resource finished. ");
     return HcclResult::HCCL_SUCCESS;
 }
 
@@ -173,7 +173,7 @@ HcclResult InsTempAllReduceNHR::KernelRun(
     rankList_ = subCommRanks_.at(0);
     CHK_PRT_RET(
         rankList_.size() != templateRankSize_,
-        HCCL_ERROR("[InsTempAllReduceNHR][KernelRun] rank count is invalid in rank list.", myRank_),
+        HCCL_ERROR("[InsTempAllReduceNHR][KernelRun] rank count is invalid in rank list, myRank[%u].", myRank_),
         HcclResult::HCCL_E_INTERNAL);
 
     // 获取当前rank在rank列表中的序号

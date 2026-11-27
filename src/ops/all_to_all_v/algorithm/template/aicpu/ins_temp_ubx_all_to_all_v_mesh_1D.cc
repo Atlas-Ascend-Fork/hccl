@@ -271,8 +271,8 @@ HcclResult InsTempUBXAllToAllVMesh1D::CheckPathNum(TemplateResource& templateRes
         HCCL_INFO("myRank is [%u], targetRank is [%u], linkNum is [%u] ", myAlgRank_, rank, linkNumSendRecv);
         if (linkNumSendRecv > maxPathNum_) {
             HCCL_ERROR(
-                "myRank is [%u], targetRank is [%u], linkNum is [%u], linkNum should not bigger than [%u]", myAlgRank_,
-                rank, linkNumSendRecv, maxPathNum_);
+                "myRank is [%u], targetRank is [%u], linkNum is [%u], linkNum should not be bigger than [%u]",
+                myAlgRank_, rank, linkNumSendRecv, maxPathNum_);
             return HcclResult::HCCL_E_NOT_SUPPORT;
         }
     }
@@ -687,7 +687,7 @@ HcclResult InsTempUBXAllToAllVMesh1D::InitParam(
     if (iter != subCommRanks_[0].end()) {
         myAlgRank_ = std::distance(subCommRanks_[0].begin(), iter);
     } else {
-        HCCL_ERROR("[InsTempUBXAllToAllVMesh1D][InitParam] subCommRanks_ or myRank_ is error.");
+        HCCL_ERROR("[InsTempUBXAllToAllVMesh1D][InitParam] subCommRanks_ or myRank_ is invalid.");
         return HCCL_E_INTERNAL;
     }
 

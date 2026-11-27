@@ -161,7 +161,7 @@ InsV2ReduceOmniPipeExecutor<AlgTopoMatch, CcuRsAlgTemplateX, CcuRsAlgTemplateY, 
 
     HCCL_INFO(
         "[%s] algName[%s] axes[%llu,%llu] rsStep[%llu] rsMaxStep[%d] gatherStep[%llu] gatherMaxStep[%d] "
-        "sched2dCost[%d] rsDataRatio[%f,%f] rsPlanBandwidth[%f,%f] gatherPlanBandwidth[%f,%f] gatherBxy[%f] "
+        "sched2dCost[%d] rsDataRatio[%f,%f] rsPlanBandwidth[%f,%f GB/s] gatherPlanBandwidth[%f,%f GB/s] gatherBxy[%f] "
         "transferCoeff[%e,%e] Ufixed[%f] A[%e] B[%e] C[%e].",
         __func__, algName, meshRankSize, closRankSize, rsCost.stepNum, rsCost.reachesMaxStep, gatherCost.stepNum,
         gatherCost.reachesMaxStep, useSched2dCost, rsCost.meshDataRatio, rsCost.closDataRatio,
@@ -499,8 +499,8 @@ InsV2ReduceOmniPipeExecutor<AlgTopoMatch, CcuRsAlgTemplateX, CcuRsAlgTemplateY, 
     eqBwLevel1G = rankSizeLevel1_ > 1 ? eqBwLevel1G / (rankSizeLevel1_ - 1) : eqBwLevel1G;
     endpointAttrBwAvgG = {eqBwLevel0G, eqBwLevel1G, 1.0};
     HCCL_DEBUG(
-        "[%s] eqBwLevel0RS:%f, eqBwLevel1RS:%f, eqBwLevel0G:%f, eqBwLevel1G:%f", __func__, eqBwLevel0RS, eqBwLevel1RS,
-        eqBwLevel0G, eqBwLevel1G);
+        "[%s] eqBwLevel0RS:%f GB/s, eqBwLevel1RS:%f, eqBwLevel0G:%f, eqBwLevel1G:%f", __func__, eqBwLevel0RS,
+        eqBwLevel1RS, eqBwLevel0G, eqBwLevel1G);
     return HCCL_SUCCESS;
 }
 template <
@@ -609,7 +609,7 @@ InsV2ReduceOmniPipeExecutor<AlgTopoMatch, CcuRsAlgTemplateX, CcuRsAlgTemplateY, 
     u64 perLoopSize = multiLoopAllRankSplitData[0][0] * dataTypeSize_;
     perLoopSize = dataSize_ > perLoopSize ? perLoopSize : dataSize_;
     HCCL_DEBUG(
-        "[%s] perLoopSize[%u] dataSize_[%u] allRankSplitData[%u]", __func__, perLoopSize, dataSize_,
+        "[%s] perLoopSize[%llu] dataSize_[%llu] allRankSplitData[%llu]", __func__, perLoopSize, dataSize_,
         allRankSplitData[myRank_]);
     std::vector<u64> dataSizePerLoop(rankSize_, perLoopSize);
     std::vector<u64> dataWholeSize(rankSize_, allRankSplitData[myRank_] * dataTypeSize_);
@@ -647,7 +647,7 @@ InsV2ReduceOmniPipeExecutor<AlgTopoMatch, CcuRsAlgTemplateX, CcuRsAlgTemplateY, 
             sliceParam.endpointAttrBw = endpointAttrBwAvgG;
             omniPipeSliceInfoG = CalcGatherOmniPipeSliceInfo(sliceParam);
             HCCL_DEBUG(
-                "[%s] endpointAttrBwAvgRS0:%f, endpointAttrBwAvgRS1:%f, "
+                "[%s] endpointAttrBwAvgRS0:%f GB/s, endpointAttrBwAvgRS1:%f, "
                 "endpointAttrBwAvgG0:%f, endpointAttrBwAvgG1:%f",
                 __func__, endpointAttrBwAvgRS[0], endpointAttrBwAvgRS[1], endpointAttrBwAvgG[0], endpointAttrBwAvgG[1]);
         }

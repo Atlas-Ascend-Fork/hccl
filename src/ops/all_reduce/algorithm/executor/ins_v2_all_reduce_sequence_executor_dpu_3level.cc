@@ -563,7 +563,7 @@ HcclResult InsV2AllReduceSequenceExecutorDpu3Level<
         HCCL_E_INTERNAL);
     if (channelLevelIdx >= remoteRankToChannelInfo_.size()) {
         HCCL_ERROR(
-            "[InsV2AllReduceSequenceExecutorDpu3Level][GenTempResource] channelLevelIdx[%u] should be lower"
+            "[InsV2AllReduceSequenceExecutorDpu3Level][GenTempResource] channelLevelIdx[%u] should be lower "
             "than remoteRankToChannelInfo_.size()[%zu]",
             channelLevelIdx, remoteRankToChannelInfo_.size());
         return HCCL_E_INTERNAL;

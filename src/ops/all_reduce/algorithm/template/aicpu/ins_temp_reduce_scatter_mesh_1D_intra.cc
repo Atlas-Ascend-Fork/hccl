@@ -131,7 +131,7 @@ HcclResult InsTempReduceScatterMesh1DIntra::PostCopy(
     if (iter != subCommRanks_[0].end()) {
         rankIdx = std::distance(subCommRanks_[0].begin(), iter);
     } else {
-        HCCL_ERROR("[InsTempReduceScatterMesh1DIntra][PostCopy] subCommRanks_ or myRank_ is error.");
+        HCCL_ERROR("[InsTempReduceScatterMesh1DIntra][PostCopy] subCommRanks_ or myRank_ is invalid.");
         return HCCL_E_INTERNAL;
     }
     // 如果是单算子模式, 并且是最后一步算子，需要将数据从 cclBuffer 拷贝到 userOut
@@ -175,7 +175,7 @@ HcclResult InsTempReduceScatterMesh1DIntra::RunReduceScatter(
     if (iter != subCommRanks_[0].end()) {
         myAlgRank = std::distance(subCommRanks_[0].begin(), iter);
     } else {
-        HCCL_ERROR("[InsTempReduceScatterMesh1DIntra][RunReduceScatter] subCommRanks_ or myRank_ is error.");
+        HCCL_ERROR("[InsTempReduceScatterMesh1DIntra][RunReduceScatter] subCommRanks_ or myRank_ is invalid.");
         return HCCL_E_INTERNAL;
     }
 

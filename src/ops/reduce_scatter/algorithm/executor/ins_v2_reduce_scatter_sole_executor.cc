@@ -214,7 +214,7 @@ HcclResult InsV2ReduceScatterSoleExecutor<AlgTopoMatch, InsAlgTemplate>::Orchest
     u64 maxDataSizePerLoop = 0;
     maxTmpMemSize_ = tempAlgParams.buffInfo.hcclBuff.size;
     u64 transportBoundDataSize = (param.engine == CommEngine::COMM_ENGINE_AICPU_TS) ? maxTmpMemSize_ : UB_MAX_DATA_SIZE;
-    HCCL_INFO("[InsV2ReduceScatterSoleExecutor]maxTmpMemSize_ [%llu]", maxTmpMemSize_);
+    HCCL_INFO("[InsV2ReduceScatterSoleExecutor]maxTmpMemSize_ [%llu bytes]", maxTmpMemSize_);
     if (templateScratchMultiplier != 0) {
         u64 scratchBoundDataSize
             = maxTmpMemSize_ / templateScratchMultiplier / HCCL_MIN_SLICE_ALIGN * HCCL_MIN_SLICE_ALIGN;
@@ -225,8 +225,9 @@ HcclResult InsV2ReduceScatterSoleExecutor<AlgTopoMatch, InsAlgTemplate>::Orchest
     // 单次循环处理的数据量大小
     u64 maxDataCountPerLoop = maxDataSizePerLoop / dataTypeSize_;
     HCCL_INFO(
-        "[InsV2ReduceScatterSoleExecutor][OrchestrateOpbase] maxDataCountPerLoop[%llu], maxDataSizePerLoop[%llu], "
-        "transportBoundDataSize[%llu], templateScratchMultiplier[%llu]",
+        "[InsV2ReduceScatterSoleExecutor][OrchestrateOpbase] maxDataCountPerLoop[%llu], maxDataSizePerLoop[%llu "
+        "bytes], "
+        "transportBoundDataSize[%llu bytes], templateScratchMultiplier[%llu]",
         maxDataCountPerLoop, maxDataSizePerLoop, transportBoundDataSize, templateScratchMultiplier);
     CHK_PRT_RET(
         maxDataCountPerLoop == 0,
@@ -306,7 +307,8 @@ HcclResult InsV2ReduceScatterSoleExecutor<AlgTopoMatch, InsAlgTemplate>::FastLau
     u64 size = CcuFastLaunchCtx::GetCtxSize(threadNum, ccuKernelNum);
     // 申请ctx
     void* ctxPtr = nullptr;
-    HCCL_INFO("[InsV2ReduceScatterSoleExecutor][HcclEngineCtxCreate] Tag[%s], size[%llu]", param.fastLaunchTag, size);
+    HCCL_INFO(
+        "[InsV2ReduceScatterSoleExecutor][HcclEngineCtxCreate] Tag[%s], size[%llu bytes]", param.fastLaunchTag, size);
     CHK_RET(HcclEngineCtxCreate(param.hcclComm, param.fastLaunchTag, CommEngine::COMM_ENGINE_CCU, size, &ctxPtr));
 
     CcuFastLaunchCtx* ccuFastLaunchCtx = reinterpret_cast<CcuFastLaunchCtx*>(ctxPtr);

@@ -724,7 +724,7 @@ HcclResult ReduceSequenceExecutorAicpu3Level<
     algTemplate->GetRes(req);
     if (channelLevelIdx >= remoteRankToChannelInfo_.size()) {
         HCCL_ERROR(
-            "[ReduceSequenceExecutorAicpu3Level][GenTempResource] channelLevelIdx[%u] should be lower"
+            "[ReduceSequenceExecutorAicpu3Level][GenTempResource] channelLevelIdx[%u] should be lower "
             "than remoteRankToChannelInfo_.size()[%zu]",
             channelLevelIdx, remoteRankToChannelInfo_.size());
         return HCCL_E_INTERNAL;

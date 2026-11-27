@@ -626,8 +626,7 @@ HcclResult InsV2ScatterParallelExecutor<AlgTopoMatch, InsAlgTemplate0, InsAlgTem
         return HCCL_SUCCESS;
     }
     HCCL_INFO(
-        "[InsV2ScatterParallelExecutor][HcclEngineCtxCreate] threadNum[%llu], ccuKernelNum[%llu]", threadNum,
-        ccuKernelNum);
+        "[InsV2ScatterParallelExecutor][HcclEngineCtxCreate] threadNum[%u], ccuKernelNum[%u]", threadNum, ccuKernelNum);
 
     std::vector<u32> ccuKernelNumList
         = {ccuKernelLaunchNumIntra0_, ccuKernelLaunchNumInter1_, ccuKernelLaunchNumInter0_, ccuKernelLaunchNumIntra1_};

@@ -214,13 +214,13 @@ HcclResult ScatterExecutorBase::KernelRunLevel1(
     u32 subCommSize = subCommInfo.localRankSize;
     if (subCommSize <= 1 || subRoot != topoInfo_->userRank) {
         HCCL_INFO(
-            "[Scatter][KernelRunLevel1]: no need to run intra-server, subCommSize[%u], subRoot[%u],"
+            "[Scatter][KernelRunLevel1]: no need to run intra-server, subCommSize[%u], subRoot[%u], "
             "userRank[%u]",
             subCommSize, subRoot, topoInfo_->userRank);
         return HCCL_SUCCESS;
     }
     HCCL_INFO(
-        "[Scatter][KernelRunLevel1]: start to run intra-server, subCommSize[%u], subRoot[%u],"
+        "[Scatter][KernelRunLevel1]: start to run intra-server, subCommSize[%u], subRoot[%u], "
         "userRank[%u]",
         subCommSize, subRoot, topoInfo_->userRank);
 

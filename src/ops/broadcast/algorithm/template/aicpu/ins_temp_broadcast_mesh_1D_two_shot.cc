@@ -109,16 +109,16 @@ HcclResult InsTempBroadcastMesh1DTwoShot::CalcDataSliceInfo(const u64 dataSize, 
     u64 chunkSize = RoundUp(dataSize, (templateRankSize_ * dataTypeSize_)) * dataTypeSize_;
 
     HCCL_DEBUG(
-        "[InsTempBroadcastMesh1DTwoShot] CalcDataSliceInfo. myRank[%d] dataSize[%d] rankSize[%d] dataTypeSize[%d] "
-        "chunkSize[%d]",
+        "[InsTempBroadcastMesh1DTwoShot] CalcDataSliceInfo. myRank[%u] dataSize[%llu] rankSize[%u] dataTypeSize[%llu] "
+        "chunkSize[%llu]",
         myRank_, dataSize, templateRankSize_, dataTypeSize_, chunkSize);
     u64 accumOff = 0;
     for (u32 rankIdx = 0; rankIdx < templateRankSize_; rankIdx++) {
         u64 currChunkSize = ((dataSize - accumOff) > chunkSize) ? chunkSize : (dataSize - accumOff);
         SliceInfo slice = {accumOff, currChunkSize};
         HCCL_DEBUG(
-            "[InsTempBroadcastMesh1DTwoShot] CalcDataSliceInfo. myRank[%d] offset[%d] dataSize[%d]", myRank_, accumOff,
-            currChunkSize);
+            "[InsTempBroadcastMesh1DTwoShot] CalcDataSliceInfo. myRank[%u] offset[%llu] dataSize[%llu]", myRank_,
+            accumOff, currChunkSize);
         sliceInfoVec[rankIdx].push_back(slice);
         accumOff += currChunkSize;
     }

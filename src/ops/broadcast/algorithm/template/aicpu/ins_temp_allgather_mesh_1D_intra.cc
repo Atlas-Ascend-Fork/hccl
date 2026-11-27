@@ -216,13 +216,13 @@ HcclResult InsTempAllGatherMesh1DIntra::LocalDataCopy(const std::vector<ThreadHa
         DataSlice dstSlice(tempAlgParams_.buffInfo.outputPtr, outOff, sliceSize, sliceCount);
 
         HCCL_DEBUG(
-            "[InsTempAllGatherMesh1DIntra][LocalCopy] RankID [%d] AlgRank [%d] srcSlice: inBaseOff[%d] inOff[%d]"
-            "sliceSize[%d] count[%d] inBuffType[%d] inputPtr[%u].",
+            "[InsTempAllGatherMesh1DIntra][LocalCopy] RankID [%d] AlgRank [%d] srcSlice: inBaseOff[%llu] inOff[%llu] "
+            "sliceSize[%llu] count[%llu] inBuffType[%d] inputPtr[%p].",
             myRank_, myAlgRank, inBaseOff, inOff, sliceSize, sliceCount, tempAlgParams_.buffInfo.inBuffType,
             tempAlgParams_.buffInfo.inputPtr);
         HCCL_DEBUG(
-            "[InsTempAllGatherMesh1DIntra][LocalCopy] RankID [%d] AlgRank [%d] dstSlice: outBaseoff[%d] "
-            "outOff[%d] sliceSize[%d] count[%d] outBuffType[%d] outputPtr[%u].",
+            "[InsTempAllGatherMesh1DIntra][LocalCopy] RankID [%d] AlgRank [%d] dstSlice: outBaseOff[%llu] "
+            "outOff[%llu] sliceSize[%llu] count[%llu] outBuffType[%d] outputPtr[%p].",
             myRank_, myAlgRank, outBaseOff, outOff, sliceSize, sliceCount, tempAlgParams_.buffInfo.outBuffType,
             tempAlgParams_.buffInfo.outputPtr);
 

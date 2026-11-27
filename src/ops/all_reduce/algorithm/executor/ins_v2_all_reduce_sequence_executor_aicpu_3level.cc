@@ -443,7 +443,7 @@ HcclResult InsV2AllReduceSequenceExecutorAicpu3Level<
     algTemplate->GetRes(req);
     if (channelLevelIdx >= remoteRankToChannelInfo_.size()) {
         HCCL_ERROR(
-            "[InsV2AllReduceSequenceExecutorAicpu3Level][GenTempResource] channelLevelIdx[%u] should be lower"
+            "[InsV2AllReduceSequenceExecutorAicpu3Level][GenTempResource] channelLevelIdx[%u] should be lower "
             "than remoteRankToChannelInfo_.size()[%zu]",
             channelLevelIdx, remoteRankToChannelInfo_.size());
         return HCCL_E_INTERNAL;

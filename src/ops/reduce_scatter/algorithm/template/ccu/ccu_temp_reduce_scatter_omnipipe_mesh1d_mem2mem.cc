@@ -180,7 +180,7 @@ HcclResult CcuTempReduceScatterOmniPipeMesh1DMem2Mem::KernelRun(
             buffInfo_.outputPtr, buffInfo_.outBuffBaseOff, templateDataParams.sliceSize, templateDataParams.count);
         HCCL_DEBUG(
             "[CcuTempReduceScatterOmniPipeMesh1DMem2Mem][%s] myRank[%u] TempLocalCopy inputAddrBase[%llu] "
-            "inputAddrOffset[%llu] outputAddrBase[%llu]"
+            "inputAddrOffset[%llu] outputAddrBase[%llu] "
             "outputAddrOffset[%llu] sliceSize[%llu]",
             __func__, myRank_, inputAddrBase, buffInfo_.inBuffBaseOff, outputAddrBase, buffInfo_.outBuffBaseOff,
             templateDataParams.sliceSize);

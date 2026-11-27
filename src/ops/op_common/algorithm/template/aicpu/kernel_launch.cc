@@ -269,11 +269,11 @@ bool IsOpsV2(const char* algName, HcclDevType deviceType)
 inline HcclResult EnforceLaunchTask(const char* algTag)
 {
     if (HcommBatchModeEnd(algTag) != HCCL_SUCCESS) {
-        HCCL_ERROR("failed set eager mode, tag is %s.", algTag);
+        HCCL_ERROR("failed to set eager mode, tag is %s.", algTag);
         return HCCL_E_INTERNAL;
     }
     if (HcommBatchModeStart(algTag) != HCCL_SUCCESS) {
-        HCCL_ERROR("failed set batch mode, tag is %s.", algTag);
+        HCCL_ERROR("failed to set batch mode, tag is %s.", algTag);
         return HCCL_E_INTERNAL;
     }
     return HCCL_SUCCESS;
@@ -594,7 +594,7 @@ static u32 GetMainThreadAndRegDfx(OpParam* param, const AlgResourceCtxSerializab
     // 获取Device测主thread
     thread = resCtxPtr->threads[0];
     if (HcommBatchModeStart(param->algTag) != HCCL_SUCCESS) {
-        HCCL_ERROR("failed set batch mode, tag is %s.", param->algTag);
+        HCCL_ERROR("failed to set batch mode, tag is %s.", param->algTag);
         return 1;
     }
 
@@ -612,7 +612,7 @@ static u32 GetMainThreadAndRegDfx(OpParam* param, const AlgResourceCtxSerializab
     // 上报上报mainstream数据,第一个任务
     if (HcommProfilingReportKernelStartTask(thread, param->commName) != HCCL_SUCCESS) {
         HCCL_ERROR(
-            "%sfailed to report MainStream And FirstTask, thread %lu, param->commName %s.", __func__, thread,
+            "%s failed to report MainStream And FirstTask, thread %lu, param->commName %s.", __func__, thread,
             param->commName);
         return 1;
     }
@@ -635,7 +635,7 @@ static u32 RunLegacyExecutorPath(OpParam* param, const std::string& algName)
     ThreadHandle exportedAicpuTsThread = resCtx->opThread;
     u32 notifyNumOnMainThread = resCtx->notifyNumOnMainThread;
     if (HcommBatchModeStart(param->algTag) != HCCL_SUCCESS) {
-        HCCL_ERROR("failed set batch mode, tag is %s.", param->algTag);
+        HCCL_ERROR("failed to set batch mode, tag is %s.", param->algTag);
         return 1;
     }
 
@@ -702,7 +702,7 @@ static u32 RunLegacyExecutorPath(OpParam* param, const std::string& algName)
         }
 
         if (HcommBatchModeEnd(param->algTag) != HCCL_SUCCESS) {
-            HCCL_ERROR("failed set eager mode, tag is %s.", param->algTag);
+            HCCL_ERROR("failed to set eager mode, tag is %s.", param->algTag);
             return 1;
         }
 
@@ -717,7 +717,7 @@ static u32 RunLegacyExecutorPath(OpParam* param, const std::string& algName)
         }
 
         if (HcommBatchModeEnd(param->algTag) != HCCL_SUCCESS) {
-            HCCL_ERROR("failed set eager mode, tag is %s.", param->algTag);
+            HCCL_ERROR("failed to set eager mode, tag is %s.", param->algTag);
             return 1;
         }
     }
@@ -831,7 +831,8 @@ extern "C" unsigned int HcclLaunchAicpuKernel(OpParam* param)
         // 打印算子信息用于调试
         static std::atomic<uint64_t> opUnfoldIdx{0};
         HCCL_INFO(
-            "[HcclLaunchAicpuKernel] opUnfoldIdx[%llu] commName[%s] opType[%u] inputPtr[0x%016llx] inputSize[%llu] "
+            "[HcclLaunchAicpuKernel] opUnfoldIdx[%llu] commName[%s] opType[%u] inputPtr[0x%016llx] inputSize[%llu "
+            "bytes] "
             "outputPtr[0x%016llx] outputSize[%llu] opMode[%u] algName[%s] isZeroCopy[%d] opExpanMode[%u] "
             "enableCache[%d]",
             opUnfoldIdx.fetch_add(1, std::memory_order_relaxed), param->commName, static_cast<uint32_t>(param->opType),
@@ -993,7 +994,7 @@ extern "C" unsigned int HcclLaunchAicpuKernel(OpParam* param)
         }
 
         if (HcommBatchModeEnd(param->algTag) != HCCL_SUCCESS) {
-            HCCL_ERROR("failed set eager mode, tag is %s.", param->algTag);
+            HCCL_ERROR("failed to set eager mode, tag is %s.", param->algTag);
             return 1;
         }
     } else {
@@ -1067,7 +1068,7 @@ extern "C" unsigned int HcclLaunchP2pAicpuKernel(void* args)
         // 获取Device测主thread
         ThreadHandle thread = resCtxPtr->threads[0];
         if (HcommBatchModeStart(param->algTag) != HCCL_SUCCESS) {
-            HCCL_ERROR("failed set batch mode, tag is %s.", param->algTag);
+            HCCL_ERROR("failed to set batch mode, tag is %s.", param->algTag);
             return 1;
         }
 
@@ -1128,7 +1129,7 @@ extern "C" unsigned int HcclLaunchP2pAicpuKernel(void* args)
             return 1;
         }
         if (HcommBatchModeEnd(param->algTag) != HCCL_SUCCESS) {
-            HCCL_ERROR("failed set eager mode, tag is %s.", param->algTag);
+            HCCL_ERROR("failed to set eager mode, tag is %s.", param->algTag);
             return 1;
         }
     } else {
@@ -1152,7 +1153,7 @@ HcclResult ops_hccl::RestoreVarDataBatchSendRecv(OpParam& param)
     u64 itemNum = static_cast<u64>(param.batchSendRecvDataDes.itemNum);
     if (param.varMemSize != itemNum * sendRecvItemSize) {
         HCCL_ERROR(
-            "param.varMemSize[%lu] is not equal to itemNum[%lu] multiply [HcclSendRecvItem] size[%lu]."
+            "param.varMemSize[%lu] is not equal to itemNum[%lu] multiply [HcclSendRecvItem] size[%lu]. "
             "Failed to restore end recv info for BatchSendRecv!",
             param.varMemSize, itemNum, sendRecvItemSize);
         return HCCL_E_PARA;
@@ -1335,7 +1336,7 @@ extern "C" unsigned int HcclLaunchAicpuKernelA3(OpParam* param)
         }
 
         if (HcommBatchModeEnd(param->algTag) != HCCL_SUCCESS) {
-            HCCL_ERROR("failed set eager mode, tag is %s.", param->algTag);
+            HCCL_ERROR("failed to set eager mode, tag is %s.", param->algTag);
             return 1;
         }
     } else {

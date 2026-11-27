@@ -323,7 +323,7 @@ SelectorStatus ReduceScatterAutoSelector::SelectMeshAlgoCcuScheduleMesh1D(
     u64 dataSize = opParam.DataDes.count * perDataSize;
     double ratio; // 以8卡为基线确定ratio，用来表示不同卡数对下发的影响系数
     if (topoInfo->userRankSize == 0) {
-        HCCL_WARNING("[ReduceScatterAutoSelector]the selector is not set topoInfo->userRankSize]");
+        HCCL_WARNING("[ReduceScatterAutoSelector] the selector does not set topoInfo->userRankSize.");
         ratio = 1;
     } else {
         ratio = DEFAULT_RANK_SIZE / topoInfo->userRankSize;
@@ -541,7 +541,7 @@ SelectorStatus ReduceScatterAutoSelector::SelectMeshAlgoAicpu(
     u64 dataSize = opParam.DataDes.count * perDataSize;
     double ratio;
     if (topoInfo->userRankSize == 0) {
-        HCCL_WARNING("[ReduceScatterAutoSelector]the selector is not set userRankSize]");
+        HCCL_WARNING("[ReduceScatterAutoSelector] the selector does not set userRankSize.");
         ratio = 1;
     } else {
         ratio = (DEFAULT_RANK_SIZE / topoInfo->userRankSize) * (DEFAULT_RANK_SIZE / topoInfo->userRankSize);

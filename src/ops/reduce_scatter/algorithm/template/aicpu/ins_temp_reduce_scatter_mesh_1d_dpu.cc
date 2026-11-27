@@ -108,7 +108,7 @@ HcclResult InsTempReduceScatterMesh1dDpu::KernelRun(
     } else {
         // 转换成eager-mode，保障AICPU指令下发执行完成
         if (HcommBatchModeEnd(param.algTag) != HCCL_SUCCESS) {
-            HCCL_ERROR("[InsTempReduceScatterMesh1dDpu] failed set eager mode, tag is %s.", param.algTag);
+            HCCL_ERROR("[InsTempReduceScatterMesh1dDpu] failed to set eager mode, tag is %s.", param.algTag);
             return HCCL_E_INTERNAL;
         }
         u32 sendMsgId = 0;
@@ -177,7 +177,7 @@ HcclResult InsTempReduceScatterMesh1dDpu::RunDpuTransfer(
     if (iter != rankIds.end()) {
         myAlgRank = std::distance(rankIds.begin(), iter);
     } else {
-        HCCL_ERROR("[InsTempReduceScatterMesh1dDpu][RunReduceScatter] rankIds or myRank is error.");
+        HCCL_ERROR("[InsTempReduceScatterMesh1dDpu][RunReduceScatter] rankIds or myRank is invalid.");
         return HCCL_E_INTERNAL;
     }
 
@@ -254,7 +254,7 @@ HcclResult InsTempReduceScatterMesh1dDpu::PostLocalReduce(
     if (iter != rankIds.end()) {
         myAlgRank = std::distance(rankIds.begin(), iter);
     } else {
-        HCCL_ERROR("[InsTempReduceScatterMesh1dDpu][PostLocalReduce] rankIds or myRank_ is error.");
+        HCCL_ERROR("[InsTempReduceScatterMesh1dDpu][PostLocalReduce] rankIds or myRank_ is invalid.");
         return HCCL_E_INTERNAL;
     }
     for (u32 repeatIdx = 0; repeatIdx < tempAlgParams.repeatNum; repeatIdx++) {

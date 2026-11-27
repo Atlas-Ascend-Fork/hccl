@@ -425,8 +425,8 @@ HcclResult InsV2ReduceScatterOmniPipe2dExecutor<AlgTopoMatch, InsAlgTempLevel0, 
     eqBwLevel1 = rankSizeLevel1_ > 1 ? eqBwLevel1 / (rankSizeLevel1_ - 1) : eqBwLevel1;
     std::vector<double> endpointAttrBwAvg = {eqBwLevel0, eqBwLevel1, 1.0};
     HCCL_INFO(
-        "[%s] param.opExecuteConfig:%d, eqBwLevel0:%f, eqBwLevel1:%f", __func__, param.opExecuteConfig, eqBwLevel0,
-        eqBwLevel1);
+        "[%s] param.opExecuteConfig:%d, eqBwLevel0:%f GB/s, eqBwLevel1:%f GB/s", __func__, param.opExecuteConfig,
+        eqBwLevel0, eqBwLevel1);
 
     // 2、计算loop
     u64 templateScratchMultiplier = algTemplateLevel0.CalcScratchMultiple(BufferType::DEFAULT, BufferType::DEFAULT);
@@ -473,7 +473,7 @@ HcclResult InsV2ReduceScatterOmniPipe2dExecutor<AlgTopoMatch, InsAlgTempLevel0, 
     OmniPipeSliceInfo tailSliceInfo;
     if (dataCount_ % maxCountPerLoop != 0) {
         u64 lastLoopSize = (dataCount_ % maxCountPerLoop) * dataTypeSize_;
-        HCCL_DEBUG("[%s] lastLoopSize:%d", __func__, lastLoopSize);
+        HCCL_DEBUG("[%s] lastLoopSize:%llu", __func__, lastLoopSize);
         std::vector<u64> dataSizePerLoop(rankSize_, lastLoopSize);
         std::vector<u64> dataWholeSize(rankSize_, dataSize_);
         sliceParam.dataSizePerLoop = dataSizePerLoop;

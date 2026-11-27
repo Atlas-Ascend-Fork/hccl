@@ -276,7 +276,7 @@ HcclResult InsV2AlltoAllVSoleExecutor<AlgTopoMatch, InsAlgTemplate>::Orchestrate
     maxTmpMemSize_ = tempAlgParams.buffInfo.hcclBuff.size;
     u64 transportBoundDataSize = UB_MAX_DATA_SIZE;
     u64 maxDataSizePerLoop = 0;
-    HCCL_INFO("[InsV2AlltoAllVSoleExecutor]maxTmpMemSize_ [%llu]", maxTmpMemSize_);
+    HCCL_INFO("[InsV2AlltoAllVSoleExecutor]maxTmpMemSize_ [%llu bytes]", maxTmpMemSize_);
     if (templateScratchMultiplier != 0) {
         u64 scratchBoundDataSize
             = maxTmpMemSize_ / templateScratchMultiplier / HCCL_MIN_SLICE_ALIGN * HCCL_MIN_SLICE_ALIGN;
@@ -308,8 +308,8 @@ HcclResult InsV2AlltoAllVSoleExecutor<AlgTopoMatch, InsAlgTemplate>::Orchestrate
         tempAlgParams.enableRemoteMemAccess = true;
     }
     HCCL_INFO(
-        "[InsV2AlltoAllVSoleExecutor][OrchestrateOpbase] maxDataCountPerLoop[%llu], maxDataSizePerLoop[%llu], "
-        "transportBoundDataSize[%llu], templateScratchMultiplier[%llu]",
+        "[InsV2AlltoAllVSoleExecutor][OrchestrateOpbase] maxDataCountPerLoop[%llu], maxDataSizePerLoop[%llu bytes], "
+        "transportBoundDataSize[%llu bytes], templateScratchMultiplier[%llu]",
         maxDataCountPerLoop, maxDataSizePerLoop, transportBoundDataSize, templateScratchMultiplier);
     CHK_PRT_RET(
         maxDataCountPerLoop == 0,

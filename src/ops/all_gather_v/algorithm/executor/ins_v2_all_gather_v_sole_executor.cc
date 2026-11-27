@@ -128,7 +128,7 @@ HcclResult InsV2AllGatherVSoleExecutor<AlgTopoMatch, InsAlgTemplate>::Orchestrat
     // allRankDispls保持varData原值（count单位），字节转换由模板侧×dataTypeSize_完成，见template_utils.h单位约定
     HCCL_DEBUG(
         "[InsV2AllGatherVSoleExecutor][OrchestrateLoop] Rank[%u], inputPtr[%#llx] outputPtr[%#llx], "
-        "cclAddr[%#llx], cclSize[%llu]",
+        "cclAddr[%#llx], cclSize[%llu bytes]",
         myRank_, param.inputPtr, param.outputPtr, resCtx.cclMem.addr, resCtx.cclMem.size);
     // 构建template
     std::shared_ptr<InsAlgTemplate> algTemplate

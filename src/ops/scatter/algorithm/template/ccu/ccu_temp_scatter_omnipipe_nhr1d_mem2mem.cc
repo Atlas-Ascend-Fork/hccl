@@ -151,20 +151,20 @@ HcclResult CcuTempScatterOmniPipeNHR1DMem2Mem::LaunchOneRepeat(
         HCCL_DEBUG(
             "[CcuTempScatterOmniPipeNHR1DMem2Mem] myRank_[%u] subCommRootId_[%u] rpt[%u] sliceSize[%llu] "
             "inputOmniSliceSizeVec[%d] = %llu "
-            "isStepone[%d] isLastStep[%d]",
+            "isStepOne[%d] isLastStep[%d]",
             myRank_, subCommRootId_, rpt, sliceSize, i, inputOmniSliceSizeVec[i], isStepOne_, isLastStep_);
     }
     for (uint32_t i = 0; i < inputOmniSliceStrideVec.size(); i++) {
         HCCL_DEBUG(
             "[CcuTempScatterOmniPipeNHR1DMem2Mem] myRank_[%u] subCommRootId_[%u] rpt[%u] sliceSize[%llu] "
             "inputOmniSliceStrideVec[%d] = %llu "
-            "isStepone[%d] isLastStep[%d]",
+            "isStepOne[%d] isLastStep[%d]",
             myRank_, subCommRootId_, rpt, sliceSize, i, inputOmniSliceStrideVec[i], isStepOne_, isLastStep_);
     }
     for (uint32_t i = 0; i < outputOmniSliceStrideVec.size(); i++) {
         HCCL_DEBUG(
             "myRank_[%u] subCommRootId_[%u] rpt[%u] sliceSize[%llu] outputOmniSliceStrideVec[%d] = %llu "
-            "isStepone[%d] isLastStep[%d]",
+            "isStepOne[%d] isLastStep[%d]",
             myRank_, subCommRootId_, rpt, sliceSize, i, outputOmniSliceStrideVec[i], isStepOne_, isLastStep_);
     }
 
@@ -206,7 +206,7 @@ HcclResult CcuTempScatterOmniPipeNHR1DMem2Mem::RunScatterNHRDispatch(
     uint64_t repeatNum = totalPieceNum / peerNum;
     HCCL_DEBUG(
         "[CcuTempScatterOmniPipeNHR1DMem2Mem][%s] myRank[%u] mySubCommRank_[%u] subCommRootId_[%u] ifDoTask_[%d] "
-        "isStepone[%d] isLastStep[%d] "
+        "isStepOne[%d] isLastStep[%d] "
         "repeatNum[%llu]",
         __func__, myRank_, mySubCommRank_, subCommRootId_, ifDoTask_, isStepOne_, isLastStep_, repeatNum);
     for (uint32_t rpt = 0; rpt < repeatNum; ++rpt) {
@@ -247,7 +247,7 @@ HcclResult CcuTempScatterOmniPipeNHR1DMem2Mem::KernelRun(
     }
     uint64_t localCopyFlag = templateDataParams.localCopyFlag;
     HCCL_DEBUG(
-        "[%s] myRank[%u] mySubCommRank_[%u] isStepone[%d] isLastStep[%d] localCopyFlag[%d] start", __func__, myRank_,
+        "[%s] myRank[%u] mySubCommRank_[%u] isStepOne[%d] isLastStep[%d] localCopyFlag[%d] start", __func__, myRank_,
         mySubCommRank_, isStepOne_, isLastStep_, localCopyFlag);
     buffInfo_ = templateDataParams.buffInfo;
     auto stepSliceInfo = templateDataParams.stepSliceInfo;
@@ -308,7 +308,7 @@ void CcuTempScatterOmniPipeNHR1DMem2Mem::BuildSliceInfoVec(
                 = stepSliceInfo.outputOmniPipeSliceStride[myRank_ % xRankSize_][sliceStrideiIndex];
             outputOmniSliceStrideVec.push_back(outputOmniSliceStrideTmp);
             HCCL_DEBUG(
-                "[checkSliceInfo] myrank:%d, mySubCommRank_:%d, ridx:%d, sliceStrideiIndex:%d"
+                "[checkSliceInfo] myrank:%d, mySubCommRank_:%d, ridx:%d, sliceStrideiIndex:%d "
                 "inputOmniSliceSizeTmp:%llu, inputOmniSliceStrideTmp:%llu, outputOmniSliceStrideTmp:%llu",
                 myRank_, mySubCommRank_, ridx, sliceStrideiIndex, inputOmniSliceSizeTmp, inputOmniSliceStrideTmp,
                 outputOmniSliceStrideTmp);

@@ -158,7 +158,7 @@ HcclResult CcuAlgTemplateBase::GetDieInfoFromChannelDescs(
             }
         } else {
             HCCL_ERROR(
-                "[CcuAlgTemplateBase::GetDieNumFromChannelDescs] get channelDescs fail: there are [%zu] link to rank "
+                "[CcuAlgTemplateBase::GetDieNumFromChannelDescs] get channelDescs fail: there are [%zu] links to rank "
                 "[%u]",
                 channels.size(), rmtRankId);
             return HcclResult::HCCL_E_INTERNAL;
@@ -208,7 +208,7 @@ HcclResult CcuAlgTemplateBase::SelectChannelToVec(
             myRankId, rmtRankId, dieId);
     }
     HCCL_INFO(
-        "[CcuAlgTemplateBase::SelectChannelToVec] find channel rank[%u] to rank[%u] on die[%u] succeed."
+        "[CcuAlgTemplateBase::SelectChannelToVec] find channel rank[%u] to rank[%u] on die[%u] succeed. "
         "Index=[%u]",
         myRankId, rmtRankId, dieId, curChannelIdx);
     return HcclResult::HCCL_SUCCESS;

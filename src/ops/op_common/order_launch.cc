@@ -267,7 +267,7 @@ OrderLaunch::HcclOrderLaunchToOrderStream(HcclComm comm, OpParam& param, ThreadH
 {
     const char* modeName = GetOrderLaunchModeName(launchMode_);
     HcclDedicatedThreadType hostThreadType = GetOrderLaunchHostThreadType(launchMode_);
-    HCCL_INFO("[%s]. %s OrderLaunch Phase1 Start, Comm[%p], timeout[%u].", __func__, modeName, comm, execTimeout_);
+    HCCL_INFO("[%s]. %s OrderLaunch Phase1 Start, Comm[%p], timeout[%u s].", __func__, modeName, comm, execTimeout_);
 
     // 准入校验不通过即跳过保序
     if (!OrderLaunchAdmissionCheck(comm, unfoldThread, launchMode_)) {
@@ -321,7 +321,7 @@ OrderLaunch::HcclOrderLaunchToOrderStream(HcclComm comm, OpParam& param, ThreadH
     // 4、notify0
     CHK_RET(static_cast<HcclResult>(HcommThreadNotifyRecordOnThread(hostOrderThread, unfoldThread, notifyIdx)));
     CHK_RET(static_cast<HcclResult>(HcommThreadNotifyWaitOnThread(unfoldThread, notifyIdx, execTimeout_)));
-    HCCL_INFO("[%s]. %s OrderLaunch Phase1 Success, timeout[%u].", __func__, modeName, execTimeout_);
+    HCCL_INFO("[%s]. %s OrderLaunch Phase1 Success, timeout[%u s].", __func__, modeName, execTimeout_);
     return HCCL_SUCCESS;
 }
 
@@ -337,7 +337,7 @@ OrderLaunch::HcclOrderLaunchToOrderStream(HcclComm comm, OpParam& param, ThreadH
 HcclResult OrderLaunch::HcclOrderLaunchToKernelStream(HcclComm comm, u32 notifyIdx)
 {
     const char* modeName = GetOrderLaunchModeName(launchMode_);
-    HCCL_INFO("[%s]. %s OrderLaunch Phase2 Start, Comm[%p], timeout[%u].", __func__, modeName, comm, execTimeout_);
+    HCCL_INFO("[%s]. %s OrderLaunch Phase2 Start, Comm[%p], timeout[%u s].", __func__, modeName, comm, execTimeout_);
 
     // 第一阶段已判定无需保序，直接跳过
     if (!orderLaunchRequired_) {
@@ -359,7 +359,7 @@ HcclResult OrderLaunch::HcclOrderLaunchToKernelStream(HcclComm comm, u32 notifyI
     // 2、wait notify1
     CHK_RET(static_cast<HcclResult>(HcommThreadNotifyWaitOnThread(hostOrderThread, notifyIdx, execTimeout_)));
 
-    HCCL_INFO("[%s]. %s OrderLaunch Phase2 Success.timeout[%u].", __func__, modeName, execTimeout_);
+    HCCL_INFO("[%s]. %s OrderLaunch Phase2 Success.timeout[%u s].", __func__, modeName, execTimeout_);
     return HCCL_SUCCESS;
 }
 } // namespace ops_hccl

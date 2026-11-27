@@ -342,7 +342,7 @@ ScatterSequenceAicpu3LevelExecutor<AlgTopoMatch, InsAlgTemplate0, InsAlgTemplate
     algTemplate->GetRes(req);
     if (channelLevelIdx >= remoteRankToChannelInfo_.size()) {
         HCCL_ERROR(
-            "[ScatterSequenceAicpu3LevelExecutor][GenTempResource] myRank[%u] channelLevelIdx[%u] should be lower"
+            "[ScatterSequenceAicpu3LevelExecutor][GenTempResource] myRank[%u] channelLevelIdx[%u] should be lower "
             "than remoteRankToChannelInfo_.size()[%zu]",
             myRank_, channelLevelIdx, remoteRankToChannelInfo_.size());
         return HCCL_E_INTERNAL;

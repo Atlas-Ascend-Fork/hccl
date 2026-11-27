@@ -446,7 +446,7 @@ HcclResult InsReduceScatterConcurrentExecutor<AlgTopoMatch, InsAlgTemplate0, Ins
         return HCCL_SUCCESS;
     }
     HCCL_INFO(
-        "[InsReduceScatterConcurrentExecutor][HcclEngineCtxCreate] threadNum[%llu], ccuKernelNum[%llu]", threadNum,
+        "[InsReduceScatterConcurrentExecutor][HcclEngineCtxCreate] threadNum[%u], ccuKernelNum[%u]", threadNum,
         ccuKernelNum);
 
     std::vector<u32> ccuKernelNumList

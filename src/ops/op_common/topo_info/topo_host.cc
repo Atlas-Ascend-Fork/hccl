@@ -164,7 +164,7 @@ HcclResult SetSuperPodInfo(HcclComm comm, TopoInfo* topoInfo)
         std::vector<uint32_t> level1SizeListVector(level1SizeList, level1SizeList + level1RankListNum);
         CHK_RET(CalculateServersPerSuperPod(level0SizeListVector, level1SizeListVector, superPodToServerNum));
         for (uint32_t i = 0; i < superPodToServerNum.size(); i++) {
-            HCCL_DEBUG("[SetSuperPodInfo]superpod[%u]: severNum[%u]", i, superPodToServerNum[i]);
+            HCCL_DEBUG("[SetSuperPodInfo]superpod[%u]: serverNum[%u]", i, superPodToServerNum[i]);
         }
         topoInfo->serverNumPerSuperPod = superPodToServerNum[topoInfo->superPodIdx];
         HCCL_DEBUG(
@@ -199,7 +199,7 @@ HcclResult SetSuperPodInfo(HcclComm comm, TopoInfo* topoInfo)
         }
     }
     HCCL_RUN_INFO(
-        "[Set][SuperPodInfo]different surperPod contains different numbers of servers:[%d]",
+        "[Set][SuperPodInfo]different superPod contains different numbers of servers:[%d]",
         topoInfo->multiSuperPodDiffServerNumMode);
 
     // 跨超Server数非对称场景走NHR-HCF算法，该不存在server数不一致场景
@@ -349,7 +349,7 @@ HcclResult GetPairLinkCounter(HcclComm comm, TopoInfo* topoInfo, std::unordered_
                 if (currentLink.header.version >= 1) {
                     // --- 在这里处理 currentLink ---
                     HCCL_DEBUG(
-                        "Link[%u] found between srcRank[%u] and dstRank[%u]:"
+                        "Link[%u] found between srcRank[%u] and dstRank[%u]: "
                         "LinkType: %u, srcEndpointDesc: %u, dstEndpointDesc: %u",
                         i, srcRank, dstRank, currentLink.linkAttr.linkProtocol, currentLink.srcEndpointDesc,
                         currentLink.dstEndpointDesc);
@@ -520,7 +520,7 @@ HcclResult GetModuleIdxByRank(HcclComm comm, uint32_t rank, const TopoInfo* topo
             for (uint32_t i = 0; i < listSize; ++i) {
                 CommLink& currentLink = linkList[i]; // 获取当前循环到的链路对象
 
-                HCCL_DEBUG("  Link[%u] found between srcRank[%u] and dstRank[%u]:", i, srcRank, dstRank);
+                HCCL_DEBUG("  Link[%u] found between srcRank[%u] and dstRank[%u]: ", i, srcRank, dstRank);
                 HCCL_DEBUG("    LinkType: %u", currentLink.linkAttr.linkProtocol);
 
                 if (currentLink.linkAttr.linkProtocol == CommProtocol::COMM_PROTOCOL_HCCS) {
@@ -605,12 +605,16 @@ HcclResult CalcLevel0TopoShape(const HcclComm comm, TopoInfoWithNetLayerDetails*
     u32 netLayer = 0;
     CHK_PRT_RET(
         topoInfo->topoInstDetailsOfLayer.size() <= netLayer,
-        HCCL_ERROR("[BaseSelector][CalcLevel0TopoShape] topoInstNumOfLayer size[%u] <= netLayer[%u]", netLayer),
+        HCCL_ERROR(
+            "[BaseSelector][CalcLevel0TopoShape] topoInstNumOfLayer size[%zu] <= netLayer[%u]",
+            topoInfo->topoInstDetailsOfLayer.size(), netLayer),
         HCCL_E_INTERNAL);
     TopoInstDetails& level0TopoInstDetails = topoInfo->topoInstDetailsOfLayer[netLayer];
     CHK_PRT_RET(
         topoInfo->netLayerDetails.localNetInsSizeOfLayer.size() <= netLayer,
-        HCCL_ERROR("[BaseSelector][CalcLevel0TopoShape] localNetInsSizeOfLayer size[%u] <= netLayer[%u]", netLayer),
+        HCCL_ERROR(
+            "[BaseSelector][CalcLevel0TopoShape] localNetInsSizeOfLayer size[%zu] <= netLayer[%u]",
+            topoInfo->netLayerDetails.localNetInsSizeOfLayer.size(), netLayer),
         HCCL_E_INTERNAL);
     u32 level0LocalRankSize = topoInfo->netLayerDetails.localNetInsSizeOfLayer[netLayer];
 
@@ -982,7 +986,7 @@ HcclResult CalcHostDPUOnly(HcclComm comm, TopoInfoWithNetLayerDetails* topoInfo)
                 EndpointDesc endPointDesc = endPointDescs[endPointIdx];
                 if (endPointDesc.loc.locType == ENDPOINT_LOC_TYPE_DEVICE) {
                     HCCL_INFO(
-                        "[CalcHostDPUOnly] Not using hostdpu because there is links on device in netLayer[%u] in "
+                        "[CalcHostDPUOnly] Not using hostdpu because there are links on device in netLayer[%u] in "
                         "endPointIdx[%u]",
                         netLayer, endPointIdx);
                     return HCCL_SUCCESS;
@@ -1283,7 +1287,7 @@ HcclResult CalcLevel0MeshType(HcclComm comm, TopoInfoWithNetLayerDetails* topoIn
     }
     if (dieLinkCounter[0] == 0 || dieLinkCounter[1] == 0) {
         topoInfo->level0MeshType = Level0MeshType::SINGLE_DIE;
-        HCCL_INFO("[Topo][CalcLevel0MeshType] one of the die have 0 links. Level 0 is 1DieFullMesh.");
+        HCCL_INFO("[Topo][CalcLevel0MeshType] one of the dies has 0 links. Level 0 is 1DieFullMesh.");
         return HCCL_SUCCESS;
     }
     HCCL_INFO("[Topo][CalcLevel0MeshType] Level 0 is 2DieFullMesh.");

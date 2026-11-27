@@ -270,7 +270,8 @@ HcclResult CcuTempReduceScatterNHR1DMem2Mem::SplitDataFor2Dies(
     }
     die1Size = sliceSize - die0Size;
     HCCL_INFO(
-        "[CcuTempReduceScatterNHR1DMem2Mem::SplitDataFor2Dies] die0Size = %llu, die1Size = %llu", die0Size, die1Size);
+        "[CcuTempReduceScatterNHR1DMem2Mem::SplitDataFor2Dies] die0Size = %llu bytes, die1Size = %llu bytes", die0Size,
+        die1Size);
     return HcclResult::HCCL_SUCCESS;
 }
 
@@ -283,7 +284,7 @@ HcclResult CcuTempReduceScatterNHR1DMem2Mem::KernelRun(
     u32 kernelNum = templateResource.ccuKernels.size();
 
     if (templateDataParams.sliceSize == 0 && templateDataParams.tailSize == 0) {
-        HCCL_INFO("[CcuTempReduceScatterNHR1DMem2Mem] sliceSize is 0, no need do, just success.");
+        HCCL_INFO("[CcuTempReduceScatterNHR1DMem2Mem] sliceSize is 0, no need to do, just return success.");
         return HCCL_SUCCESS;
     }
     uint64_t die0Size = 0;
@@ -316,9 +317,9 @@ HcclResult CcuTempReduceScatterNHR1DMem2Mem::KernelRun(
     uint64_t isInputOutputEqual
         = (inputAddr + currentRankSliceInputOffset == outputAddr + currentRankSliceOutputOffset) ? 1 : 0;
     HCCL_INFO(
-        "[CcuTempReduceScatterNHR1DMem2Mem] TaskArgs: dimSize[%llu], die0Size[%llu], die1Size[%llu],"
-        "die0LastSliceSize[%llu], die1LastSliceSize[%llu], inputAddr[%llu],"
-        "outputAddr[%llu], repeatNum[%llu], inputSliceStride[%llu], outputSliceStride[%llu],"
+        "[CcuTempReduceScatterNHR1DMem2Mem] TaskArgs: dimSize[%llu], die0Size[%llu], die1Size[%llu], "
+        "die0LastSliceSize[%llu], die1LastSliceSize[%llu], inputAddr[%llu], "
+        "outputAddr[%llu], repeatNum[%llu], inputSliceStride[%llu], outputSliceStride[%llu], "
         "inputRepeatStride[%llu], outputRepeatStride[%llu]",
         templateRankSize_, die0Size, die1Size, die0LastSliceSize, die1LastSliceSize, inputAddr, outputAddr, repeatNum,
         inputSliceStride, outputSliceStride, inputRepeatStride, outputRepeatStride);

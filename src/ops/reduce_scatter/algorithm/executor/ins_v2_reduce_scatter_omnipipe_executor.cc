@@ -204,8 +204,8 @@ InsV2ReduceScatterOmniPipeExecutor<AlgTopoMatch, InsAlgTemplate0, InsAlgTemplate
 
     HCCL_INFO(
         "[InsV2ReduceScatterOmniPipeExecutor][%s] algName[%s] axes[%llu,%llu,%llu] steps[%llu,%llu] "
-        "planBandwidth[%f,%f] "
-        "costBandwidth[%f,%f] xyBandwidth[%f] thirdPlanBandwidth[%f] meshFanoutBandwidth[%f] meshFanoutPath[%d]"
+        "planBandwidth[%f,%f GB/s] "
+        "costBandwidth[%f,%f GB/s] xyBandwidth[%f] thirdPlanBandwidth[%f] meshFanoutBandwidth[%f] meshFanoutPath[%d]"
         "innerMax[%d] outerMax[%d] thirdIsOuterSlow[%d] transferCoeff[%f] Ufixed[%f] A[%e] B[%e] C[%e].",
         __func__, algName, axes.mesh, axes.clos, axes.third, xyStepNum, thirdStepNum, meshBandwidth, closBandwidth,
         costMeshBandwidth, costClosBandwidth, xyBandwidth, thirdPlanBandwidth, meshFanoutBandwidth, meshFanoutPath,

@@ -21,8 +21,8 @@ HcclResult HcomCheckGroupName(const char* group)
         u32 groupLen = strnlen(group, GROUP_NAME_MAX_LEN + 1);
         if (groupLen == (GROUP_NAME_MAX_LEN + 1) || groupLen == 0) {
             HCCL_ERROR(
-                "[Check][GroupName]errNo[0x%016llx] group name[%s] length[%lu] is invalid",
-                HCOM_ERROR_CODE(HCCL_E_PARA), group, groupLen);
+                "[Check][GroupName]errNo[0x%016llx] group name[%s] length[%u] is invalid", HCOM_ERROR_CODE(HCCL_E_PARA),
+                group, groupLen);
             return HCCL_E_PARA;
         }
     }

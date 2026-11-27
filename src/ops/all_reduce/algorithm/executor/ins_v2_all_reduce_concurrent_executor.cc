@@ -555,7 +555,7 @@ HcclResult InsV2AllReduceConcurrentExecutor<AlgTopoMatch, InsAlgTemplate0, InsAl
         return HCCL_SUCCESS;
     }
     HCCL_INFO(
-        "[InsV2AllReduceConcurrentExecutor][HcclEngineCtxCreate] threadNum[%llu], ccuKernelNum[%llu]", threadNum,
+        "[InsV2AllReduceConcurrentExecutor][HcclEngineCtxCreate] threadNum[%u], ccuKernelNum[%u]", threadNum,
         ccuKernelNum);
     std::vector<u32> ccuKernelNumList
         = {static_cast<u32>(templateAlgRes0.submitInfos.size()), static_cast<u32>(templateAlgRes1.submitInfos.size())};

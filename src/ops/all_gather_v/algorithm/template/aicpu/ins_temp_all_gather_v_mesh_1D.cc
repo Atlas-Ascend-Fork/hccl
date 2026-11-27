@@ -240,22 +240,21 @@ HcclResult InsTempAllGatherVMesh1D::RunAllGatherVMesh(
 
                 HCCL_DEBUG(
                     "[InsTempAllGatherVMesh1D][RunAllGatherVMesh] rankId [%d] connectedRank [%d] txSrcSlices: "
-                    "offset[%d] sliceSize[%d] count[%d].",
+                    "offset[%llu] sliceSize[%llu] count[%llu].",
                     myRank_, connectedRank, txSrcOffset, sizeOut_[channelIdx], elemCountOut_[channelIdx]);
 
                 HCCL_DEBUG(
                     "[InsTempAllGatherVMesh1D][RunAllGatherVMesh] rankId [%d] connectedRank [%d] txDstSlices: "
-                    "offset[%d] sliceSize[%d] count[%d].",
+                    "offset[%llu] sliceSize[%llu] count[%llu].",
                     myRank_, connectedRank, txDstOffset, sizeOut_[channelIdx], elemCountOut_[channelIdx]);
 
                 HCCL_DEBUG(
                     "[InsTempAllGatherVMesh1D][RunAllGatherVMesh] rankId [%d] connectedRank [%d] rxSrcSlices: "
-                    "offset[%d] sliceSize[%d] count[%d].",
+                    "offset[%llu] sliceSize[%llu] count[%llu].",
                     myRank_, connectedRank, rxOffset, rxSizeOut_[channelIdx], rxElemCountOut_[channelIdx]);
-
                 HCCL_DEBUG(
                     "[InsTempAllGatherVMesh1D][RunAllGatherVMesh] rankId [%d] connectedRank [%d] rxDrcSlices: "
-                    "offset[%d] sliceSize[%d] count[%d].",
+                    "offset[%llu] sliceSize[%llu] count[%llu].",
                     myRank_, connectedRank, rxOffset, rxSizeOut_[channelIdx], rxElemCountOut_[channelIdx]);
 
                 TxRxSlicesList sendRecvSlicesList({txSrcSlices, txDstSlices}, {rxSrcSlices, rxDstSlices});
@@ -307,7 +306,7 @@ HcclResult InsTempAllGatherVMesh1D::LocalDataCopy(const std::vector<ThreadHandle
             "sliceSize[%d] count[%d].",
             myRank_, myAlgRank, inBaseOff, inOff, sliceSize, sliceCount);
         HCCL_DEBUG(
-            "[InsTempAllGatherVMesh1D][LocalDataCopy] RankID [%d] AlgRank [%d] dstSlice: outBaseoff[%d] "
+            "[InsTempAllGatherVMesh1D][LocalDataCopy] RankID [%d] AlgRank [%d] dstSlice: outBaseOff[%d] "
             "outOff[%d] sliceSize[%d] count[%d].",
             myRank_, myAlgRank, outBaseOff, outOff, sliceSize, sliceCount);
 

@@ -524,8 +524,8 @@ HcclResult InsV2ReduceOmniPipe3DExecutor<
     }
     bdvec = {bw_ag_l0, bw_ag_l1, bw_ag_l2, bw_rs_l0, bw_rs_l1, bw_rs_l2};
     HCCL_INFO(
-        "[InsV2ReduceOmniPipe3DExecutor][ClacOmniBandwidthInSever]{bw_ag_l0[%f], bw_ag_l1[%f], bw_ag_l2[%f], "
-        "bw_rs_l0[%f], bw_rs_l1[%f], "
+        "[InsV2ReduceOmniPipe3DExecutor][ClacOmniBandwidthInSever]{bw_ag_l0[%f GB/s], bw_ag_l1[%f GB/s], bw_ag_l2[%f], "
+        "bw_rs_l0[%f GB/s], bw_rs_l1[%f GB/s], "
         "bw_rs_l2[%f]}",
         bw_ag_l0, bw_ag_l1, bw_ag_l2, bw_rs_l0, bw_rs_l1, bw_rs_l2);
     return HCCL_SUCCESS;

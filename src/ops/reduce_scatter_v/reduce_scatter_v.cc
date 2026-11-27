@@ -252,7 +252,7 @@ HcclResult PrepareReduceScatterVParam(
 {
     u32 perDataSize = DATATYPE_SIZE_TABLE[dataType];
     u64 outputSize = recvCount * perDataSize;
-    HCCL_INFO("PrepareReduceScatterVParam[outputSize]:[%llu]", outputSize);
+    HCCL_INFO("PrepareReduceScatterVParam[outputSize]:[%llu bytes]", outputSize);
 
     CHK_RET(HcclGetCommName(comm, param.commName));
     param.stream = stream;

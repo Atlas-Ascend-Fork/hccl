@@ -31,12 +31,12 @@ HcclResult HcclScatter(
     void* sendBuf, void* recvBuf, uint64_t recvCount, HcclDataType dataType, uint32_t root, HcclComm comm,
     aclrtStream stream)
 {
-    HCCL_INFO("Start to run execute HcclScatter");
+    HCCL_INFO("Start to run HcclScatter");
     // 获取设备类型拦截混合组网
     HcclHeterogMode allDeviceType;
     CHK_RET(HcclGetHeterogMode(comm, &allDeviceType));
     if (allDeviceType != HcclHeterogMode::HCCL_HETEROG_MODE_HOMOGENEOUS) {
-        HCCL_ERROR("[HcclScatter] Scatter only support singleDeviceType");
+        HCCL_ERROR("[HcclScatter] Scatter only supports singleDeviceType");
         return HCCL_E_NOT_SUPPORT;
     }
 
@@ -847,7 +847,7 @@ AllocAlgResource(HcclComm comm, const OpParam& param, AlgResourceRequest& resReq
         u32 threadNum = resRequest.slaveThreadNum + 1;
         CHK_RET(HcclThreadAcquire(comm, param.engine, threadNum, maxNotifyNum, threads));
         resCtxHost->topoInfo.mainThread = *threads;
-        HCCL_DEBUG("threads ptr is %p\n", *threads);
+        HCCL_DEBUG("threads ptr is %p", *threads);
     } else {
         // host模式下，将主流封装为thread，并创建主流上的notify
         CHK_RET(

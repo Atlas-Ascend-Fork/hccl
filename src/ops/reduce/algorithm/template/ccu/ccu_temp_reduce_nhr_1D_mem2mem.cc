@@ -75,7 +75,7 @@ HcclResult CcuTempReduceNHR1DMem2Mem::GetDieNumFromChannelDescs(HcclComm comm, u
         return HcclResult::HCCL_SUCCESS;
     } else {
         HCCL_ERROR(
-            "[CcuTempReduceNHR1DMem2Mem::CalcRes] get channelDescs fail: there are [] link to rank []",
+            "[CcuTempReduceNHR1DMem2Mem::CalcRes] get channelDescs fail: there are [%zu] links to rank [%u]",
             firstVector.size(), firstElement->first);
         return HcclResult::HCCL_E_INTERNAL;
     }
@@ -437,7 +437,7 @@ HcclResult CcuTempReduceNHR1DMem2Mem::KernelRun(
     HCCL_INFO("[CcuTempReduceNHR1DMem2Mem] Template KernelRun start.");
 
     if (templateDataParams.sliceSize == 0) {
-        HCCL_INFO("[CcuTempReduceNHR1DMem2Mem] sliceSize is 0, no need do, just success.");
+        HCCL_INFO("[CcuTempReduceNHR1DMem2Mem] sliceSize is 0, no need to do, just return success.");
         return HCCL_SUCCESS;
     }
     u32 kernelNum = templateResource.ccuKernels.size();

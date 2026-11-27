@@ -245,7 +245,7 @@ HcclResult CcuTempAlltoAllVMesh1D::KernelRun(
         CHK_PRT_RET(
             localSendRecvInfo_.sendLength[myRank_] != localSendRecvInfo_.recvLength[myRank_],
             HCCL_INFO(
-                "[CcuTempAlltoAllVMesh1D] rankSize = 1, sendLength[%llu] and recvLength[%llu]"
+                "[CcuTempAlltoAllVMesh1D] rankSize = 1, sendLength[%llu] and recvLength[%llu] "
                 "should be equal.",
                 localSendRecvInfo_.sendLength[myRank_], localSendRecvInfo_.recvLength[myRank_]),
             HcclResult::HCCL_E_PARA);

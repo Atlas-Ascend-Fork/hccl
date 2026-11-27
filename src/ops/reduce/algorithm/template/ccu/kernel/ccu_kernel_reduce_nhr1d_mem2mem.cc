@@ -116,7 +116,7 @@ DoWriteReduceSlice(ReduceNHR1DMem2MemContext& ctx, const u32& toRank, const u32&
     const auto* arg = ctx.arg;
     auto toRankIt = arg->rank2ChannelIdx.find(toRank);
     if (toRankIt == arg->rank2ChannelIdx.end()) {
-        HCCL_ERROR("[CcuKernelReduceNHR1DMem2Mem] rank2ChannelIdx not find toRank key [%u]", toRank);
+        HCCL_ERROR("[CcuKernelReduceNHR1DMem2Mem] rank2ChannelIdx cannot find toRank key [%u]", toRank);
         return CCU_E_PARA;
     }
     const u32& toRankIdx = toRankIt->second;
@@ -155,7 +155,7 @@ static CcuResult DoReduceScatterNHRSingleStep(ReduceNHR1DMem2MemContext& ctx, co
     auto toRankIt = arg->rank2ChannelIdx.find(nhrStepInfo.toRank);
     if (toRankIt == arg->rank2ChannelIdx.end()) {
         HCCL_ERROR(
-            "[CcuKernelReduceNHR1DMem2Mem][DoReduceScatterNHRSingleStep] rank2ChannelIdx not find toRank key [%u]",
+            "[CcuKernelReduceNHR1DMem2Mem][DoReduceScatterNHRSingleStep] rank2ChannelIdx cannot find toRank key [%u]",
             nhrStepInfo.toRank);
         return CCU_E_PARA;
     }
@@ -163,7 +163,7 @@ static CcuResult DoReduceScatterNHRSingleStep(ReduceNHR1DMem2MemContext& ctx, co
 
     auto fromRankIt = arg->rank2ChannelIdx.find(nhrStepInfo.fromRank);
     if (fromRankIt == arg->rank2ChannelIdx.end()) {
-        HCCL_ERROR("[CcuKernelReduceNHR1DMem2Mem] rank2ChannelIdx not find fromRank key [%u]", nhrStepInfo.toRank);
+        HCCL_ERROR("[CcuKernelReduceNHR1DMem2Mem] rank2ChannelIdx cannot find fromRank key [%u]", nhrStepInfo.fromRank);
         return CCU_E_PARA;
     }
     const u32& fromRankIdx = fromRankIt->second;
@@ -240,7 +240,7 @@ DoSendRecvSlice(ReduceNHR1DMem2MemContext& ctx, const u32& toRank, const u32& se
     const auto* arg = ctx.arg;
     auto toRankIt = arg->rank2ChannelIdx.find(toRank);
     if (toRankIt == arg->rank2ChannelIdx.end()) {
-        HCCL_ERROR("[CcuKernelReduceNHR1DMem2Mem] rank2ChannelIdx not find toRank key [%u]", toRank);
+        HCCL_ERROR("[CcuKernelReduceNHR1DMem2Mem] rank2ChannelIdx cannot find toRank key [%u]", toRank);
         return CCU_E_PARA;
     }
     const u32& toRankIdx = toRankIt->second;
@@ -276,7 +276,7 @@ static CcuResult DoGatherNHRSingleStep(ReduceNHR1DMem2MemContext& ctx, const NHR
     auto toRankIt = arg->rank2ChannelIdx.find(nhrStepInfo.toRank);
     if (toRankIt == arg->rank2ChannelIdx.end()) {
         HCCL_ERROR(
-            "[CcuKernelReduceNHR1DMem2Mem][DoGatherNHRSingleStep] rank2ChannelIdx not find toRank key [%u]",
+            "[CcuKernelReduceNHR1DMem2Mem][DoGatherNHRSingleStep] rank2ChannelIdx cannot find toRank key [%u]",
             nhrStepInfo.toRank);
         return CCU_E_PARA;
     }
@@ -284,7 +284,7 @@ static CcuResult DoGatherNHRSingleStep(ReduceNHR1DMem2MemContext& ctx, const NHR
 
     auto fromRankIt = arg->rank2ChannelIdx.find(nhrStepInfo.fromRank);
     if (fromRankIt == arg->rank2ChannelIdx.end()) {
-        HCCL_ERROR("[CcuKernelReduceNHR1DMem2Mem] rank2ChannelIdx not find fromRank key [%u]", nhrStepInfo.fromRank);
+        HCCL_ERROR("[CcuKernelReduceNHR1DMem2Mem] rank2ChannelIdx cannot find fromRank key [%u]", nhrStepInfo.fromRank);
         return CCU_E_PARA;
     }
     const u32& fromRankIdx = fromRankIt->second;
