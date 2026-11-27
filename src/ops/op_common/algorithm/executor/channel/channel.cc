@@ -1394,4 +1394,103 @@ HcclResult CreateChannelRequestByRankId(
 #endif
     return HCCL_SUCCESS;
 }
+
+#ifndef AICPU_COMPILE
+// 返回值：非空=本层建链成功；空=本层无可用链路（调用方回退原有单链路逻辑）。多通道路径为机会性优化，
+// 链路分类失败等环境条件一律回退而非报错（两端同拓扑确定对称，回退后行为一致）。
+static HcclResult BuildMultiJettyChannelsForLayer(
+    HcclComm comm, CommProtocol primaryProtocol, u32 myRank, u32 remoteRank, uint32_t netLayer,
+    std::vector<HcclChannelDesc>& outChannels)
+{
+    CommLink* linkList = nullptr;
+    u32 listSize = 0;
+    CHK_RET(HcclRankGraphGetLinks(comm, netLayer, myRank, remoteRank, &linkList, &listSize));
+    if (listSize == 0) {
+        return HCCL_SUCCESS;
+    }
+    std::vector<CommLink> links(linkList, linkList + listSize);
+    // 取 CLOS 对角 binding口（PG口）聚合通道：单通道已聚合全部物理端口带宽，P2P 两卡场景无需拆物理口
+    // 分类失败（含编译期空桩 NOT_SUPPORT、"Cannot get TopoType"等）视为本层无多通道可用，回退原有单链路逻辑：
+    // 两端查询同一拓扑、失败确定对称，回退后两端行为一致（该类失败在部分机型为正常环境条件）
+    HcclResult mjRet = ProcessLinksForChannelMutiJetty(
+        comm, primaryProtocol, links, myRank, remoteRank, netLayer, outChannels, false, false);
+    if (mjRet != HcclResult::HCCL_SUCCESS) {
+        HCCL_WARNING(
+            "[BuildMultiJettyChannelsForLayer] myRank=%u, rank=%u, netLayer=%u, linkNum=%u "
+            "ProcessLinksForChannelMutiJetty ret=%d, fallback to single channel.",
+            myRank, remoteRank, netLayer, listSize, static_cast<int>(mjRet));
+        return HCCL_SUCCESS;
+    }
+    // PG口 eid 恒为 127 且每对 rank 唯一（多物理口在 hcomm 内聚合为单通道），无需排序配对
+
+    // 无 CLOS 对角的拓扑（仅 mesh 单链路类型）回退原有单链路逻辑
+    if (outChannels.empty()) {
+        return HCCL_SUCCESS;
+    }
+
+    for (u32 idx = 0; idx < links.size(); idx++) {
+        if (links[idx].linkAttr.linkProtocol != primaryProtocol) {
+            continue;
+        }
+        CommTopo linkTopoType;
+        // 拓扑不可分类的链路跳过（GetTopoTypeByLink 内部已打错误日志）
+        if (GetTopoTypeByLink(comm, netLayer, links[idx], linkTopoType) == HcclResult::HCCL_SUCCESS
+            && linkTopoType == CommTopo::COMM_TOPO_1DMESH) {
+            CHK_RET(CreateChannelFromLink(
+                comm, myRank, remoteRank, netLayer, idx, links[idx], "BuildMultiJettyChannelsForLayer", outChannels));
+            break;
+        }
+    }
+    const size_t maxChannelNum = static_cast<size_t>(MAX_JETTY_NUM) + 1;
+    if (outChannels.size() > maxChannelNum) {
+        HCCL_WARNING(
+            "[BuildMultiJettyChannelsForLayer] myRank=%u, rank=%u, multichannel num[%zu] exceeds maxChannelNum[%zu], "
+            "truncated.",
+            myRank, remoteRank, outChannels.size(), maxChannelNum);
+        outChannels.resize(maxChannelNum);
+    }
+    return HCCL_SUCCESS;
+}
+#endif // AICPU_COMPILE
+
+HcclResult CreateChannelRequestByRankIdMultiChannel(
+    HcclComm comm, const OpParam& param, u32 myRank, u32 remoteRank, std::vector<HcclChannelDesc>& channels,
+    u32 channelRepeatNum)
+{
+#ifndef AICPU_COMPILE
+    channels.clear();
+    std::vector<CommProtocol> expectedProtocols;
+    CHK_RET(GetProtocolByEngine(param, expectedProtocols));
+
+    if (!expectedProtocols.empty()) {
+        uint32_t* netLayers = nullptr;
+        uint32_t netLayerNum = 0;
+        CHK_RET(HcclRankGraphGetLayers(comm, &netLayers, &netLayerNum));
+
+        for (uint32_t i = 0; i < netLayerNum; i++) {
+            std::vector<HcclChannelDesc> multiChannels;
+            CHK_RET(BuildMultiJettyChannelsForLayer(
+                comm, expectedProtocols[0], myRank, remoteRank, netLayers[i], multiChannels));
+            if (multiChannels.empty()) {
+                continue;
+            }
+            channels = std::move(multiChannels);
+            HCCL_INFO(
+                "[CreateChannelRequestByRankIdMultiChannel] myRank=%u, rank=%u, use %zu multichannel(s) on "
+                "netLayer=%u.",
+                myRank, remoteRank, channels.size(), netLayers[i]);
+            break;
+        }
+    }
+
+    if (channels.empty()) {
+        HCCL_INFO(
+            "[CreateChannelRequestByRankIdMultiChannel] myRank=%u, rank=%u, no multichannel available, "
+            "fallback to CreateChannelRequestByRankId.",
+            myRank, remoteRank);
+        CHK_RET(CreateChannelRequestByRankId(comm, param, myRank, remoteRank, channels, channelRepeatNum));
+    }
+#endif
+    return HCCL_SUCCESS;
+}
 } // namespace ops_hccl

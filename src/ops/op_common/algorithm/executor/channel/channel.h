@@ -54,6 +54,10 @@ HcclResult CalcChannelRequestMesh2D(
 HcclResult CreateChannelRequestByRankId(
     HcclComm comm, const OpParam& param, u32 myRank, u32 remoteRank, std::vector<HcclChannelDesc>& channels,
     u32 channelRepeatNum = 1);
+// P2P Send/Recv 专用建链：取 CLOS binding口（PG口）聚合通道并合并 mesh 直连，无可用链路时回退原有逻辑
+HcclResult CreateChannelRequestByRankIdMultiChannel(
+    HcclComm comm, const OpParam& param, u32 myRank, u32 remoteRank, std::vector<HcclChannelDesc>& channels,
+    u32 channelRepeatNum = 1);
 HcclResult CalcChannelRequestMesh1DWithPriorityTopo(
     HcclComm comm, const OpParam& param, const TopoInfo* topoInfo, const std::vector<std::vector<u32>>& subcommInfo,
     std::vector<HcclChannelDesc>& channels, CommTopo priorityTopo);
