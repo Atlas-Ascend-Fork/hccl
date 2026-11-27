@@ -25,9 +25,19 @@
 #include "config_log.h"
 #include "cost_model.h"
 #include "cost_table.h"
+#include "dlhcomm_function.h"
 #include "hccl_res_dl.h"
 #include "op_common.h"
 #include "tuner_setup.h"
+
+// clos_topo_selector_test.cc 对以下 5 个符号保留了测试专用强定义（如高版本
+// GetHcommVersion、AIV 路径不得进入的 HcclGetHcclBuffer），共享桩使用 weak
+// 定义，避免同一目标链接时 multiple definition。
+#if defined(__GNUC__) || defined(__clang__)
+#define SELECTOR_STUB_WEAK __attribute__((weak))
+#else
+#define SELECTOR_STUB_WEAK
+#endif
 
 namespace hccl_ut {
 namespace {
@@ -56,6 +66,12 @@ namespace {
     }
 } // namespace
 
+bool& HostDpuOnlyRef()
+{
+    static bool hostDpuOnly = false;
+    return hostDpuOnly;
+}
+
 const std::vector<ops_hccl::OpExecuteConfig>& LastCandidateEngines() { return CandidateEnginesRef(); }
 
 void RecordCandidateEngines(const std::vector<ops_hccl::OpExecuteConfig>& engines) { CandidateEnginesRef() = engines; }
@@ -66,6 +82,8 @@ void RecordCandidatePrefixes(const std::vector<std::string>& prefixes) { Candida
 
 void SetTunerInitResult(HcclResult ret) { TunerInitResultRef() = ret; }
 
+void SetHostDpuOnly(bool value) { HostDpuOnlyRef() = value; }
+
 void SetCostModelAlgos(const std::vector<std::string>& algos) { CostModelAlgosRef() = algos; }
 
 void ResetSelectorStubState()
@@ -74,6 +92,7 @@ void ResetSelectorStubState()
     CandidatePrefixesRef().clear();
     CostModelAlgosRef().clear();
     TunerInitResultRef() = HCCL_SUCCESS;
+    HostDpuOnlyRef() = false;
 }
 } // namespace hccl_ut
 
@@ -117,7 +136,7 @@ HcclResult CheckHostDPUOnly(const HcclComm comm, const TopoInfoWithNetLayerDetai
 {
     (void)comm;
     (void)topoInfo;
-    hostDPUOnly = false;
+    hostDPUOnly = hccl_ut::HostDpuOnlyRef();
     return HCCL_SUCCESS;
 }
 
@@ -128,6 +147,16 @@ HcclResult CheckSupportNda(const HcclComm comm, const TopoInfoWithNetLayerDetail
     (void)topoInfo;
     isSupportNda = false;
     return HCCL_SUCCESS;
+}
+
+// 目标分支 dpu_inline_reduce_selector.h 的 DPU inline-reduce 能力查询, 真实实现在
+// dpu_inline_reduce_selector.cc(依赖 HCOMM write-reduce 原语, 本 UT 不链接)。
+// 桩为不支持: 与本 UT 拓扑(deviceType 未置 950)下真实实现的结论一致。
+SELECTOR_STUB_WEAK bool CanUseDpuInlineReduce(const OpParam& opParam, const TopoInfoWithNetLayerDetails* topoInfo)
+{
+    (void)opParam;
+    (void)topoInfo;
+    return false;
 }
 
 bool IsNegotiationCommName(const char* commName)
@@ -308,6 +337,16 @@ const AlgAttrs* AlgAttrsRegistry::Get(const std::string& name) const
     (void)name;
     return nullptr;
 }
+
+// order_preserved_common.h 的 IsNeedStrictModeForOrderPreserved 会经由 GetDeterministicLevel
+// 访问 DlHcommFunction 单例; 真实实现走 dlopen, 本 UT 不加载动态库, 桩为空单例
+SELECTOR_STUB_WEAK DlHcommFunction& DlHcommFunction::GetInstance()
+{
+    static DlHcommFunction instance;
+    return instance;
+}
+
+SELECTOR_STUB_WEAK DlHcommFunction::~DlHcommFunction() {}
 } // namespace ops_hccl
 
 // ---- 全局作用域桩: HCOMM ctx 与 tuner 接口 ----
@@ -334,7 +373,24 @@ HcclResult HcclTunerCallGetCollInfo(
     return HCCL_SUCCESS;
 }
 
+// 三个算子 selector 的 SelectAivAlgo 会查询 cclBuffer 容量; 真实实现在 CANN hccl_comm 侧,
+// 本 UT 不链接, 桩为固定 1MB 缓冲区(DPU/NDA 选路不依赖该值)
+SELECTOR_STUB_WEAK HcclResult HcclGetHcclBuffer(HcclComm comm, void** addr, uint64_t* size)
+{
+    (void)comm;
+    static uint8_t cclBuffer[1024 * 1024];
+    if (addr == nullptr || size == nullptr) {
+        return HCCL_E_PTR;
+    }
+    *addr = cclBuffer;
+    *size = sizeof(cclBuffer);
+    return HCCL_SUCCESS;
+}
+
 extern "C" {
+// 返回低于 9.2.0.1 的版本: order-preserved 判定走环境变量分支(本 UT 桩为 0), 不影响 DPU/NDA 选路
+SELECTOR_STUB_WEAK int GetHcommVersion(void) { return 0; }
+
 // 恒未命中: 逼 Run 走 TunerInit 与 InitCostModel 的创建分支
 HcclResult HcclEngineCtxGet(HcclComm comm, const char* ctxTag, CommEngine engine, void** ctx, uint64_t* size)
 {

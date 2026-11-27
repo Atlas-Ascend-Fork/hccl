@@ -804,7 +804,7 @@ REGISTER_EXEC_V2_MULTI(
     InsTempReduceScatterOmniPipeMesh1dDpu);
 REGISTER_ALG_ATTRS(
     AicpuReduceScatterPipeLineMeshNHR, topo.supportLevel0Topos = LEVEL0_TOPO_MESH_1D_CLOS; topo.maxTopoLevelNum = 1;
-    topo.isSupportLevel0PcieMix = true; op.isSupportProd = false; op.unsupportedDataTypes = UNSUPPORTED_64BIT;
+    topo.isSupportLevel0PcieMix = true; SetPipelineAlgoOpAttrs(op);
     topo.topoCustomCheck = [](const TopoInfoWithNetLayerDetails* topo) -> bool {
         bool isMultiple = false;
         AutoSelectorBase::CheckClosNumMultipleOfMeshNum(topo, isMultiple);
@@ -818,7 +818,7 @@ REGISTER_EXEC_V2_MULTI(
     InsTempReduceScatterOmniPipeMesh1D);
 REGISTER_ALG_ATTRS(
     AicpuReduceScatterPipeLineMeshNHRMesh, topo.minTopoLevelNum = TOPO_LEVEL_NUM_3;
-    topo.maxTopoLevelNum = TOPO_LEVEL_NUM_3; op.isSupportProd = false; op.unsupportedDataTypes = UNSUPPORTED_64BIT;
+    topo.maxTopoLevelNum = TOPO_LEVEL_NUM_3; SetPipelineAlgoOpAttrs(op);
     topo.topoCustomCheck = [](const TopoInfoWithNetLayerDetails* topo) -> bool {
         return topo->topLevelUboe && topo->level0Symmetric && topo->deviceNumPerModule == 8;
     });
@@ -830,7 +830,8 @@ REGISTER_EXEC_V2_MULTI(
 REGISTER_ALG_ATTRS(
     DpuReduceScatterPipeLineMeshNHRMesh, topo.supportLevel0Topos = LEVEL0_TOPO_MESH_1D_CLOS | LEVEL0_TOPO_MESH_1D;
     topo.isSupportLevel1Nhr = true; topo.minTopoLevelNum = TOPO_LEVEL_NUM_2; topo.maxTopoLevelNum = TOPO_LEVEL_NUM_3;
-    topo.isHostDpuOnly = true; topo.topoCustomCheck = [](const TopoInfoWithNetLayerDetails* topo) -> bool {
+    topo.isHostDpuOnly = true; SetPipelineAlgoOpAttrs(op);
+    topo.topoCustomCheck = [](const TopoInfoWithNetLayerDetails* topo) -> bool {
         if (topo->level0Topo == Level0Shape::MESH_1D_CLOS) {
             return true;
         }
@@ -846,8 +847,8 @@ REGISTER_EXEC_V2_MULTI(
     InsTempReduceScatterOmniPipeMesh1dNDA);
 REGISTER_ALG_ATTRS(
     DpuReduceScatterPipeLineMeshNHRMeshNDA, topo.supportLevel0Topos = LEVEL0_TOPO_MESH_1D_CLOS;
-    topo.minTopoLevelNum = TOPO_LEVEL_NUM_2; topo.maxTopoLevelNum = TOPO_LEVEL_NUM_3; topo.isHostDpuOnly = true;
-    topo.topoPriorityCheck = [](const TopoInfoWithNetLayerDetails* topo) -> bool {
+    topo.minTopoLevelNum = TOPO_LEVEL_NUM_2; SetPipelineAlgoOpAttrs(op); topo.maxTopoLevelNum = TOPO_LEVEL_NUM_3;
+    topo.isHostDpuOnly = true; topo.topoPriorityCheck = [](const TopoInfoWithNetLayerDetails* topo) -> bool {
         return topo->level0Topo == Level0Shape::MESH_1D_CLOS && !topo->level0PcieMix;
     });
 

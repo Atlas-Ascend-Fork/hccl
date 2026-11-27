@@ -971,7 +971,8 @@ REGISTER_EXEC_V2_MULTI(
     InsTempAllGatherOmniPipeMesh1D, InsTempAllGatherOmniPipeNHR, InsTempAllGatherOmniPipeNHRDPU);
 REGISTER_ALG_ATTRS(
     DpuReducePipeLineMeshNHRNHR, topo.minTopoLevelNum = 3; topo.supportLevel0Topos = LEVEL0_TOPO_MESH_1D_CLOS;
-    topo.isSupportLevel0PcieMix = false; topo.topoCustomCheck = [](const TopoInfoWithNetLayerDetails* topo) -> bool {
+    topo.isSupportLevel0PcieMix = false; SetPipelineAlgoOpAttrs(op);
+    topo.topoCustomCheck = [](const TopoInfoWithNetLayerDetails* topo) -> bool {
         if (topo->deviceNumPerModule == 1)
             return false;
         return !AutoSelectorBase::IsLayerAllConnetedWithTopo(topo, 0, CommTopo::COMM_TOPO_1DMESH);
@@ -983,6 +984,6 @@ REGISTER_EXEC_V2_MULTI(
     InsTempReduceScatterOmniPipeMesh1D, InsTempReduceScatterOmniPipeNHR, InsTempReduceScatterOmniPipeMesh1dNDA,
     InsTempAllGatherOmniPipeMesh1D, InsTempAllGatherOmniPipeNHR, InsTempAllGatherOmniPipeNHRNDA);
 REGISTER_ALG_ATTRS(DpuReducePipeLineMeshNHRNHRNDA, topo.supportLevel0Topos = LEVEL0_TOPO_MESH_1D_CLOS;
-                   topo.isSupportLevel0PcieMix = false; topo.isHostDpuOnly = true;
-                   op.unsupportedDataTypes = UNSUPPORTED_64BIT; op.isSupportInplace = false);
+                   topo.isSupportLevel0PcieMix = false; topo.isHostDpuOnly = true; SetPipelineAlgoOpAttrs(op);
+                   op.isSupportInplace = false);
 } // namespace ops_hccl

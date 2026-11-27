@@ -11,7 +11,8 @@
 // alltoall_nda_selector_test 目标的补充桩：
 // - SelectorRegistry::Global/RegisterByOpType：alltoall_auto_selector.cc 末尾的
 //   REGISTER_SELECTOR_BY_OPTYPE 静态注册在本 UT 中只要求"能注册成功"，不校验注册表内容。
-// - HcclGetHcclBuffer：SelectAivAlgo（vtable 强制链接）依赖的 Hccl 缓存查询，桩为固定地址。
+// - HcclGetHcclBuffer 由 selector_engine/stub/selector_deps_stub.cc 统一提供，本文件不再重复定义，
+//   避免同目标同时编入两个桩文件时链接期 multiple definition。
 // 其余 auto_selector_base.cc 的依赖复用 selector_engine/stub/selector_deps_stub.cc。
 
 #include "selector_registry.h"
@@ -34,20 +35,3 @@ HcclResult SelectorRegistry::RegisterByOpType(const HcclCMDType opType, u32 prio
 }
 
 } // namespace ops_hccl
-
-extern "C" {
-
-HcclResult HcclGetHcclBuffer(HcclComm comm, void** buffer, uint64_t* size)
-{
-    (void)comm;
-    static uint8_t fakeBuffer[1 << 20];
-    if (buffer != nullptr) {
-        *buffer = fakeBuffer;
-    }
-    if (size != nullptr) {
-        *size = sizeof(fakeBuffer);
-    }
-    return HCCL_SUCCESS;
-}
-
-} // extern "C"

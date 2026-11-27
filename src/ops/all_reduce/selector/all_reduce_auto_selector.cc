@@ -436,11 +436,7 @@ SelectorStatus AllReduceAutoSelector::SelectAicpuAlgo(
         return SelectorStatus::MATCH;
     }
 
-    bool isDataTypeOrReduceTypeSpecial = opParam.DataDes.dataType == HcclDataType::HCCL_DATA_TYPE_INT64
-                                         || opParam.DataDes.dataType == HcclDataType::HCCL_DATA_TYPE_UINT64
-                                         || opParam.DataDes.dataType == HcclDataType::HCCL_DATA_TYPE_FP64
-                                         || opParam.reduceType == HcclReduceOp::HCCL_REDUCE_PROD;
-
+    bool isDataTypeOrReduceTypeSpecial = IsDataTypeOrReduceTypeSpecial(opParam);
     if (topoInfo->topoLevelNums > 1) {
         bool level0AndLevel1Symetric = topoInfo->level0Symmetric && topoInfo->level1Symmetric;
         if (isDataTypeOrReduceTypeSpecial) {
@@ -540,11 +536,7 @@ SelectorStatus AllReduceAutoSelector::SelectMeshAlgoAicpu(
     u64 perDataSize = DATATYPE_SIZE_TABLE[opParam.DataDes.dataType];
     u64 dataSize = opParam.DataDes.count * perDataSize;
 
-    bool isDataTypeOrReduceTypeSpecial = opParam.DataDes.dataType == HcclDataType::HCCL_DATA_TYPE_INT64
-                                         || opParam.DataDes.dataType == HcclDataType::HCCL_DATA_TYPE_UINT64
-                                         || opParam.DataDes.dataType == HcclDataType::HCCL_DATA_TYPE_FP64
-                                         || opParam.reduceType == HcclReduceOp::HCCL_REDUCE_PROD;
-
+    bool isDataTypeOrReduceTypeSpecial = IsDataTypeOrReduceTypeSpecial(opParam);
     double ratio;
     if (topoInfo->userRankSize == 0) {
         HCCL_WARNING("[AllReduceAutoSelector] the selector userRankSize not set");
@@ -728,7 +720,7 @@ SelectorStatus AllReduceAutoSelector::SelectDPUAlgo(
             SelectDpuAllReduceSequenceAlgo(opParam, topoInfo, selectAlgName);
             return SelectorStatus::MATCH;
         } else if (topoInfo->level0Topo == Level0Shape::MESH_1D_CLOS) {
-            if (!topoInfo->level0PcieMix) {
+            if (!topoInfo->level0PcieMix && !IsDataTypeOrReduceTypeSpecial(opParam)) {
                 selectAlgName = "DpuAllReducePipeLineMeshNHRNHR";
                 HCCL_INFO("[AllReduceAutoSelector] Using algo DpuAllReducePipeLineMeshNHRNHR");
                 return SelectorStatus::MATCH;
@@ -763,7 +755,8 @@ SelectorStatus AllReduceAutoSelector::SelectNdaAlgo(
             HCCL_INFO("[AllReduceAutoSelector] Using algo DpuAllReduceSequenceMeshNHRNDA, branch[1dev-or-mesh1d]");
             return SelectorStatus::MATCH;
         } else if (topoInfo->level0Topo == Level0Shape::MESH_1D_CLOS) {
-            if (!topoInfo->level0PcieMix && dataSize > AR_NDA_PIPELINE_MIN_DATA_SIZE) {
+            if (!topoInfo->level0PcieMix && dataSize > AR_NDA_PIPELINE_MIN_DATA_SIZE
+                && !IsDataTypeOrReduceTypeSpecial(opParam)) {
                 selectAlgName = "DpuAllReducePipeLineMeshNHRNHRNDA";
                 HCCL_INFO(
                     "[AllReduceAutoSelector] Using algo DpuAllReducePipeLineMeshNHRNHRNDA, branch[clos-pipeline]");

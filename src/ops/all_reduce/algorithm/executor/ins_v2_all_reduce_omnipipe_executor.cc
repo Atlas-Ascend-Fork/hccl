@@ -1248,7 +1248,8 @@ REGISTER_EXEC_V2_MULTI(
     InsTempAllGatherOmniPipeMesh1D, InsTempAllGatherOmniPipeNHR, InsTempAllGatherOmniPipeNHRDPU);
 REGISTER_ALG_ATTRS(
     AicpuAllReducePipeLineMeshNHR, topo.supportLevel0Topos = LEVEL0_TOPO_MESH_1D_CLOS;
-    topo.isSupportLevel0PcieMix = true; topo.topoCustomCheck = [](const TopoInfoWithNetLayerDetails* topo) -> bool {
+    topo.isSupportLevel0PcieMix = true; SetPipelineAlgoOpAttrs(op);
+    topo.topoCustomCheck = [](const TopoInfoWithNetLayerDetails* topo) -> bool {
         bool isMultiple = false;
         bool isEqual = false;
         AutoSelectorBase::CheckMeshNumEqualToClosNum(topo, isEqual);
@@ -1265,13 +1266,9 @@ REGISTER_EXEC_V2_MULTI(
     InsTempAllGatherOmniPipeNHR);
 REGISTER_ALG_ATTRS(
     AicpuAllReducePipeLineMeshNHRNHR, topo.minTopoLevelNum = TOPO_LEVEL_NUM_3; topo.maxTopoLevelNum = TOPO_LEVEL_NUM_3;
-    topo.topoCustomCheck = [](const TopoInfoWithNetLayerDetails* topo) -> bool {
+    SetPipelineAlgoOpAttrs(op); topo.topoCustomCheck = [](const TopoInfoWithNetLayerDetails* topo) -> bool {
         return topo->topLevelUboe && topo->level0Symmetric && topo->deviceNumPerModule == 8;
-    };
-
-    op.isSupportProd = false;
-    op.unsupportedDataTypes
-    = {HcclDataType::HCCL_DATA_TYPE_INT64, HcclDataType::HCCL_DATA_TYPE_UINT64, HcclDataType::HCCL_DATA_TYPE_FP64});
+    });
 // 3级算法: HostDPU 场景，L2 使用 DPU 专用模板
 REGISTER_EXEC_V2_MULTI(
     HcclCMDType::HCCL_CMD_ALLREDUCE, DpuAllReducePipeLineMeshNHRNHR, InsV2AllReduceOmniPipeExecutor,
@@ -1280,7 +1277,7 @@ REGISTER_EXEC_V2_MULTI(
     InsTempAllGatherOmniPipeNHRDPU);
 REGISTER_ALG_ATTRS(
     DpuAllReducePipeLineMeshNHRNHR, topo.supportLevel0Topos = LEVEL0_TOPO_MESH_1D_CLOS | LEVEL0_TOPO_MESH_1D;
-    topo.isSupportLevel1Nhr = true; topo.isHostDpuOnly = true;
+    topo.isSupportLevel1Nhr = true; topo.isHostDpuOnly = true; SetPipelineAlgoOpAttrs(op);
     topo.topoCustomCheck = [](const TopoInfoWithNetLayerDetails* topo) -> bool {
         if (topo->level0Topo == Level0Shape::MESH_1D_CLOS) {
             return !topo->level0PcieMix;
@@ -1295,7 +1292,7 @@ REGISTER_EXEC_V2_MULTI(
     InsTempAllGatherOmniPipeNHRNDA);
 REGISTER_ALG_ATTRS(
     DpuAllReducePipeLineMeshNHRNHRNDA, topo.supportLevel0Topos = LEVEL0_TOPO_MESH_1D_CLOS, topo.isHostDpuOnly = true;
-    topo.topoCustomCheck = [](const TopoInfoWithNetLayerDetails* topo) -> bool {
+    SetPipelineAlgoOpAttrs(op); topo.topoCustomCheck = [](const TopoInfoWithNetLayerDetails* topo) -> bool {
         return !topo->level0PcieMix;
     });
 

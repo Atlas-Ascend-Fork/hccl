@@ -180,6 +180,12 @@ inline bool Is64BitDataType(const HcclDataType dataType)
            || dataType == HcclDataType::HCCL_DATA_TYPE_FP64;
 }
 
+inline bool IsDataTypeOrReduceTypeSpecial(const OpParam& opParam)
+{
+    return UNSUPPORTED_64BIT.count(opParam.DataDes.dataType) > 0
+           || opParam.reduceType == HcclReduceOp::HCCL_REDUCE_PROD;
+}
+
 inline bool Is8BitDataType(const HcclDataType dataType) { return dataType == HcclDataType::HCCL_DATA_TYPE_INT8; }
 
 // AIV_ONLY 选路失败的对外报错前缀(契约文本, 日志采集/用例依赖逐字匹配, 勿改动)
