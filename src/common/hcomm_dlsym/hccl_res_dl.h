@@ -65,7 +65,7 @@ static inline HcommResult ThreadConfigInit(ThreadConfig* config, uint32_t num)
 
 #endif
 
-#if CANN_VERSION_NUM <= CANN_VERSION(9, 3, 0, 1)
+#if CANN_VERSION_NUM < CANN_VERSION(9, 3, 0)
 #define THREAD_TYPE_CPU ((ThreadType)1)
 #endif
 

@@ -91,7 +91,7 @@ constexpr u32 CPU_TS_NOTIFY_NUM = 3;           // CPU TS thread notify数量
 
 bool IsHostDpuThreadNewFlowEnabled(HcclComm comm)
 {
-    if (GetHcommVersion() <= CANN_VERSION(9, 3, 0, 1)) {
+    if (GetHcommVersion() < CANN_VERSION(9, 3, 0)) {
         return false;
     }
     std::string algoConfig;

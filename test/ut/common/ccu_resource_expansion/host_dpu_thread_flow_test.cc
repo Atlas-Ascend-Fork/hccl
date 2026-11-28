@@ -41,7 +41,7 @@ protected:
     void SetUp() override
     {
         g_resources = MockResources{};
-        g_resources.hcommVersion = CANN_VERSION(9, 3, 0, 2);
+        g_resources.hcommVersion = CANN_VERSION(9, 3, 0);
         DlHcommFunction::GetInstance().dlHcclConfigGetInfo
             = [this](HcclComm comm, HcclConfigType type, uint32_t length, void* buffer) {
                   ++queryCalls_;
@@ -75,12 +75,12 @@ protected:
 
 TEST_F(HostDpuThreadFlowTest, PreservesVersionBoundary)
 {
-    for (int version : {CANN_VERSION(9, 3, 0, 1) - 1, CANN_VERSION(9, 3, 0, 1)}) {
+    for (int version : {CANN_VERSION(9, 3, 0, 2), CANN_VERSION(9, 3, 0) - 1}) {
         g_resources.hcommVersion = version;
         EXPECT_FALSE(IsHostDpuThreadNewFlowEnabled(CommA()));
     }
     EXPECT_EQ(queryCalls_, 0U);
-    g_resources.hcommVersion = CANN_VERSION(9, 3, 0, 2);
+    g_resources.hcommVersion = CANN_VERSION(9, 3, 0);
     EXPECT_TRUE(IsHostDpuThreadNewFlowEnabled(CommA()));
     EXPECT_EQ(queryCalls_, 1U);
 }
