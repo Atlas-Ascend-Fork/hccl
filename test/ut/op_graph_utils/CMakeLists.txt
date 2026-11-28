@@ -20,6 +20,7 @@ set(ut_src_list
     ${CMAKE_CURRENT_SOURCE_DIR}/hcom_op_layer_test.cc
     ${CMAKE_CURRENT_SOURCE_DIR}/hcom_execute_test.cc
     ${CMAKE_CURRENT_SOURCE_DIR}/hcom_guard_test.cc
+    ${CMAKE_CURRENT_SOURCE_DIR}/hccl_reg_gate_test.cc
     ${CMAKE_CURRENT_SOURCE_DIR}/stub/log_stub.cc
     ${CMAKE_CURRENT_SOURCE_DIR}/stub/op_deps_stub.cc
     ${_repo_root}/src/common/op_graph/hccl_op_utils.cc
@@ -112,3 +113,109 @@ target_link_libraries(op_graph_utils_test PRIVATE
 )
 
 run_llt_test(TARGET op_graph_utils_test TASK_NUM 1)
+
+# 注册门控缺符号降级 UT: 同套桩 + HCCL_UT_HIDE_HCOMM_RES_APIS 隐藏两接口桩定义,
+# hccl_custom_op.cc 弱引用解析为 null → 「缺符号不注册」降级分支可被断言
+add_executable(op_graph_reg_gate_test
+    ${CMAKE_CURRENT_SOURCE_DIR}/hccl_reg_gate_test.cc
+    ${CMAKE_CURRENT_SOURCE_DIR}/stub/log_stub.cc
+    ${CMAKE_CURRENT_SOURCE_DIR}/stub/op_deps_stub.cc
+    ${CMAKE_CURRENT_SOURCE_DIR}/stub/op_layer_stub.cc
+    ${_repo_root}/src/common/op_graph/hccl_custom_op.cc
+    ${_repo_root}/src/common/op_graph/hccl_op_v_utils.cc
+    ${_repo_root}/src/common/op_graph/hccl_rt_utils.cc
+)
+
+target_compile_options(op_graph_reg_gate_test PRIVATE
+    -U_FORTIFY_SOURCE
+)
+
+target_compile_definitions(op_graph_reg_gate_test PRIVATE HCCL_UT_HIDE_HCOMM_RES_APIS)
+
+target_include_directories(op_graph_reg_gate_test PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/stub
+    ${_repo_root}/src/common/op_graph
+    ${_repo_root}/src/common
+    ${_repo_root}/include
+    ${ASCEND_CANN_PACKAGE_PATH}/include
+    ${ASCEND_CANN_PACKAGE_PATH}/pkg_inc
+)
+
+_detect_cann_version(op_graph_reg_gate_test)
+
+target_link_libraries(op_graph_reg_gate_test PRIVATE
+    $<BUILD_INTERFACE:intf_llt_pub>
+    GTest::gtest_main
+    -lpthread
+)
+
+add_executable(op_graph_reg_gate_hide_acq
+    ${CMAKE_CURRENT_SOURCE_DIR}/hccl_reg_gate_test.cc
+    ${CMAKE_CURRENT_SOURCE_DIR}/stub/log_stub.cc
+    ${CMAKE_CURRENT_SOURCE_DIR}/stub/op_deps_stub.cc
+    ${CMAKE_CURRENT_SOURCE_DIR}/stub/op_layer_stub.cc
+    ${_repo_root}/src/common/op_graph/hccl_custom_op.cc
+    ${_repo_root}/src/common/op_graph/hccl_op_v_utils.cc
+    ${_repo_root}/src/common/op_graph/hccl_rt_utils.cc
+)
+
+target_compile_options(op_graph_reg_gate_hide_acq PRIVATE
+    -U_FORTIFY_SOURCE
+)
+
+target_compile_definitions(op_graph_reg_gate_hide_acq PRIVATE HCCL_UT_HIDE_DEDICATED_ACQUIRE)
+
+target_include_directories(op_graph_reg_gate_hide_acq PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/stub
+    ${_repo_root}/src/common/op_graph
+    ${_repo_root}/src/common
+    ${_repo_root}/include
+    ${ASCEND_CANN_PACKAGE_PATH}/include
+    ${ASCEND_CANN_PACKAGE_PATH}/pkg_inc
+)
+
+_detect_cann_version(op_graph_reg_gate_hide_acq)
+
+target_link_libraries(op_graph_reg_gate_hide_acq PRIVATE
+    $<BUILD_INTERFACE:intf_llt_pub>
+    GTest::gtest_main
+    -lpthread
+)
+
+add_executable(op_graph_reg_gate_hide_res
+    ${CMAKE_CURRENT_SOURCE_DIR}/hccl_reg_gate_test.cc
+    ${CMAKE_CURRENT_SOURCE_DIR}/stub/log_stub.cc
+    ${CMAKE_CURRENT_SOURCE_DIR}/stub/op_deps_stub.cc
+    ${CMAKE_CURRENT_SOURCE_DIR}/stub/op_layer_stub.cc
+    ${_repo_root}/src/common/op_graph/hccl_custom_op.cc
+    ${_repo_root}/src/common/op_graph/hccl_op_v_utils.cc
+    ${_repo_root}/src/common/op_graph/hccl_rt_utils.cc
+)
+
+target_compile_options(op_graph_reg_gate_hide_res PRIVATE
+    -U_FORTIFY_SOURCE
+)
+
+target_compile_definitions(op_graph_reg_gate_hide_res PRIVATE HCCL_UT_HIDE_THREAD_RES_INFO)
+
+target_include_directories(op_graph_reg_gate_hide_res PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/stub
+    ${_repo_root}/src/common/op_graph
+    ${_repo_root}/src/common
+    ${_repo_root}/include
+    ${ASCEND_CANN_PACKAGE_PATH}/include
+    ${ASCEND_CANN_PACKAGE_PATH}/pkg_inc
+)
+
+_detect_cann_version(op_graph_reg_gate_hide_res)
+
+target_link_libraries(op_graph_reg_gate_hide_res PRIVATE
+    $<BUILD_INTERFACE:intf_llt_pub>
+    GTest::gtest_main
+    -lpthread
+)
+
+
+run_llt_test(TARGET op_graph_reg_gate_test TASK_NUM 1)
+run_llt_test(TARGET op_graph_reg_gate_hide_acq TASK_NUM 1)
+run_llt_test(TARGET op_graph_reg_gate_hide_res TASK_NUM 1)

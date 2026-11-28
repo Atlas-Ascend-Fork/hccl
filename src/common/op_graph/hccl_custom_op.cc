@@ -20,6 +20,13 @@
 
 #include "hccl/hcom.h"
 #include "hccl/hccl_res.h"
+// hcomm 资源接口弱声明: 老 toolkit (9.0.x/9.1.x) 缺符号时弱引用为 null 而非 dlopen 失败
+extern "C" HcclResult HcclDedicatedThreadAcquire(
+    HcclComm comm, HcclDedicatedThreadType useType, uint32_t notifyNumPerThread, ThreadHandle* thread)
+    __attribute__((weak));
+extern "C" HcclResult
+HcclThreadResGetInfo(HcclComm comm, ThreadHandle thread, ThreadResType resType, uint32_t infoLen, void** info)
+    __attribute__((weak));
 #include "acl/acl_rt.h"
 #include "log.h"
 #include "runtime/rt_external_model.h"
@@ -85,12 +92,29 @@ bool HcclGeRuntimeInterfaceAvailable()
     return available;
 }
 
+// hcomm 资源接口在位判定: 缺符号时不注册、回退原引擎 (接管注册门控之一)
+bool HcclUnfoldStreamResApiAvailable()
+{
+    // magic static: 12 个注册点各自调用, 判空与日志只发生一次
+    static const bool available = []() {
+        const bool present = (&HcclDedicatedThreadAcquire != nullptr) && (&HcclThreadResGetInfo != nullptr);
+        HCCL_INFO(
+            "[Hccl][GeCustomOp][Register] hcomm unfold-stream res apis %s.",
+            present ? "available, register ge custom op" : "unavailable, skip registration, fallback to hccl_engine");
+        return present;
+    }();
+    return available;
+}
+
 ge::CustomOpCreatorRegister* CreateSocGatedRegister(const char* opType, ge::CustomOpCreateFunc creator)
 {
     if (!IsCustomOpTargetSoc()) {
         return nullptr;
     }
     if (!HcclGeRuntimeInterfaceAvailable()) {
+        return nullptr;
+    }
+    if (!HcclUnfoldStreamResApiAvailable()) {
         return nullptr;
     }
     // 5 元接管注册 (kBottom 认领 kHccl 引擎槽位), 与 GE 认领链按优先级回退解析配套。

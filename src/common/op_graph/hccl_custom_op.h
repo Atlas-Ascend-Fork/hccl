@@ -122,10 +122,14 @@ bool IsCustomOpTargetSoc();
 // 之一, 判定通过即保证注册与 Execute 侧全部调用命中真实实现
 bool HcclGeRuntimeInterfaceAvailable();
 
+// hcomm 资源接口在位判定: 缺符号时不注册、回退原引擎 (接管注册门控之一)
+bool HcclUnfoldStreamResApiAvailable();
+
 // 条件 5 元接管注册 (kBottom/kHccl): 认领 HCCL 引擎槽位, 与 GE 认领链
 // (按优先级回退解析) 配套。全部算子使用 (12 个注册点)。注册条件 = 目标 SoC
-// (IsCustomOpTargetSoc) + GE/RTS 新接口在位 (HcclGeRuntimeInterfaceAvailable),
-// 任一不满足即不注册, 算子回退原 hccl_engine 路径。
+// (IsCustomOpTargetSoc) + GE/RTS 新接口在位 (HcclGeRuntimeInterfaceAvailable) +
+// hcomm 资源接口在位 (HcclUnfoldStreamResApiAvailable), 任一不满足即不注册,
+// 算子回退原 hccl_engine 路径。
 ge::CustomOpCreatorRegister* CreateSocGatedRegister(const char* opType, ge::CustomOpCreateFunc creator);
 
 class HcclCustomOpBase : public ge::EagerExecuteOp, public ge::ShapeInferOp {
