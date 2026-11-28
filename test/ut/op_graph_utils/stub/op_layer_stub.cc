@@ -173,6 +173,11 @@ HcclResult HcclEngineCtxCreate(HcclComm comm, const char* ctxTag, CommEngine eng
     return HCCL_SUCCESS;
 }
 
+// 注册门控缺符号 UT: 隐藏宏按接口独立 — HCCL_UT_HIDE_DEDICATED_ACQUIRE /
+// HCCL_UT_HIDE_THREAD_RES_INFO (部分缺符号矩阵: 两接口引入版本线不同, 只缺其一是真实
+// 部署形态); 旧 HCCL_UT_HIDE_HCOMM_RES_APIS = 双隐藏等价别名。hccl_custom_op.cc 弱引用
+// 对应解析为 null, 门控降级分支可被断言
+#if !defined(HCCL_UT_HIDE_HCOMM_RES_APIS) && !defined(HCCL_UT_HIDE_DEDICATED_ACQUIRE)
 HcclResult HcclDedicatedThreadAcquire(
     HcclComm comm, HcclDedicatedThreadType useType, uint32_t notifyNumPerThread, ThreadHandle* thread)
 {
@@ -182,7 +187,9 @@ HcclResult HcclDedicatedThreadAcquire(
     *thread = 1;
     return HCCL_SUCCESS;
 }
+#endif
 
+#if !defined(HCCL_UT_HIDE_HCOMM_RES_APIS) && !defined(HCCL_UT_HIDE_THREAD_RES_INFO)
 HcclResult
 HcclThreadResGetInfo(HcclComm comm, ThreadHandle thread, ThreadResType resType, uint32_t infoLen, void** info)
 {
@@ -193,6 +200,7 @@ HcclThreadResGetInfo(HcclComm comm, ThreadHandle thread, ThreadResType resType, 
     *info = &g_stubStream;
     return HCCL_SUCCESS;
 }
+#endif
 
 extern "C" {
 HcclResult HcclSetAivCoreLimitGraphMode(const char* group, uint32_t aivCoreLimit)
