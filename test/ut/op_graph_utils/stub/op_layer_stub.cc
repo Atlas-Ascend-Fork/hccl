@@ -32,6 +32,7 @@ std::vector<StubCommCall> g_stubArCalls;
 std::vector<StubCommCall> g_stubRsCalls;
 std::vector<StubCommCall> g_stubSendCalls;
 std::vector<StubCommCall> g_stubBcastCalls;
+std::vector<StubCommCall> g_stubAgCalls;
 std::vector<StubCommCall> g_stubReduceCalls;
 std::vector<StubCommCall> g_stubRecvCalls;
 
@@ -143,6 +144,21 @@ HcclResult HcclBroadcastGraphMode(
     (void)scratchMemAddr;
     (void)scratchMemSize;
     g_stubBcastCalls.push_back({buf, nullptr, count, tag != nullptr ? tag : ""});
+    return HCCL_SUCCESS;
+}
+
+HcclResult HcclAllGatherGraphMode(
+    void* sendBuf, void* recvBuf, uint64_t sendCount, HcclDataType dataType, const char* group, aclrtStream stream,
+    const char* tag, void** streams, size_t streamCount, void* scratchMemAddr, uint64_t scratchMemSize)
+{
+    (void)dataType;
+    (void)group;
+    (void)stream;
+    (void)streams;
+    (void)streamCount;
+    (void)scratchMemAddr;
+    (void)scratchMemSize;
+    g_stubAgCalls.push_back({sendBuf, recvBuf, sendCount, tag != nullptr ? tag : ""});
     return HCCL_SUCCESS;
 }
 } // extern "C"
@@ -372,12 +388,21 @@ HcclSend(void* sendBuf, uint64_t count, HcclDataType dataType, uint32_t destRank
 HcclResult
 HcclBroadcast(void* buf, uint64_t count, HcclDataType dataType, uint32_t root, HcclComm comm, aclrtStream stream)
 {
-    (void)buf;
-    (void)count;
     (void)dataType;
     (void)root;
     (void)comm;
     (void)stream;
+    g_stubBcastCalls.push_back({buf, nullptr, count, ""});
+    return HCCL_SUCCESS;
+}
+
+HcclResult HcclAllGather(
+    void* sendBuf, void* recvBuf, uint64_t sendCount, HcclDataType dataType, HcclComm comm, aclrtStream stream)
+{
+    (void)dataType;
+    (void)comm;
+    (void)stream;
+    g_stubAgCalls.push_back({sendBuf, recvBuf, sendCount, ""});
     return HCCL_SUCCESS;
 }
 
@@ -406,11 +431,18 @@ aclError aclrtFree(void* devPtr)
     return ACL_SUCCESS;
 }
 
-// broadcast 动态路径输出引用 (AllocRefOutputsDynamic, 用例不触达; 失败场景在其之前拦截)
+// broadcast 输出引用 (AllocRefOutputsDynamic/AllocRefOutputsAndCalcCount): CtxBuilder 的 Output
+// 声明经 g_stubOutputTensors 队列顺序弹出 (同 MallocOutputTensor 桩), 逐对 MakeOutputRefInput(i,i)
+// 的"output 与 input 同址"由 Output 声明的 data 指针承载 (生产语义由 CtxBuilder 侧等价表达)
+extern std::vector<gert::Tensor*> g_stubOutputTensors; // op_deps_stub.cc 定义
+extern size_t g_stubOutputCursor;                      // op_deps_stub.cc 定义
 gert::Tensor* gert::EagerOpExecutionContext::MakeOutputRefInput(size_t outputIndex, size_t inputIndex) const
 {
     (void)outputIndex;
     (void)inputIndex;
+    if (g_stubOutputCursor < g_stubOutputTensors.size()) {
+        return g_stubOutputTensors[g_stubOutputCursor++];
+    }
     return nullptr;
 }
 

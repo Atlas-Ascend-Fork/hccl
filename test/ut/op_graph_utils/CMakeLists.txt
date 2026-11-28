@@ -31,6 +31,7 @@ set(ut_src_list
     ${_repo_root}/src/ops/reduce_scatter/op_graph/hcom_reduce_scatter_op.cc
     ${_repo_root}/src/ops/send/op_graph/hcom_send_op.cc
     ${_repo_root}/src/ops/broadcast/op_graph/hcom_broadcast_op.cc
+    ${_repo_root}/src/ops/all_gather/op_graph/hcom_all_gather_op.cc
     ${_repo_root}/src/ops/all_to_all_v/op_graph/hcom_alltoallv_op.cc
     ${_repo_root}/src/ops/all_gather_v/op_graph/hcom_all_gather_v_op.cc
     ${_repo_root}/src/ops/recv/op_graph/hcom_receive_op.cc
@@ -52,6 +53,7 @@ target_include_directories(op_graph_utils_test PRIVATE
     ${_repo_root}/src/ops/reduce_scatter/op_graph
     ${_repo_root}/src/ops/send/op_graph
     ${_repo_root}/src/ops/broadcast/op_graph
+    ${_repo_root}/src/ops/all_gather/op_graph
     ${_repo_root}/src/ops/all_to_all_v/op_graph
     ${_repo_root}/src/ops/all_gather_v/op_graph
     ${_repo_root}/src/ops/recv/op_graph
