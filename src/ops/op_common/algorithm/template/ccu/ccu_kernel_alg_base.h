@@ -32,6 +32,12 @@ constexpr uint64_t NUM_TWO = 2;
 constexpr uint32_t LOCAL_COPY_MS_PER_LOOP = 8;
 constexpr uint32_t CCU_MS_LOCAL_COPY_LOOP_COUNT = 8;
 constexpr uint32_t CCU_M2M_LOCAL_COPY_LOOP_COUNT = 16;
+// mem2mem reduce的loop并行度。all_reduce_mesh1d_mem2mem的host侧
+// 沿用CCU_M2M_LOCAL_COPY_LOOP_COUNT, 两常量需保持同值
+constexpr uint32_t CCU_M2M_REDUCE_LOOP_COUNT = 16;
+static_assert(
+    CCU_M2M_REDUCE_LOOP_COUNT == CCU_M2M_LOCAL_COPY_LOOP_COUNT,
+    "all_reduce_mesh1d_mem2mem loopCount depends on the two constants staying equal");
 // 2die 数据切分对齐粒度: 切分点(die0Size/majorSize/minorSize)按此向下对齐,
 // 保证第二个 die 的数据起始地址对齐
 constexpr uint64_t CCU_2DIE_SPLIT_ALIGN_SIZE = 128;

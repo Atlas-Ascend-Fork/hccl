@@ -145,8 +145,7 @@ static CcuResult CreateReduceLoop(
     AllReduceMesh1DMem2Mem2DieOneShotContext& ctx, LocalReduceVar& var, uint32_t size, HcclDataType dataType,
     HcclDataType outputDataType, HcclReduceOp opType, const std::string& loopName)
 {
-    constexpr uint32_t LOOP_NUM = 16;
-    AllocGoResource(ctx.moConfig, ctx.moRes, ctx.resourceAllocated, LOOP_NUM);
+    AllocGoResource(ctx.moConfig, ctx.moRes, ctx.resourceAllocated, CCU_M2M_REDUCE_LOOP_COUNT);
 
     if (ctx.IsLoopEntityRegistered(loopName)) {
         return CCU_SUCCESS;

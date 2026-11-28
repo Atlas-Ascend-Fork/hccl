@@ -139,9 +139,8 @@ HcclResult CcuTempAllReduceMesh1DMem2Mem2DieOneShot::KernelRun(
            localReduceSliceOffset1};
 
     LoopGroupConfig config{};
-    constexpr uint32_t LOOP_NUM = 16;
     config.msInterleave = CCU_MS_INTERLEAVE;
-    config.loopCount = LOOP_NUM;
+    config.loopCount = CCU_M2M_REDUCE_LOOP_COUNT;
     config.memSlice = CCU_MS_SIZE;
 
     auto localReduceGoSize = CalGoSize(normalSliceSize, config);

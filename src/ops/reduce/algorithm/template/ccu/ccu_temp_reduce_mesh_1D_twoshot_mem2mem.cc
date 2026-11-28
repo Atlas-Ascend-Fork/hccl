@@ -15,7 +15,6 @@
 
 namespace ops_hccl {
 
-constexpr uint32_t REDUCE_LOOP_COUNT = 16;
 constexpr uint32_t MAX_RANK_SIZE_FOR_MESH_1D = 8;
 constexpr uint32_t SEND_RECV_DATA_FACTOR = 2;
 
@@ -185,7 +184,7 @@ HcclResult CcuTempReduceMesh1DTwoShotMem2Mem::KernelRun(
 
     LoopGroupConfig config{};
     config.msInterleave = CCU_MS_INTERLEAVE;
-    config.loopCount = REDUCE_LOOP_COUNT;
+    config.loopCount = CCU_M2M_REDUCE_LOOP_COUNT;
     config.memSlice = CCU_MS_SIZE;
     auto goSize = (mySubCommRank_ == (templateRankSize_ - 1)) ? CalGoSize(lastSliceSize, config) :
                                                                 CalGoSize(normalSliceSize, config);

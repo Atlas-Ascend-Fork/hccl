@@ -349,8 +349,7 @@ static CcuResult DoRepeatReduceScatter(ReduceScatterMesh1DMem2MemContext& ctx)
 
 static CcuResult CreateReduceLoopV1(ReduceScatterMesh1DMem2MemContext& ctx)
 {
-    constexpr uint32_t LOOP_NUM_16 = 16;
-    AllocGoResource(ctx.moConfig, ctx.moRes, ctx.resourceAllocated, LOOP_NUM_16);
+    AllocGoResource(ctx.moConfig, ctx.moRes, ctx.resourceAllocated, REDUCE_SCATTER_LOOP_COUNT);
 
     if (ctx.IsLoopEntityRegistered("reduceScatterLocalReduce")) {
         return CCU_SUCCESS;
@@ -405,8 +404,8 @@ static CcuResult CreateReduceLoopV1(ReduceScatterMesh1DMem2MemContext& ctx)
 
 static CcuResult CreateReduceLoopV2(ReduceScatterMesh1DMem2MemContext& ctx)
 {
-    constexpr uint32_t LOOP_NUM_16 = 16;
-    AllocGoResource(ctx.moConfig, ctx.moRes, ctx.resourceAllocated, LOOP_NUM_16, 1, CCU_LOOP_CKE_NUM_REDUCE_LOOP_V2);
+    AllocGoResource(
+        ctx.moConfig, ctx.moRes, ctx.resourceAllocated, REDUCE_SCATTER_LOOP_COUNT, 1, CCU_LOOP_CKE_NUM_REDUCE_LOOP_V2);
 
     if (ctx.IsLoopEntityRegistered("reduceScatterLocalReduce")) {
         return CCU_SUCCESS;

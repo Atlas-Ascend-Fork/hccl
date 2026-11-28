@@ -137,8 +137,7 @@ static void InitSliceInfo(ReduceMesh1DTwoShotMem2MemContext& ctx)
 // ============================================
 static CcuResult CreateReduceLoop(ReduceMesh1DTwoShotMem2MemContext& ctx)
 {
-    constexpr uint32_t LOOP_NUM = 16;
-    AllocGoResource(ctx.moConfig, ctx.moRes, ctx.resourceAllocated, LOOP_NUM);
+    AllocGoResource(ctx.moConfig, ctx.moRes, ctx.resourceAllocated, CCU_M2M_REDUCE_LOOP_COUNT);
 
     if (ctx.IsLoopEntityRegistered("twoshotReduce")) {
         return CCU_SUCCESS;

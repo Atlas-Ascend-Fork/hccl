@@ -103,8 +103,7 @@ static CcuResult CreateReduceLoopV1(
     AllReduceMeshMem2Mem1DContext& ctx, GroupReduceMem2MemVar& var, uint32_t size, HcclDataType dataType,
     HcclDataType outputDataType, HcclReduceOp opType)
 {
-    constexpr uint32_t LOOP_NUM = 16;
-    AllocGoResource(ctx.moConfig, ctx.moRes, ctx.resourceAllocated, LOOP_NUM);
+    AllocGoResource(ctx.moConfig, ctx.moRes, ctx.resourceAllocated, CCU_M2M_REDUCE_LOOP_COUNT);
     if (ctx.IsLoopEntityRegistered("reduce_mesh1d_mem2mem")) {
         return CCU_SUCCESS;
     }
@@ -148,8 +147,8 @@ static CcuResult CreateReduceLoopV2(
     AllReduceMeshMem2Mem1DContext& ctx, GroupReduceMem2MemVar& var, uint32_t size, HcclDataType dataType,
     HcclDataType outputDataType, HcclReduceOp opType)
 {
-    constexpr uint32_t LOOP_NUM = 16;
-    AllocGoResource(ctx.moConfig, ctx.moRes, ctx.resourceAllocated, LOOP_NUM, 1, CCU_LOOP_CKE_NUM_REDUCE_LOOP_V2);
+    AllocGoResource(
+        ctx.moConfig, ctx.moRes, ctx.resourceAllocated, CCU_M2M_REDUCE_LOOP_COUNT, 1, CCU_LOOP_CKE_NUM_REDUCE_LOOP_V2);
     if (ctx.IsLoopEntityRegistered("reduce_mesh1d_mem2mem")) {
         return CCU_SUCCESS;
     }
