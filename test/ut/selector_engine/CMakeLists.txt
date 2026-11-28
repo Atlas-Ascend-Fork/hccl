@@ -98,6 +98,7 @@ endmacro()
 # costModel/costTable/tuner/HCOMM ctx 依赖由本目录桩提供, 不依赖硬件。
 # 另编入 AllReduce/Reduce/ReduceScatter 三个算子 selector, 覆盖 IsDataTypeOrReduceTypeSpecial
 # 的 pipeline 选路守护(见 selector_dpu_guard_test.cc)。
+# ReduceAutoSelector 门禁口径 UT(Issue #1030): INT8+SUM 拦截回退 AICPU 回归锁
 set(ut_src_list
     ${CMAKE_CURRENT_SOURCE_DIR}/selector_engine_test.cc
     ${CMAKE_CURRENT_SOURCE_DIR}/selector_dpu_guard_test.cc

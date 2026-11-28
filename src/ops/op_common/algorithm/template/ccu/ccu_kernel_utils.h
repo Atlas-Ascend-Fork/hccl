@@ -52,6 +52,10 @@ uint64_t GetParallelParam(
 uint64_t GetOffsetParam(uint64_t gsaOffset, uint64_t msOffset, uint64_t ckeOffset);
 uint64_t GetExpansionParam(uint64_t expansionNum);
 uint32_t GetReduceExpansionNum(HcclReduceOp reduceOp, HcclDataType dataType, HcclDataType outputDataType);
+// mesh 规约内核不支持 INT8+SUM（会挂死），GroupReduce 系与直调 LocalReduce 的同族内核入口统一拦截，
+// 选路漏拦时快速报错而非挂死；NHR 内核走 ReadReduce/WriteReduce 等数据面直写原语（omnipipe 变体走
+// ReadReduce、其余 NHR 变体走 WriteReduce），经全链路验证支持 int8，不经此处
+CcuResult CheckCcuReduceDataType(HcclDataType dataType, HcclReduceOp opType);
 std::string GetReduceTypeStr(HcclDataType dataType, HcclReduceOp opType);
 
 uint64_t DataTypeSizeGet(HcclDataType type);

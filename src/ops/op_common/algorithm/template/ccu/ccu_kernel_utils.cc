@@ -125,6 +125,18 @@ uint32_t GetReduceExpansionNum(HcclReduceOp reduceOp, HcclDataType dataType, Hcc
 
 uint64_t DataTypeSizeGet(HcclDataType type) { return HCCL_SIZE_TABLE[type]; }
 
+CcuResult CheckCcuReduceDataType(HcclDataType dataType, HcclReduceOp opType)
+{
+    if (dataType == HcclDataType::HCCL_DATA_TYPE_INT8 && opType == HcclReduceOp::HCCL_REDUCE_SUM) {
+        HCCL_ERROR(
+            "[CcuKernelUtils] dataType[%d] INT8 SUM is not supported by ccu mesh reduce kernel, reject to avoid "
+            "hang.",
+            dataType);
+        return CcuResult::CCU_E_PARA;
+    }
+    return CcuResult::CCU_SUCCESS;
+}
+
 std::string GetReduceTypeStr(HcclDataType dataType, HcclReduceOp opType)
 {
     static std::map<HcclDataType, std::string> ccuRepDataTypeStr = {

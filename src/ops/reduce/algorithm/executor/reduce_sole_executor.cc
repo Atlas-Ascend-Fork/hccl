@@ -404,7 +404,9 @@ REGISTER_ALG_ATTRS(
         }
         return true;
     };
-    op.unsupportedDataTypes = UNSUPPORTED_INT8_AND_64BIT; op.isSupportInplace = true; op.isSupportProd = false;);
+    // INT8 为保守全量排除：实测仅 SUM 挂死、MAX/MIN 可执行，老选路按实测放行 MAX/MIN，两路口径待后续对齐
+    op.unsupportedDataTypes = UNSUPPORTED_INT8_AND_64BIT;
+    op.isSupportInplace = true; op.isSupportProd = false;);
 #endif // CANN_VERSION_NUM >= CANN_VERSION(9, 0, 0)
 #if CANN_VERSION_NUM >= CANN_VERSION(9, 0, 0)
 REGISTER_EXEC_V2(

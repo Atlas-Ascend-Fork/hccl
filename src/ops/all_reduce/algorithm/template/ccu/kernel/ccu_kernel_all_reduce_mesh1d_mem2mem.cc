@@ -652,6 +652,7 @@ CcuResult CcuAllReduceMeshMem2Mem1DKernel(CcuKernelArg arg)
 
     HCCL_INFO("[CcuKernelAllReduceMeshMem2Mem1D] AllReduceMeshMem2Mem1D run");
     CCU_CHK_RET(ParseKernelArg(ctx, kernelArg));
+    CCU_CHK_RET(CheckCcuReduceDataType(ctx.dataType, ctx.reduceOp));
     CCU_CHK_RET(InitResource(ctx));
     CCU_CHK_RET(LoadArgs(ctx));
 

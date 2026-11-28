@@ -388,6 +388,7 @@ CcuResult CcuReduceScatterOmniPipeMesh1DMem2MemKernel(CcuKernelArg arg)
 
     HCCL_INFO("[CcuKernelReduceScatterOmniPipeMesh1DMem2Mem] ReduceScatterOmniPipeMesh1DMem2Mem run");
     CCU_CHK_RET(ParseKernelArg(ctx, kernelArg));
+    CCU_CHK_RET(CheckCcuReduceDataType(ctx.dataType, ctx.reduceOp));
     CCU_CHK_RET(InitResource(ctx));
     CCU_CHK_RET(LoadArgs(ctx));
     PreSync(ctx);

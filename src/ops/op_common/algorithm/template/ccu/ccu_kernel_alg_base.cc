@@ -346,6 +346,7 @@ CcuResult GroupReduce(
     std::vector<ccu::RemoteAddr> src, ccu::LocalAddr localSrc, GroupOpSizeVars goSize, HcclDataType dataType,
     HcclDataType outputDataType, HcclReduceOp opType, CcuVersion ccuVersion, uint32_t localRankSlot)
 {
+    CCU_CHK_RET(CheckCcuReduceDataType(dataType, opType));
     if (ccuVersion == CcuVersion::CCU_V1) {
         HCCL_INFO("select GroupReduceV1");
         return GroupReduceV1(
@@ -828,6 +829,7 @@ CcuResult GroupReduceWithoutMyRank(
     std::vector<ccu::RemoteAddr> src, GroupOpSizeVars goSize, HcclDataType dataType, HcclDataType outputDataType,
     HcclReduceOp opType)
 {
+    CCU_CHK_RET(CheckCcuReduceDataType(dataType, opType));
     GroupReduceVar var;
     ccu::Variable tmp;
     ccu::Variable loopParam;
@@ -1148,6 +1150,7 @@ CcuResult GroupLocalReduce(
     CcuKernelCtxBase& ctx, ccu::LocalAddr outDstOrg, std::vector<ccu::LocalAddr>& scratchOrg, GroupOpSizeVars goSize,
     HcclDataType dataType, HcclDataType outputDataType, HcclReduceOp opType)
 {
+    CCU_CHK_RET(CheckCcuReduceDataType(dataType, opType));
     const uint32_t size = scratchOrg.size();
 
     // loop body 持有变量地址；重复执行时须复用 ctx 中的变量。

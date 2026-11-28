@@ -263,6 +263,15 @@ SelectorStatus ReduceAutoSelector::SelectMeshAlgoCcuSchedule(
                 HCCL_INFO("[ReduceAutoSelector] Mesh1D dataSize[%llu] >= 8MB, fallback to aicpu.", dataSize);
                 return SelectorStatus::NOT_MATCH;
             } else {
+                // INT8+SUM 会挂死（Issue #1030），回退 AICPU；MAX/MIN 无升格可正常执行
+                CHK_PRT_RET(
+                    opParam.DataDes.dataType == HcclDataType::HCCL_DATA_TYPE_INT8
+                        && opParam.reduceType == HcclReduceOp::HCCL_REDUCE_SUM,
+                    HCCL_WARNING(
+                        "[ReduceAutoSelector] dataType[%d] with reduce op[%d] is not supported by ccu mesh kernel, "
+                        "fallback to aicpu.",
+                        opParam.DataDes.dataType, opParam.reduceType),
+                    SelectorStatus::NOT_MATCH);
                 selectAlgName = "CcuSchedReduceSoleMesh";
             }
         } else if (topoInfo->level0PcieMix) {

@@ -756,6 +756,7 @@ CcuResult CcuReduceScatterMesh1DMem2MemKernel(CcuKernelArg arg)
 
     HCCL_INFO("[CcuKernelReduceScatterMesh1DMem2Mem] ReduceScatterMesh1DMem2Mem run");
     CCU_CHK_RET(ParseKernelArg(ctx, kernelArg));
+    CCU_CHK_RET(CheckCcuReduceDataType(ctx.dataType, ctx.reduceOp));
     CCU_CHK_RET(InitResource(ctx));
     CCU_CHK_RET(LoadArgs(ctx));
 
