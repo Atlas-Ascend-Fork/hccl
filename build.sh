@@ -570,13 +570,15 @@ function make_st_gov() {
         if [[ "${major_version}" -ge 2 ]]; then
             log "Info: Detected lcov version 2.x, running with ${CPU_NUM} parallel jobs"
             LCOV_IGNORE_ERRORS="mismatch,corrupt,empty,inconsistent,negative,unused"
-            LCOV_RC_PARAM=""
+            LCOV_RC_PARAM="-rc branch_coverage=1"
             LCOV_PARALLEL="-j ${CPU_NUM}"
+            GENHTML_RC_PARAM="-rc branch_coverage=1"
             GENHTML_IGNORE_ERRORS="inconsistent,corrupt"
         else
             LCOV_IGNORE_ERRORS=""
-            LCOV_RC_PARAM=""
+            LCOV_RC_PARAM="-rc lcov_branch_coverage=1"
             LCOV_PARALLEL=""
+            GENHTML_RC_PARAM="-rc genhtml_branch_coverage=1"
             GENHTML_IGNORE_ERRORS=""
         fi
 
@@ -593,6 +595,7 @@ function make_st_gov() {
                 ${LCOV_PARALLEL} \
                 -d ${BUILD_ST_DIR}/testcase/ \
                 -d ${BUILD_ST_DIR}/utils/ \
+                ${LCOV_RC_PARAM} \
                 -o coverage.info
         fi
 
@@ -601,12 +604,14 @@ function make_st_gov() {
             lcov -r coverage.info \
                     */test/st/algorithm/* \
                 ${LCOV_PARALLEL} \
+                ${LCOV_RC_PARAM} \
                 --ignore-errors ${LCOV_IGNORE_ERRORS} \
                 -o coverage.info
         else
             lcov -r coverage.info \
                     */test/st/algorithm/* \
                 ${LCOV_PARALLEL} \
+                ${LCOV_RC_PARAM} \
                 -o coverage.info
         fi
 
@@ -615,19 +620,24 @@ function make_st_gov() {
             lcov -e coverage.info \
                     */src/* \
                 ${LCOV_PARALLEL} \
+                ${LCOV_RC_PARAM} \
                 --ignore-errors "${LCOV_IGNORE_ERRORS}" \
                 -o coverage.info
         else
             lcov -e coverage.info \
                     */src/* \
                 ${LCOV_PARALLEL} \
+                ${LCOV_RC_PARAM} \
                 -o coverage.info
         fi
 
         if [ -n "${LCOV_IGNORE_ERRORS}" ] ; then
-            genhtml coverage.info ${LCOV_PARALLEL} --ignore-errors ${GENHTML_IGNORE_ERRORS}
+            genhtml coverage.info ${LCOV_PARALLEL} \
+                    ${GENHTML_RC_PARAM} \
+                    --ignore-errors ${GENHTML_IGNORE_ERRORS}
         else
-            genhtml coverage.info ${LCOV_PARALLEL}
+            genhtml coverage.info ${LCOV_PARALLEL} \
+                    ${GENHTML_RC_PARAM}
         fi
         
         log "Info: ST coverage statistics generated successfully"
