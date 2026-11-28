@@ -53,6 +53,7 @@ public:
     HcclResult CalcRes(
         HcclComm comm, const OpParam& param, const TopoInfoWithNetLayerDetails* topoInfo,
         AlgResourceRequest& resourceRequest) override;
+    HcclResult GetRes(AlgResourceRequest& resourceRequest) const override;
     u64 GetThreadNum() const override;
     void SetRoot(u32 root);
     void GetNotifyIdxMainToSub(std::vector<u32>& notifyIdxMainToSub) override {};
