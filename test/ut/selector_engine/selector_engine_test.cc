@@ -15,6 +15,8 @@
 
 #include "auto_selector_base.h"
 #include "cost_table.h"
+#include "dlhcomm_function.h"
+#include "reduce_auto_selector.h"
 #include "selector_deps_stub.h"
 #include "selector_engine.h"
 
@@ -304,4 +306,65 @@ TEST(IsDataTypeOrReduceTypeSpecialTest, DefaultOpParamIsNotSpecial)
     // when
     // then
     EXPECT_FALSE(ops_hccl::IsDataTypeOrReduceTypeSpecial(param));
+}
+
+// ---------- ReduceAutoSelector 门禁回归锁(Issue #1030): MESH_1D_CLOS 全互连分支拦截 INT8+SUM ----------
+namespace {
+TopoInfoWithNetLayerDetails MakeMesh1dClosAllConnectedTopo()
+{
+    TopoInfoWithNetLayerDetails topo{};
+    topo.topoLevelNums = 1;
+    topo.userRankSize = 4;
+    topo.level0Topo = ops_hccl::Level0Shape::MESH_1D_CLOS;
+    topo.topoInstDetailsOfLayer.resize(1);
+    // 单个 CLOS 实例内 4 rank 全互连（IsLayerAllConnetedWithTopo 读 rankNumForTopoType 与 localNetInsSizeOfLayer）
+    topo.topoInstDetailsOfLayer[0].topoInstNum = 1;
+    topo.topoInstDetailsOfLayer[0].rankNumForTopoType[CommTopo::COMM_TOPO_1DMESH] = {4};
+    topo.netLayerDetails.localNetInsSizeOfLayer = {4};
+    return topo;
+}
+
+OpParam MakeReduceParam(HcclDataType dataType, HcclReduceOp reduceOp)
+{
+    OpParam param{};
+    param.opExecuteConfig = OpExecuteConfig::CCU_SCHED;
+    param.opType = HcclCMDType::HCCL_CMD_REDUCE;
+    param.DataDes.dataType = dataType;
+    param.DataDes.count = 1024; // 1KB, 小于 8MB 阈值
+    param.reduceType = reduceOp;
+    return param;
+}
+
+using ops_hccl::ReduceAutoSelector;
+using ops_hccl::SelectorStatus;
+} // namespace
+
+TEST(ReduceAutoSelectorTest, Int8SumRejectedByCcuScheduleAndFallsBackToAicpu)
+{
+    ReduceAutoSelector selector;
+    OpParam param = MakeReduceParam(HCCL_DATA_TYPE_INT8, HCCL_REDUCE_SUM);
+    TopoInfoWithNetLayerDetails topo = MakeMesh1dClosAllConnectedTopo();
+    std::string algName;
+    EXPECT_EQ(selector.Select(param, &topo, algName), SelectorStatus::MATCH);
+    EXPECT_EQ(algName, "AicpuReduceSoleMesh");
+    EXPECT_EQ(param.opExecuteConfig, OpExecuteConfig::AICPU_TS);
+}
+
+// ---------- 链接桩: 仅 auto selector 的 DPU/AIV 分支引用, 门禁口径 UT 不执行到 ----------
+namespace ops_hccl {
+bool CanUseDpuInlineReduce(const OpParam&, const TopoInfoWithNetLayerDetails*) { return false; }
+
+DlHcommFunction::~DlHcommFunction() = default;
+
+DlHcommFunction& DlHcommFunction::GetInstance()
+{
+    static DlHcommFunction instance;
+    return instance;
+}
+} // namespace ops_hccl
+
+extern "C" {
+int GetHcommVersion(void) { return 0; }
+
+HcclResult HcclGetHcclBuffer(HcclComm, void**, uint64_t*) { return HCCL_E_PARA; }
 }

@@ -451,6 +451,7 @@ CcuResult CcuReduceMesh1DTwoShotMem2MemKernel(CcuKernelArg arg)
         "[CcuKernelReduceMesh1DTwoShotMem2Mem] run, rankId[%u], rankSize[%llu], rootId[%u]", kernelArg->rankId,
         kernelArg->rankSize, kernelArg->rootId);
     CCU_CHK_RET(ParseKernelArg(ctx, kernelArg));
+    CCU_CHK_RET(CheckCcuReduceDataType(ctx.dataType, ctx.reduceOp));
     CCU_CHK_RET(InitResource(ctx));
     CCU_CHK_RET(LoadArgs(ctx));
     PreSync(ctx);

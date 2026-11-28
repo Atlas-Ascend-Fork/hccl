@@ -177,8 +177,8 @@ static CcuResult DoReduceScatterV(ReduceScatterVMesh1DMem2MemContext& ctx)
         outDst.addr = ctx.output;
         outDst.token = ctx.token[arg->rankId];
         // 执行reduce操作
-        GroupLocalReduce(
-            ctx, outDst, ctx.reduceScatterVDst, ctx.reduceGosize, ctx.dataType, ctx.outputDataType, ctx.reduceOp);
+        CCU_CHK_RET(GroupLocalReduce(
+            ctx, outDst, ctx.reduceScatterVDst, ctx.reduceGosize, ctx.dataType, ctx.outputDataType, ctx.reduceOp));
     }
     return CCU_SUCCESS;
 }

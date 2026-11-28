@@ -435,6 +435,7 @@ CcuResult CcuAllreduceMesh1D2DieOneShotKernel(CcuKernelArg arg)
     HCCL_INFO("[CcuKernelAllreduceMesh1D2DieOneShot] AllreduceMesh1D2DieOneShot run");
 
     CCU_CHK_RET(ParseKernelArg(ctx));
+    CCU_CHK_RET(CheckCcuReduceDataType(ctx.dataType, ctx.reduceOp));
     CCU_CHK_RET(InitResource(ctx));
     CCU_CHK_RET(LoadArgs(ctx));
 
