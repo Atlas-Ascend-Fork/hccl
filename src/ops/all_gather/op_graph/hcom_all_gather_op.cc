@@ -106,8 +106,16 @@ AllocOutputByRankSize(hccl::HcclOpState& st, const char* fnName, uint64_t attrRa
 {
     const gert::Tensor* firstInput = st.ctx->GetInputTensor(HcomAllGatherOp::INPUT_INDEX);
     gert::StorageShape outShape = BuildAllGatherOutShape(firstInput->GetShape().GetOriginShape(), attrRankSizeU);
-    gert::Tensor* outTensor = st.ctx->MallocOutputTensor(
-        HcomAllGatherOp::OUTPUT_INDEX, outShape, firstInput->GetFormat(), firstInput->GetDataType());
+    // 空张量输入空张量输出
+    // 由于 GE eager Malloc 不支持 0 字节申请，故只定形不分配内存
+    gert::Tensor* outTensor = nullptr;
+    if (firstInput->GetShapeSize() == 0) {
+        outTensor = hccl::SetEmptyOutputTensor(
+            st.ctx, HcomAllGatherOp::OUTPUT_INDEX, outShape, firstInput->GetFormat(), firstInput->GetDataType());
+    } else {
+        outTensor = st.ctx->MallocOutputTensor(
+            HcomAllGatherOp::OUTPUT_INDEX, outShape, firstInput->GetFormat(), firstInput->GetDataType());
+    }
     if (outTensor == nullptr) {
         HCCL_ERROR("[HcomAllGatherOp][%s] failed to allocate output tensor.", fnName);
         return ge::GRAPH_FAILED;
@@ -141,21 +149,21 @@ ge::graphStatus HcomAllGatherOp::ExtractParamsStatic(hccl::HcclOpState& st)
     const int64_t* fusion = attrs->GetInt(ATTR_FUSION);
     const int64_t* fusionId = attrs->GetInt(ATTR_FUSION_ID);
 
-    // 计数输入: inputCount > 1 即融合节点 (GE 融合 pass 产出, 判据与 AR 一致), 分派融合分支
+    // 计数输入: inputCount > 1 即融合节点 (GE 融合 pass 产出), 分派融合分支
     const size_t inputCount = CountInputs(st);
     if (inputCount > 1) {
         return ExtractParamsStaticFused(st, inputCount, attrRankSizeU, group, fusion, fusionId);
     }
 
     // 单输入路径 (非融合): count = shapeSize (GetCountByShape 口径, 不 512B 对齐)
-    // 引擎融合优化器只对多输入的 AG/RS 设 CONTINUOUS_INPUT/OUTPUT (HcomOptimizeSetAttr),
+    // 引擎融合优化器只对融合节点设 CONTINUOUS_INPUT/OUTPUT (HcomOptimizeSetAttr),
     // 单输入节点无跨输入连续性语义, 不做 512B 对齐;
     // 融合场景的连续性假设见 ExtractParamsStaticFused 的连续布局约束注释
     // GetShapeSize() 返回 int64_t: 负值 (维度乘积溢出/UNKNOWN_DIM 混入) cast 后
-    // 变巨数会绕过零值检查, 先判原值再 cast
+    // 变巨数绕过检查, 先判原值再 cast (0 为合法空张量, 放行走空输入路径)
     const gert::Tensor* firstInput = st.ctx->GetInputTensor(INPUT_INDEX);
     int64_t shapeSize = firstInput->GetShapeSize();
-    if (shapeSize <= 0) {
+    if (shapeSize < 0) {
         HCCL_ERROR("[HcomAllGatherOp][ExtractParamsStatic] invalid input shape size %ld.", shapeSize);
         return ge::GRAPH_FAILED;
     }
@@ -215,10 +223,6 @@ ParseFusedInputs(hccl::HcclOpState& st, size_t inputCount, uint64_t& unitSize, u
             inTensor->GetAddr(), tensorSize, alignedSize);
     }
     st.count = totalAlignedSize / unitSize;
-    if (st.count == 0) {
-        HCCL_ERROR("[HcomAllGatherOp][ExtractParamsStaticFused] total count is 0.");
-        return ge::GRAPH_FAILED;
-    }
     return ge::GRAPH_SUCCESS;
 }
 
@@ -229,8 +233,15 @@ static ge::graphStatus AllocateFusedOutputs(hccl::HcclOpState& st, size_t inputC
 {
     for (size_t idx = 0; idx < outputCount; idx++) {
         const gert::Tensor* inTensor = st.ctx->GetInputTensor(idx % inputCount);
-        gert::Tensor* outTensor
-            = st.ctx->MallocOutputTensor(idx, inTensor->GetShape(), inTensor->GetFormat(), inTensor->GetDataType());
+        // 空张量输入空张量输出，只定形而不分配内存
+        gert::Tensor* outTensor = nullptr;
+        if (inTensor->GetShapeSize() == 0) {
+            outTensor = hccl::SetEmptyOutputTensor(
+                st.ctx, idx, inTensor->GetShape(), inTensor->GetFormat(), inTensor->GetDataType());
+        } else {
+            outTensor
+                = st.ctx->MallocOutputTensor(idx, inTensor->GetShape(), inTensor->GetFormat(), inTensor->GetDataType());
+        }
         if (outTensor == nullptr) {
             HCCL_ERROR("[HcomAllGatherOp][ExtractParamsStaticFused] failed to allocate output tensor %zu.", idx);
             return ge::GRAPH_FAILED;
@@ -258,6 +269,15 @@ ge::graphStatus HcomAllGatherOp::ExtractParamsStaticFused(
     uint64_t unitSize = 0;
     uint64_t totalAlignedSize = 0;
     HCCL_GE_CHK_RET(ParseFusedInputs(st, inputCount, unitSize, totalAlignedSize));
+
+    // 防御 count>0 但首输入地址为 nullptr的情况（空张量输入可能导致）
+    if (st.count > 0 && st.inputPtrs[0] == nullptr) {
+        HCCL_ERROR(
+            "[HcomAllGatherOp][ExtractParamsStaticFused] first input is empty (null buf) with count=%lu > 0, "
+            "mixed empty/non-empty inputs not supported.",
+            st.count);
+        return ge::GRAPH_FAILED;
+    }
 
     // 溢出防御: outputCount = inputCount * attrRankSize, 超过 SIZE_MAX 拒绝 (attrRankSize 仅校验了 >0)
     if (attrRankSizeU > SIZE_MAX / inputCount) {
@@ -305,7 +325,7 @@ ge::graphStatus HcomAllGatherOp::ExtractParamsDynamic(hccl::HcclOpState& st)
     // GetShapeSize() 返回 int64_t: 负值 (维度乘积溢出/UNKNOWN_DIM 混入) cast 后变巨数, 先判原值再 cast
     const gert::Tensor* firstInput = st.ctx->GetInputTensor(INPUT_INDEX);
     int64_t shapeSize = firstInput->GetShapeSize();
-    if (shapeSize <= 0) {
+    if (shapeSize < 0) {
         HCCL_ERROR("[HcomAllGatherOp][ExtractParamsDynamic] invalid input shape size %ld.", shapeSize);
         return ge::GRAPH_FAILED;
     }
@@ -424,6 +444,10 @@ ge::graphStatus HcomAllGatherOp::LaunchHcclOpDynamic(hccl::HcclOpState& st)
     // 动态路径 (lowering-style): 对照 lowering HcomAllGatherKernelV2 —
     // 单 input (ExtractParamsDynamic 已强制), count 取 inputShape, 直传用户 buffer, 无 crack
     // 单算子接口 (hccl.map 公共导出): 免 tag 构造/group 串解析; GraphMode 为烘焙态接口, engine 动态路径不使用
+    if (st.count == 0) {
+        HCCL_INFO("[HcomAllGatherOp][LaunchHcclOpDynamic] all inputs empty (count=0), skip and succeed.");
+        return ge::GRAPH_SUCCESS;
+    }
     HcclResult ret = HcclSetAivCoreLimitGraphMode(st.group, st.aivCoreLimit);
     if (ret != HCCL_SUCCESS) {
         HCCL_ERROR(

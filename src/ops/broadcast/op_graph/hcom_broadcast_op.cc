@@ -136,10 +136,6 @@ static ge::graphStatus AllocRefOutputsAndCalcCount(hccl::HcclOpState& st, size_t
         return ge::GRAPH_FAILED;
     }
     st.count = totalAlignedSize / unitSize;
-    if (st.count == 0) {
-        HCCL_ERROR("[HcomBroadcastOp][ExtractParamsStatic] input count is 0 (totalAlignedSize=%lu).", totalAlignedSize);
-        return ge::GRAPH_FAILED;
-    }
     return ge::GRAPH_SUCCESS;
 }
 
@@ -147,12 +143,16 @@ static ge::graphStatus AllocRefOutputsAndCalcCount(hccl::HcclOpState& st, size_t
 static ge::graphStatus AllocRefOutputsDynamic(hccl::HcclOpState& st, size_t& inputCount)
 {
     inputCount = 0;
+    bool hasNonEmpty = false;
     for (size_t i = 0;; i++) {
         const gert::Tensor* inTensor = st.ctx->GetInputTensor(i);
         if (inTensor == nullptr) {
             break;
         }
         inputCount++;
+        if (inTensor->GetShapeSize() > 0) {
+            hasNonEmpty = true;
+        }
 
         gert::Tensor* outTensor = st.ctx->MakeOutputRefInput(i, i);
         if (outTensor == nullptr) {
@@ -169,6 +169,12 @@ static ge::graphStatus AllocRefOutputsDynamic(hccl::HcclOpState& st, size_t& inp
     }
     if (inputCount == 0) {
         HCCL_ERROR("[HcomBroadcastOp][ExtractParamsDynamic] no input tensors.");
+        return ge::GRAPH_FAILED;
+    }
+    // 防御 count==0（首输入为空）但存在非空输入的情况（混合输入会静默跳过非空张量的广播）
+    if (st.count == 0 && hasNonEmpty) {
+        HCCL_ERROR("[HcomBroadcastOp][ExtractParamsDynamic] first input is empty (count=0) with non-empty inputs "
+                   "mixed in, mixed empty/non-empty inputs not supported.");
         return ge::GRAPH_FAILED;
     }
     return ge::GRAPH_SUCCESS;
@@ -189,6 +195,15 @@ ge::graphStatus HcomBroadcastOp::ExtractParamsStatic(hccl::HcclOpState& st)
     size_t inputCount = 0;
     HCCL_GE_CHK_RET(AllocRefOutputsAndCalcCount(st, inputCount));
 
+    // 防御 count>0 但首输入地址为 nullptr的情况（空张量输入可能导致）
+    if (st.count > 0 && st.inputPtrs[0] == nullptr) {
+        HCCL_ERROR(
+            "[HcomBroadcastOp][ExtractParamsStatic] first input is empty (null buf) with count=%lu > 0, "
+            "mixed empty/non-empty inputs not supported.",
+            st.count);
+        return ge::GRAPH_FAILED;
+    }
+
     HCCL_INFO(
         "[HcomBroadcastOp][ExtractParamsStatic] inputCount=%zu input[0]=%p output[0]=%p root=%u count=%lu "
         "dataType=%d group=%s stream=%p fusion=%ld fusionId=%ld.",
@@ -201,11 +216,12 @@ ge::graphStatus HcomBroadcastOp::ExtractParamsStatic(hccl::HcclOpState& st)
 ge::graphStatus HcomBroadcastOp::ExtractParamsDynamic(hccl::HcclOpState& st)
 {
     // 动态路径 (lowering-style): 对照 lowering HcomBroadcastKernelV2
-    // - 只校验 inputNum >= 1 (区别于 RS 动态路径强制 ==1): 多 input 不报错, count 与通信地址只用第一个
+    // - 只校验 inputNum >= 1: 多 input 不报错, count 与通信地址只用第一个
+    //   (首输入空+余非空属混合输入, 由 AllocRefOutputsDynamic 尾部拦截拒绝)
     // - count 用 GetCountByShapeAlign 512B 对齐口径:
-    //   count = RoundUp(shapeSize * unitSize, 512) / unitSize (区别于 AG 的非对齐 GetCountByShape)
+    //   count = RoundUp(shapeSize * unitSize, 512) / unitSize
     // - root 从 IR attr root_rank (index 0) 读入 st.root, 传通信调用第 4 参数
-    //   (root < rankSize 校验在静态路径 CalcResourcesStatic, 对照 Reduce 同款)
+    //   (root < rankSize 校验在静态路径 CalcResourcesStatic)
     const gert::RuntimeAttrs* attrs = nullptr;
     HCCL_GE_CHK_RET(ExtractCommonParams(st, "ExtractParamsDynamic", attrs));
 
@@ -235,10 +251,6 @@ ge::graphStatus HcomBroadcastOp::ExtractParamsDynamic(hccl::HcclOpState& st)
     }
     uint64_t alignedBytes = (shapeSize * unitSize + memAlignSize - 1) / memAlignSize * memAlignSize;
     st.count = alignedBytes / unitSize;
-    if (st.count == 0) {
-        HCCL_ERROR("[HcomBroadcastOp][ExtractParamsDynamic] input count is 0 (shapeSize=%lu).", shapeSize);
-        return ge::GRAPH_FAILED;
-    }
 
     // 遍历所有 input, 输出与输入逐对: output[i] 经 MakeOutputRefInput(i, i) 引用 input[i]
     size_t inputCount = 0;
@@ -357,6 +369,10 @@ ge::graphStatus HcomBroadcastOp::LaunchHcclOpDynamic(hccl::HcclOpState& st)
     // SetAivCoreLimit 后单次 HcclBroadcast 直传用户 buffer, 不用 CCL buffer, 无 crack
     // 单算子接口 (hccl.map 公共导出): 免 tag 构造/group 串解析; GraphMode 为烘焙态接口, engine 动态路径不使用
     // 单 buf in-place: 通信写 input 地址即写 output (output 经 MakeOutputRefInput 与 input 同址)
+    if (st.count == 0) {
+        HCCL_INFO("[HcomBroadcastOp][LaunchHcclOpDynamic] all inputs empty (count=0), skip and succeed.");
+        return ge::GRAPH_SUCCESS;
+    }
     HcclResult ret = HcclSetAivCoreLimitGraphMode(st.group, st.aivCoreLimit);
     if (ret != HCCL_SUCCESS) {
         HCCL_ERROR(

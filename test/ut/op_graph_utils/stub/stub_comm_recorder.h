@@ -26,5 +26,6 @@ extern std::vector<StubCommCall> g_stubArCalls;
 extern std::vector<StubCommCall> g_stubRsCalls;
 extern std::vector<StubCommCall> g_stubSendCalls;
 extern std::vector<StubCommCall> g_stubBcastCalls;
+extern std::vector<StubCommCall> g_stubAgCalls;
 extern std::vector<StubCommCall> g_stubReduceCalls;
 extern std::vector<StubCommCall> g_stubRecvCalls;

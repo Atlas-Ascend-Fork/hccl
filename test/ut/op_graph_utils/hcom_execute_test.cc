@@ -19,6 +19,7 @@
 
 #include "gert_context_helper.h"
 #include "hcom_all_reduce_op.h"
+#include "hcom_all_gather_op.h"
 #include "hcom_reduce_op.h"
 #include "hcom_reduce_scatter_op.h"
 #include "hcom_broadcast_op.h"
@@ -65,6 +66,7 @@ protected:
         g_stubRsCalls.clear();
         g_stubSendCalls.clear();
         g_stubBcastCalls.clear();
+        g_stubAgCalls.clear();
         g_stubReduceCalls.clear();
         g_stubRecvCalls.clear();
         g_stubOutputTensors.clear();
@@ -503,4 +505,151 @@ TEST_F(ExecuteTest, RecvRefreshSingleIterationWhenDataSmallerThanBuf)
     EXPECT_EQ(ge::GRAPH_SUCCESS, op.Execute(ctx.Build()));
     ASSERT_EQ(1U, g_stubRecvCalls.size());
     EXPECT_EQ(50U, g_stubRecvCalls[0].count);
+}
+
+// ---------------------------------------------------------------------------
+// 空张量输入回归 (AG/BRD): 静态/融合/动态三路径放行 no-op, 混合输入响亮拒绝
+// (对齐 AllReduce/Reduce 既有基准: 全空断言通信入口行为, 混合断言边界拦截)
+// ---------------------------------------------------------------------------
+TEST_F(ExecuteTest, AgStaticEmptyInputNoOp)
+{
+    float out[1] = {};
+    HcomAllGatherOp op;
+    hcut::CtxBuilder ctx;
+    ctx.Input({0}, ge::DT_FLOAT, nullptr).Output({0}, ge::DT_FLOAT, out);
+    ctx.Attr(0, static_cast<int64_t>(8))
+        .Attr(1, "ut_group")
+        .Attr(2, static_cast<int64_t>(0))
+        .Attr(3, static_cast<int64_t>(0));
+
+    EXPECT_EQ(ge::GRAPH_SUCCESS, op.Execute(ctx.Build()));
+    // 静态 Direct: 空输出只定形 (SetEmptyOutputTensor), count=0 正常下发通信入口
+    ASSERT_EQ(1U, g_stubAgCalls.size());
+    EXPECT_EQ(0U, g_stubAgCalls[0].count);
+    EXPECT_EQ(nullptr, g_stubAgCalls[0].buf1); // 空张量地址为 null, 正常下发由底层 0 短路
+}
+
+TEST_F(ExecuteTest, AgFusedAllEmptyInputsNoOp)
+{
+    float out[1] = {};
+    HcomAllGatherOp op;
+    hcut::CtxBuilder ctx;
+    ctx.Input({0}, ge::DT_FLOAT, nullptr).Input({0}, ge::DT_FLOAT, nullptr);
+    // 融合 AG 输出 = 输入数 × rankSize = 2 × 8 = 16 (每个输入展开 rankSize 份拼接语义)
+    for (size_t i = 0; i < 16; i++) {
+        ctx.Output({0}, ge::DT_FLOAT, out);
+    }
+    ctx.Attr(0, static_cast<int64_t>(8))
+        .Attr(1, "ut_group")
+        .Attr(2, static_cast<int64_t>(0))
+        .Attr(3, static_cast<int64_t>(0));
+
+    EXPECT_EQ(ge::GRAPH_SUCCESS, op.Execute(ctx.Build()));
+    // 融合全空: count=(0+0) 对齐累加仍为 0, 逐输出空分支 (SetEmptyOutputTensor) 后正常下发
+    ASSERT_EQ(1U, g_stubAgCalls.size());
+    EXPECT_EQ(0U, g_stubAgCalls[0].count);
+}
+
+TEST_F(ExecuteTest, AgFusedMixedEmptyAndNonEmptyRejected)
+{
+    float data[8] = {};
+    float out0[1] = {};
+    float out1[8] = {};
+    HcomAllGatherOp op;
+    hcut::CtxBuilder ctx;
+    ctx.Input({0}, ge::DT_FLOAT, nullptr); // 空: inputPtrs[0]=null
+    ctx.Input({8}, ge::DT_FLOAT, data);    // 非空: 32B → 对齐 512B → count=128 > 0
+    ctx.Output({0}, ge::DT_FLOAT, out0).Output({8}, ge::DT_FLOAT, out1);
+    ctx.Attr(0, static_cast<int64_t>(8))
+        .Attr(1, "ut_group")
+        .Attr(2, static_cast<int64_t>(0))
+        .Attr(3, static_cast<int64_t>(0));
+
+    EXPECT_EQ(ge::GRAPH_FAILED, op.Execute(ctx.Build()));
+    EXPECT_EQ(0U, g_stubAgCalls.size()); // null buf + count>0 不得进通信
+}
+
+TEST_F(ExecuteTest, AgDynamicEmptyInputNoOp)
+{
+    g_stubCtxVal[kIdxStaticModel] = 0; // 动态路径
+    float out[1] = {};
+    HcomAllGatherOp op;
+    hcut::CtxBuilder ctx;
+    ctx.Input({0}, ge::DT_FLOAT, nullptr).Output({0}, ge::DT_FLOAT, out);
+    ctx.Attr(0, static_cast<int64_t>(8)).Attr(1, "ut_group");
+
+    EXPECT_EQ(ge::GRAPH_SUCCESS, op.Execute(ctx.Build()));
+    // 动态空张量: LaunchHcclOpDynamic 入口 count==0 直接 SUCCESS, 不进任何通信
+    EXPECT_EQ(0U, g_stubAgCalls.size());
+}
+
+TEST_F(ExecuteTest, BroadcastStaticAllEmptyInputsNoOp)
+{
+    float out0[1] = {};
+    float out1[1] = {};
+    HcomBroadcastOp op;
+    hcut::CtxBuilder ctx;
+    ctx.Input({0}, ge::DT_FLOAT, nullptr).Input({0}, ge::DT_FLOAT, nullptr);
+    ctx.Output({0}, ge::DT_FLOAT, out0).Output({0}, ge::DT_FLOAT, out1);
+    ctx.Attr(0, static_cast<int64_t>(0))
+        .Attr(1, "ut_group")
+        .Attr(2, static_cast<int64_t>(0))
+        .Attr(3, static_cast<int64_t>(0));
+
+    EXPECT_EQ(ge::GRAPH_SUCCESS, op.Execute(ctx.Build()));
+    // 静态全空: 512B 对齐累加 count=0, 输出引用输入逐对建立后正常下发通信入口
+    ASSERT_EQ(1U, g_stubBcastCalls.size());
+    EXPECT_EQ(0U, g_stubBcastCalls[0].count);
+    EXPECT_EQ(nullptr, g_stubBcastCalls[0].buf1);
+}
+
+TEST_F(ExecuteTest, BroadcastStaticMixedEmptyAndNonEmptyRejected)
+{
+    float data[8] = {};
+    float out0[1] = {};
+    float out1[8] = {};
+    HcomBroadcastOp op;
+    hcut::CtxBuilder ctx;
+    ctx.Input({0}, ge::DT_FLOAT, nullptr); // 空: inputPtrs[0]=null
+    ctx.Input({8}, ge::DT_FLOAT, data);    // 非空: 32B → 对齐 512B → count=128 > 0
+    ctx.Output({0}, ge::DT_FLOAT, out0).Output({8}, ge::DT_FLOAT, out1);
+    ctx.Attr(0, static_cast<int64_t>(0))
+        .Attr(1, "ut_group")
+        .Attr(2, static_cast<int64_t>(0))
+        .Attr(3, static_cast<int64_t>(0));
+
+    EXPECT_EQ(ge::GRAPH_FAILED, op.Execute(ctx.Build()));
+    EXPECT_EQ(0U, g_stubBcastCalls.size()); // null buf + count>0 不得进通信
+}
+
+TEST_F(ExecuteTest, BroadcastDynamicEmptyInputNoOp)
+{
+    g_stubCtxVal[kIdxStaticModel] = 0; // 动态路径
+    float out[1] = {};
+    HcomBroadcastOp op;
+    hcut::CtxBuilder ctx;
+    ctx.Input({0}, ge::DT_FLOAT, nullptr).Output({0}, ge::DT_FLOAT, out);
+    ctx.Attr(0, static_cast<int64_t>(0)).Attr(1, "ut_group");
+
+    EXPECT_EQ(ge::GRAPH_SUCCESS, op.Execute(ctx.Build()));
+    // 动态空张量: LaunchHcclOpDynamic 入口 count==0 直接 SUCCESS, 不进任何通信
+    EXPECT_EQ(0U, g_stubBcastCalls.size());
+}
+
+TEST_F(ExecuteTest, BroadcastDynamicMixedEmptyAndNonEmptyRejected)
+{
+    g_stubCtxVal[kIdxStaticModel] = 0; // 动态路径
+    float data[8] = {};
+    float out0[1] = {};
+    float out1[8] = {};
+    HcomBroadcastOp op;
+    hcut::CtxBuilder ctx;
+    ctx.Input({0}, ge::DT_FLOAT, nullptr); // 空: 首输入 → count=0
+    ctx.Input({8}, ge::DT_FLOAT, data);    // 非空: hasNonEmpty → 混合
+    ctx.Output({0}, ge::DT_FLOAT, out0).Output({8}, ge::DT_FLOAT, out1);
+    ctx.Attr(0, static_cast<int64_t>(0)).Attr(1, "ut_group");
+
+    // 动态路径 count 与通信地址只用首输入, 首空+余非空会静默跳过非空张量的广播 → 边界拒绝
+    EXPECT_EQ(ge::GRAPH_FAILED, op.Execute(ctx.Build()));
+    EXPECT_EQ(0U, g_stubBcastCalls.size());
 }
