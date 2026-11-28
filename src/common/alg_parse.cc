@@ -371,6 +371,12 @@ private:
                                 return HCCL_E_PARA;
                             }
                             level = static_cast<uint32_t>(parsed);
+                            if (level >= HCCL_ALGO_LEVEL_NUM) {
+                                HCCL_WARNING(
+                                    "[HcclAlgoParser] level %u exceeds maximum supported level %u", level,
+                                    HCCL_ALGO_LEVEL_NUM - 1);
+                                return HCCL_E_PARA;
+                            }
                         } catch (...) {
                             HCCL_WARNING("[HcclAlgoParser] invalid level: %s", name.c_str());
                             return HCCL_E_PARA;

@@ -28,6 +28,8 @@ namespace ops_hccl {
 #define HCCL_RUN_INFO(format, ...) fprintf(stderr, "[INFO] " format "\n", ##__VA_ARGS__)
 #define HCCL_RUN_WARNING(format, ...) fprintf(stderr, "[WARNING] " format "\n", ##__VA_ARGS__)
 
+constexpr uint32_t HCCL_ALGO_LEVEL_NUM = 4;
+
 // mock
 HcclResult static HcclGetHcclAlgo(HcclComm comm, std::string& hcclAlgo) { return HCCL_SUCCESS; }
 
